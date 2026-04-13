@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: tennis-betting-server
+    env: python
+    plan: starter
+    pythonVersion: 3.11
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+    healthCheckPath: /api/status
+    healthCheckInterval: 30
+
+  - type: cron
+    name: daily-card-generation
+    schedule: "0 8 * * *"  # 8:00 AM UTC daily (adjust timezone as needed)
+    runCommand: |
+      pip install -r requirements.txt && \
+      mkdir -p data/raw data/polymarket data/odds models cards logs && \
+      python3 04_betting_card.py
+
+envVars:
+  - key: FLASK_ENV
+    value: production
+  - key: PORT
+    value: 3000

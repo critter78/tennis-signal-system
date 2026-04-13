@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tennis Signal System — P&L Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Mono', monospace; }
+        body { background: #0f1117; color: #e0e0e0; min-height: 100vh; padding: 20px; }
+
+        .header { border-bottom: 1px solid #2d3139; padding-bottom: 16px; margin-bottom: 20px; }
+        .header h1 { font-size: 18px; font-weight: 700; color: #d4740a; letter-spacing: 0.06em; }
+        .header .sub { font-size: 11px; color: #6c757d; margin-top: 4px; }
+
+        .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat-card { background: #1a1d27; border: 1px solid #2d3139; padding: 12px 16px; flex: 1; min-width: 130px; }
+        .stat-card .label { font-size: 9px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+        .stat-card .value { font-size: 20px; font-weight: 700; }
+        .stat-card .value.green { color: #4caf50; }
+        .stat-card .value.red { color: #f44336; }
+        .stat-card .value.amber { color: #d4740a; }
+        .stat-card .value.white { color: #e0e0e0; }
+
+        .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #2d3139; }
+        .tab { padding: 10px 20px; font-size: 12px; font-weight: 600; color: #6c757d; cursor: pointer; letter-spacing: 0.04em; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+        .tab:hover { color: #e0e0e0; }
+        .tab.active { color: #d4740a; border-bottom-color: #d4740a; }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+        .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+        @media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+        .chart-card { background: #1a1d27; border: 1px solid #2d3139; padding: 16px; }
+        .chart-card h3 { font-size: 12px; font-weight: 700; color: #d4740a; margin-bottom: 12px; letter-spacing: 0.04em; }
+        .chart-card canvas { width: 100% !important; }
+
+        .mini-stat { background: #1a1d27; border: 1px solid #2d3139; padding: 14px; text-align: center; }
+        .mini-stat .ms-label { font-size: 9px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.06em; }
+        .mini-stat .ms-value { font-size: 22px; font-weight: 700; margin-top: 6px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { text-align: left; padding: 8px 10px; font-size: 9px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #2d3139; background: #141620; }
+        td { padding: 7px 10px; border-bottom: 1px solid #1e2130; }
+        tr:hover { background: #1e2130; }
+        .w { color: #4caf50; font-weight: 700; }
+        .l { color: #f44336; font-weight: 700; }
+        .p { color: #6c757d; }
+
+        .filters { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+        .filters select, .filters input { background: #1a1d27; color: #e0e0e0; border: 1px solid #2d3139; padding: 6px 10px; font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
+        .filters label { font-size: 10px; color: #6c757d; }
+
+        .empty-msg { text-align: center; padding: 60px 20px; color: #6c757d; font-size: 13px; }
+
+        /* ── SIGNAL CARDS ── */
+        .sig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; }
+        .sig-card { background: #1a1d27; border: 1px solid #2d3139; padding: 0; overflow: hidden; transition: border-color 0.2s; }
+        .sig-card:hover { border-color: #d4740a; }
+        .sig-card.is-bet { border-color: #e65100; border-width: 2px; }
+        .sig-top { padding: 12px 14px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #2d3139; }
+        .sig-match { font-size: 13px; font-weight: 700; color: #e0e0e0; }
+        .sig-tourney { font-size: 10px; color: #d4740a; margin-top: 3px; }
+        .sig-badge { font-size: 9px; font-weight: 700; padding: 2px 8px; letter-spacing: 0.04em; display: inline-block; margin-left: 4px; }
+        .badge-strong { background: #b71c1c; color: white; }
+        .badge-solid { background: #e65100; color: white; }
+        .badge-watch { background: #2d3139; color: #aaa; }
+        .badge-value { background: #1b5e20; color: #4caf50; }
+        .badge-bestvalue { background: #e65100; color: white; }
+        .badge-edge { background: #0d47a1; color: #42a5f5; }
+        .sig-body { padding: 12px 14px; }
+        .sig-pick { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .sig-pick-label { font-size: 9px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.06em; }
+        .sig-pick-name { font-size: 15px; font-weight: 700; color: #4caf50; }
+        .sig-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+        .sig-num { text-align: center; }
+        .sig-num .sn-label { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.04em; }
+        .sig-num .sn-val { font-size: 16px; font-weight: 700; margin-top: 2px; }
+        .sig-stats { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; font-size: 10px; color: #aaa; }
+        .sig-stats .stat-header { font-weight: 700; color: #e0e0e0; margin-bottom: 4px; }
+        .sig-h2h { text-align: center; font-weight: 700; color: #e0e0e0; }
+        .sig-footer { padding: 10px 14px; border-top: 1px solid #2d3139; display: flex; justify-content: space-between; align-items: center; }
+        .sig-bet-btn { background: #1b5e20; color: white; border: none; padding: 6px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700; cursor: pointer; letter-spacing: 0.04em; transition: all 0.2s; }
+        .sig-bet-btn:hover { background: #2e7d32; }
+        .sig-bet-btn.active { background: #e65100; }
+        .sig-poly-link { color: #42a5f5; font-size: 10px; text-decoration: none; }
+        .sig-poly-link:hover { text-decoration: underline; }
+        .sig-summary { background: #1a1d27; border: 1px solid #2d3139; padding: 12px 16px; margin-bottom: 14px; font-size: 12px; color: #aaa; display: flex; gap: 20px; flex-wrap: wrap; }
+        .sig-summary strong { color: #e0e0e0; }
+        .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .bar-label { font-size: 11px; color: #aaa; width: 120px; text-align: right; }
+        .bar-bg { flex: 1; height: 20px; background: #2d3139; position: relative; }
+        .bar-fill { height: 100%; position: absolute; left: 0; top: 0; }
+        .bar-val { font-size: 11px; font-weight: 700; width: 50px; }
+    </style>
+</head>
+<body>
+
+<!-- DATA PLACEHOLDER (replaced by 07_dashboard.py) -->
+<script>
+window.PICKS_DATA = [];
+</script>
+
+<div class="header">
+    <h1>TENNIS SIGNAL SYSTEM — P&L DASHBOARD</h1>
+    <div class="sub" id="headerSub">Loading data...</div>
+</div>
+
+<div class="stats-row" id="statsRow"></div>
+
+<div class="tabs">
+    <div class="tab active" onclick="switchTab('signals')">Today's Signals</div>
+    <div class="tab" onclick="switchTab('overview')">Overview</div>
+    <div class="tab" onclick="switchTab('mybets')">My Bets</div>
+    <div class="tab" onclick="switchTab('performance')">Performance</div>
+    <div class="tab" onclick="switchTab('accuracy')">Model Accuracy</div>
+</div>
+
+<!-- SIGNALS -->
+<div class="panel active" id="panel-signals">
+    <div class="filters">
+        <label>Filter:</label>
+        <select id="sigFilterType" onchange="renderSignals()">
+            <option value="all">All Signals</option>
+            <option value="edge">Edge Signals Only</option>
+            <option value="outright">Outrights Only</option>
+            <option value="h2h">Match Picks Only</option>
+        </select>
+        <select id="sigFilterSurface" onchange="renderSignals()">
+            <option value="all">All Surfaces</option>
+            <option value="Hard">Hard</option>
+            <option value="Clay">Clay</option>
+            <option value="Grass">Grass</option>
+        </select>
+        <select id="sigSort" onchange="renderSignals()">
+            <option value="edge">Sort: Highest Edge</option>
+            <option value="confidence">Sort: Confidence</option>
+            <option value="volume">Sort: Volume</option>
+        </select>
+    </div>
+    <div id="signalsGrid"></div>
+</div>
+
+<!-- OVERVIEW -->
+<div class="panel" id="panel-overview">
+    <div class="grid-4" id="quickStats"></div>
+    <div class="grid-2">
+        <div class="chart-card"><h3>CUMULATIVE P&L</h3><canvas id="chartPnl"></canvas></div>
+        <div class="chart-card"><h3>DAILY SIGNAL COUNT</h3><canvas id="chartDaily"></canvas></div>
+    </div>
+    <div class="grid-2">
+        <div class="chart-card"><h3>EDGE DISTRIBUTION</h3><canvas id="chartEdge"></canvas></div>
+        <div class="chart-card"><h3>CONFIDENCE DISTRIBUTION</h3><canvas id="chartConf"></canvas></div>
+    </div>
+</div>
+
+<!-- MY BETS -->
+<div class="panel" id="panel-mybets">
+    <div class="filters" id="betFilters"></div>
+    <div class="chart-card" style="overflow-x:auto">
+        <h3>MY BET HISTORY</h3>
+        <div id="betTableWrap"></div>
+    </div>
+</div>
+
+<!-- PERFORMANCE -->
+<div class="panel" id="panel-performance">
+    <div class="grid-2">
+        <div class="chart-card"><h3>WIN RATE BY SURFACE</h3><canvas id="chartSurface"></canvas></div>
+        <div class="chart-card"><h3>WIN RATE BY EDGE TIER</h3><canvas id="chartTier"></canvas></div>
+    </div>
+    <div class="grid-2">
+        <div class="chart-card"><h3>TOP TOURNAMENTS BY SIGNAL COUNT</h3><canvas id="chartTourney"></canvas></div>
+        <div class="chart-card"><h3>WIN RATE BY CONFIDENCE</h3><canvas id="chartConfPerf"></canvas></div>
+    </div>
+</div>
+
+<!-- MODEL ACCURACY -->
+<div class="panel" id="panel-accuracy">
+    <div class="grid-2">
+        <div class="chart-card"><h3>CALIBRATION — MODEL PROB vs ACTUAL WIN RATE</h3><canvas id="chartCalib"></canvas></div>
+        <div class="chart-card"><h3>MODEL vs MARKET PRICING</h3><canvas id="chartModelMarket"></canvas></div>
+    </div>
+    <div class="grid-2">
+        <div class="chart-card"><h3>ACCURACY BY RANKING TIER</h3><canvas id="chartRankTier"></canvas></div>
+        <div class="chart-card"><h3>EDGE ACCURACY — DID HIGH-EDGE PICKS WIN MORE?</h3><canvas id="chartEdgeAcc"></canvas></div>
+    </div>
+</div>
+
+<script>
+// ─── TAB SWITCHING ───
+function switchTab(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
+}
+
+// ─── DATA PROCESSING ───
+const picks = window.PICKS_DATA || [];
+const myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
+
+const resolved = picks.filter(p => p.outcome !== null && p.outcome !== undefined);
+const withEdge = picks.filter(p => p.has_edge);
+const wins = resolved.filter(p => p.outcome === 'win');
+const losses = resolved.filter(p => p.outcome === 'loss');
+
+// ─── HEADER ───
+document.getElementById('headerSub').textContent =
+    `${picks.length} total picks logged | ${myBets.length} bets placed | ${resolved.length} resolved | Last updated: ${new Date().toLocaleDateString()}`;
+
+// ─── STAT CARDS ───
+function statCard(label, value, cls) {
+    return `<div class="stat-card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`;
+}
+
+const winRate = resolved.length > 0 ? (wins.length / resolved.length * 100).toFixed(1) + '%' : '—';
+const totalPnl = resolved.reduce((s, p) => s + (p.pnl || 0), 0);
+const pnlStr = totalPnl >= 0 ? `+$${totalPnl.toFixed(0)}` : `-$${Math.abs(totalPnl).toFixed(0)}`;
+const avgEdge = withEdge.length > 0 ? (withEdge.reduce((s, p) => s + Math.abs(p.edge), 0) / withEdge.length).toFixed(1) + '%' : '—';
+const bestEdge = picks.length > 0 ? Math.max(...picks.map(p => Math.abs(p.edge || 0))).toFixed(1) + '%' : '—';
+
+document.getElementById('statsRow').innerHTML = [
+    statCard('Total Picks', picks.length, 'white'),
+    statCard('Bets Placed', myBets.length, 'amber'),
+    statCard('Signals (Edge)', withEdge.length, 'amber'),
+    statCard('Win Rate', winRate, resolved.length > 0 && wins.length/resolved.length >= 0.5 ? 'green' : 'red'),
+    statCard('Total P&L', totalPnl === 0 ? '—' : pnlStr, totalPnl >= 0 ? 'green' : 'red'),
+    statCard('Avg Edge', avgEdge, 'amber'),
+    statCard('Best Edge', bestEdge, 'green'),
+].join('');
+
+// ─── QUICK STATS ───
+const avgEdgeWin = wins.length > 0 ? (wins.reduce((s,p) => s + Math.abs(p.edge||0), 0) / wins.length).toFixed(1) + '%' : '—';
+const avgEdgeLoss = losses.length > 0 ? (losses.reduce((s,p) => s + Math.abs(p.edge||0), 0) / losses.length).toFixed(1) + '%' : '—';
+const biggestWin = wins.length > 0 ? '$' + Math.max(...wins.map(p => p.pnl || 0)).toFixed(0) : '—';
+const biggestLoss = losses.length > 0 ? '-$' + Math.abs(Math.min(...losses.map(p => p.pnl || 0))).toFixed(0) : '—';
+
+document.getElementById('quickStats').innerHTML = [
+    `<div class="mini-stat"><div class="ms-label">Avg Edge (Winners)</div><div class="ms-value" style="color:#4caf50">${avgEdgeWin}</div></div>`,
+    `<div class="mini-stat"><div class="ms-label">Avg Edge (Losers)</div><div class="ms-value" style="color:#f44336">${avgEdgeLoss}</div></div>`,
+    `<div class="mini-stat"><div class="ms-label">Biggest Win</div><div class="ms-value" style="color:#4caf50">${biggestWin}</div></div>`,
+    `<div class="mini-stat"><div class="ms-label">Biggest Loss</div><div class="ms-value" style="color:#f44336">${biggestLoss}</div></div>`,
+].join('');
+
+// ─── CHART DEFAULTS ───
+Chart.defaults.color = '#6c757d';
+Chart.defaults.borderColor = '#2d3139';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 10;
+
+// ─── CUMULATIVE P&L CHART ───
+(function() {
+    const daily = {};
+    resolved.forEach(p => {
+        const d = (p.logged_at || '').slice(0, 10);
+        if (!daily[d]) daily[d] = 0;
+        daily[d] += (p.pnl || 0);
+    });
+    const dates = Object.keys(daily).sort();
+    let cum = 0;
+    const cumData = dates.map(d => { cum += daily[d]; return cum; });
+
+    if (dates.length === 0) {
+        dates.push(new Date().toISOString().slice(0,10));
+        cumData.push(0);
+    }
+
+    new Chart(document.getElementById('chartPnl'), {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{
+                label: 'Cumulative P&L ($)',
+                data: cumData,
+                borderColor: '#d4740a',
+                backgroundColor: 'rgba(212,116,10,0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { grid: { color: '#1e2130' } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+})();
+
+// ─── DAILY SIGNAL COUNT ───
+(function() {
+    const daily = {};
+    picks.forEach(p => {
+        const d = (p.logged_at || '').slice(0, 10);
+        if (!daily[d]) daily[d] = { total: 0, edge: 0 };
+        daily[d].total++;
+        if (p.has_edge) daily[d].edge++;
+    });
+    const dates = Object.keys(daily).sort();
+
+    new Chart(document.getElementById('chartDaily'), {
+        type: 'bar',
+        data: {
+            labels: dates,
+            datasets: [
+                { label: 'Total Signals', data: dates.map(d => daily[d].total), backgroundColor: '#2d3139' },
+                { label: 'With Edge', data: dates.map(d => daily[d].edge), backgroundColor: '#d4740a' },
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { labels: { boxWidth: 12 } } },
+            scales: {
+                y: { grid: { color: '#1e2130' }, stacked: false },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+})();
+
+// ─── EDGE DISTRIBUTION ───
+(function() {
+    const buckets = { '5-7%': 0, '7-10%': 0, '10-15%': 0, '15-20%': 0, '20%+': 0 };
+    withEdge.forEach(p => {
+        const e = Math.abs(p.edge);
+        if (e >= 20) buckets['20%+']++;
+        else if (e >= 15) buckets['15-20%']++;
+        else if (e >= 10) buckets['10-15%']++;
+        else if (e >= 7) buckets['7-10%']++;
+        else buckets['5-7%']++;
+    });
+
+    new Chart(document.getElementById('chartEdge'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(buckets),
+            datasets: [{ label: 'Signals', data: Object.values(buckets), backgroundColor: ['#6c757d','#d4740a','#e65100','#f44336','#b71c1c'] }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { grid: { color: '#1e2130' } }, x: { grid: { display: false } } }
+        }
+    });
+})();
+
+// ─── CONFIDENCE DISTRIBUTION ───
+(function() {
+    const buckets = { '<50%': 0, '50-55%': 0, '55-60%': 0, '60-65%': 0, '65-70%': 0, '70-80%': 0, '80%+': 0 };
+    picks.forEach(p => {
+        const c = p.confidence || 0;
+        if (c >= 80) buckets['80%+']++;
+        else if (c >= 70) buckets['70-80%']++;
+        else if (c >= 65) buckets['65-70%']++;
+        else if (c >= 60) buckets['60-65%']++;
+        else if (c >= 55) buckets['55-60%']++;
+        else if (c >= 50) buckets['50-55%']++;
+        else buckets['<50%']++;
+    });
+
+    new Chart(document.getElementById('chartConf'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(buckets),
+            datasets: [{ label: 'Picks', data: Object.values(buckets), backgroundColor: '#4caf50' }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { grid: { color: '#1e2130' } }, x: { grid: { display: false } } }
+        }
+    });
+})();
+
+// ─── SURFACE PERFORMANCE ───
+(function() {
+    const surfaces = {};
+    resolved.forEach(p => {
+        const s = p.surface || 'Unknown';
+        if (!surfaces[s]) surfaces[s] = { w: 0, l: 0, edge: 0, n: 0 };
+        if (p.outcome === 'win') surfaces[s].w++;
+        else surfaces[s].l++;
+        surfaces[s].edge += Math.abs(p.edge || 0);
+        surfaces[s].n++;
+    });
+    const labels = Object.keys(surfaces);
+    const winRates = labels.map(s => surfaces[s].n > 0 ? (surfaces[s].w / surfaces[s].n * 100) : 0);
+
+    // Use all picks if none resolved
+    if (labels.length === 0) {
+        const allSurfaces = {};
+        picks.forEach(p => {
+            const s = p.surface || 'Unknown';
+            if (!allSurfaces[s]) allSurfaces[s] = 0;
+            allSurfaces[s]++;
+        });
+        const aLabels = Object.keys(allSurfaces);
+        new Chart(document.getElementById('chartSurface'), {
+            type: 'bar',
+            data: {
+                labels: aLabels,
+                datasets: [{ label: 'Signal Count', data: aLabels.map(s => allSurfaces[s]), backgroundColor: '#d4740a' }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false }, title: { display: true, text: 'No resolved picks yet — showing signal count by surface', color: '#6c757d' } }, scales: { y: { grid: { color: '#1e2130' } }, x: { grid: { display: false } } } }
+        });
+    } else {
+        new Chart(document.getElementById('chartSurface'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Win Rate %', data: winRates, backgroundColor: labels.map(s => winRates[labels.indexOf(s)] >= 50 ? '#4caf50' : '#f44336') }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1e2130' }, max: 100 }, x: { grid: { display: false } } } }
+        });
+    }
+})();
+
+// ─── EDGE TIER PERFORMANCE ───
+(function() {
+    const tiers = { 'STRONG (>=10%)': { w: 0, n: 0 }, 'SOLID (7-10%)': { w: 0, n: 0 }, 'WATCH (5-7%)': { w: 0, n: 0 } };
+    const source = resolved.length > 0 ? resolved : withEdge;
+    const useResolved = resolved.length > 0;
+
+    source.forEach(p => {
+        const e = Math.abs(p.edge || 0);
+        let tier = null;
+        if (e >= 10) tier = 'STRONG (>=10%)';
+        else if (e >= 7) tier = 'SOLID (7-10%)';
+        else if (e >= 5) tier = 'WATCH (5-7%)';
+        if (tier) {
+            tiers[tier].n++;
+            if (useResolved && p.outcome === 'win') tiers[tier].w++;
+        }
+    });
+
+    const labels = Object.keys(tiers);
+    const data = useResolved ? labels.map(t => tiers[t].n > 0 ? (tiers[t].w / tiers[t].n * 100) : 0) : labels.map(t => tiers[t].n);
+
+    new Chart(document.getElementById('chartTier'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{ label: useResolved ? 'Win Rate %' : 'Signal Count', data: data, backgroundColor: ['#f44336', '#d4740a', '#6c757d'] }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false }, title: useResolved ? {} : { display: true, text: 'No resolved picks yet — showing signal count by tier', color: '#6c757d' } },
+            scales: { y: { grid: { color: '#1e2130' } }, x: { grid: { display: false } } }
+        }
+    });
+})();
+
+// ─── TOURNAMENT CHART ───
+(function() {
+    const tourneys = {};
+    picks.forEach(p => {
+        const t = p.tournament || 'Unknown';
+        if (!tourneys[t]) tourneys[t] = 0;
+        tourneys[t]++;
+    });
+    const sorted = Object.entries(tourneys).sort((a, b) => b[1] - a[1]).slice(0, 12);
+
+    new Chart(document.getElementById('chartTourney'), {
+        type: 'bar',
+        data: {
+            labels: sorted.map(s => s[0].length > 25 ? s[0].slice(0,22) + '...' : s[0]),
+            datasets: [{ label: 'Signals', data: sorted.map(s => s[1]), backgroundColor: '#d4740a' }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { x: { grid: { color: '#1e2130' } }, y: { grid: { display: false } } }
+        }
+    });
+})();
+
+// ─── CONFIDENCE PERFORMANCE ───
+(function() {
+    const conf = { 'HIGH (>=65%)': { w: 0, n: 0 }, 'MED (55-65%)': { w: 0, n: 0 }, 'LOW (<55%)': { w: 0, n: 0 } };
+    const source = resolved.length > 0 ? resolved : picks;
+    const useResolved = resolved.length > 0;
+
+    source.forEach(p => {
+        const c = p.confidence || 0;
+        let tier = c >= 65 ? 'HIGH (>=65%)' : c >= 55 ? 'MED (55-65%)' : 'LOW (<55%)';
+        conf[tier].n++;
+        if (useResolved && p.outcome === 'win') conf[tier].w++;
+    });
+
+    const labels = Object.keys(conf);
+    const data = useResolved ? labels.map(t => conf[t].n > 0 ? (conf[t].w / conf[t].n * 100) : 0) : labels.map(t => conf[t].n);
+
+    new Chart(document.getElementById('chartConfPerf'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{ label: useResolved ? 'Win Rate %' : 'Signal Count', data: data, backgroundColor: ['#4caf50', '#d4740a', '#6c757d'] }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false }, title: useResolved ? {} : { display: true, text: 'No resolved picks yet — showing count by confidence', color: '#6c757d' } },
+            scales: { y: { grid: { color: '#1e2130' } }, x: { grid: { display: false } } }
+        }
+    });
+})();
+
+// ─── CALIBRATION CHART ───
+(function() {
+    if (resolved.length < 10) {
+        const ctx = document.getElementById('chartCalib').getContext('2d');
+        ctx.fillStyle = '#6c757d';
+        ctx.font = '13px IBM Plex Mono';
+        ctx.textAlign = 'center';
+        ctx.fillText('Need 10+ resolved picks for calibration', ctx.canvas.width/2, 100);
+        return;
+    }
+    const buckets = {};
+    resolved.forEach(p => {
+        const b = Math.round((p.model_prob || p.confidence || 50) / 10) * 10;
+        if (!buckets[b]) buckets[b] = { w: 0, n: 0 };
+        buckets[b].n++;
+        if (p.outcome === 'win') buckets[b].w++;
+    });
+    const labels = Object.keys(buckets).sort((a,b) => a - b);
+    const predicted = labels.map(b => +b);
+    const actual = labels.map(b => buckets[b].n > 0 ? (buckets[b].w / buckets[b].n * 100) : 0);
+
+    new Chart(document.getElementById('chartCalib'), {
+        type: 'scatter',
+        data: {
+            datasets: [
+                { label: 'Actual Win Rate', data: labels.map((b, i) => ({x: predicted[i], y: actual[i]})), backgroundColor: '#d4740a', pointRadius: 6 },
+                { label: 'Perfect Calibration', data: [{x:0,y:0},{x:100,y:100}], type: 'line', borderColor: '#4caf50', borderDash: [5,5], pointRadius: 0 },
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { title: { display: true, text: 'Model Probability %', color: '#6c757d' }, grid: { color: '#1e2130' }, min: 0, max: 100 },
+                y: { title: { display: true, text: 'Actual Win Rate %', color: '#6c757d' }, grid: { color: '#1e2130' }, min: 0, max: 100 },
+            }
+        }
+    });
+})();
+
+// ─── MODEL vs MARKET ───
+(function() {
+    const data = picks.filter(p => p.model_prob && p.poly_price).slice(0, 500).map(p => ({
+        x: p.poly_price,
+        y: p.model_prob,
+        r: 4,
+    }));
+
+    if (data.length === 0) {
+        const ctx = document.getElementById('chartModelMarket').getContext('2d');
+        ctx.fillStyle = '#6c757d';
+        ctx.font = '13px IBM Plex Mono';
+        ctx.textAlign = 'center';
+        ctx.fillText('No data yet', ctx.canvas.width/2, 100);
+        return;
+    }
+
+    new Chart(document.getElementById('chartModelMarket'), {
+        type: 'scatter',
+        data: {
+            datasets: [
+                { label: 'Model vs Poly', data: data, backgroundColor: 'rgba(212,116,10,0.5)', pointRadius: 3 },
+                { label: 'Equal Line', data: [{x:0,y:0},{x:100,y:100}], type: 'line', borderColor: '#4caf50', borderDash: [5,5], pointRadius: 0 },
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { title: { display: true, text: 'Polymarket Price (cents)', color: '#6c757d' }, grid: { color: '#1e2130' }, min: 0, max: 100 },
+                y: { title: { display: true, text: 'Model Probability %', color: '#6c757d' }, grid: { color: '#1e2130' }, min: 0, max: 100 },
+            }
+        }
+    });
+})();
+
+// ─── RANKING TIER ACCURACY ───
+(function() {
+    const tiers = { 'Top 10': { w: 0, n: 0 }, '11-25': { w: 0, n: 0 }, '26-50': { w: 0, n: 0 }, '50+': { w: 0, n: 0 }, 'Unranked': { w: 0, n: 0 } };
+    const source = resolved.length > 0 ? resolved : picks;
+    const useResolved = resolved.length > 0;
+
+    source.forEach(p => {
+        const r = p.rank;
+        let tier = 'Unranked';
+        if (r && r <= 10) tier = 'Top 10';
+        else if (r && r <= 25) tier = '11-25';
+        else if (r && r <= 50) tier = '26-50';
+        else if (r) tier = '50+';
+        tiers[tier].n++;
+        if (useResolved && p.outcome === 'win') tiers[tier].w++;
+    });
+
+    const labels = Object.keys(tiers);
+    const data = useResolved ? labels.map(t => tiers[t].n > 0 ? (tiers[t].w / tiers[t].n * 100) : 0) : labels.map(t => tiers[t].n);
+
+    new Chart(document.getElementById('chartRankTier'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{ label: useResolved ? 'Win Rate %' : 'Signal Count', data: data, backgroundColor: '#d4740a' }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1e2130' } }, x: { grid: { display: false } } } }
+    });
+})();
+
+// ─── EDGE ACCURACY ───
+(function() {
+    const tiers = { '5-10%': { w: 0, n: 0 }, '10-15%': { w: 0, n: 0 }, '15-20%': { w: 0, n: 0 }, '20%+': { w: 0, n: 0 } };
+    const source = resolved.length > 0 ? resolved.filter(p => p.has_edge) : withEdge;
+    const useResolved = resolved.length > 0;
+
+    source.forEach(p => {
+        const e = Math.abs(p.edge || 0);
+        let tier = e >= 20 ? '20%+' : e >= 15 ? '15-20%' : e >= 10 ? '10-15%' : '5-10%';
+        tiers[tier].n++;
+        if (useResolved && p.outcome === 'win') tiers[tier].w++;
+    });
+
+    const labels = Object.keys(tiers);
+    const data = useResolved ? labels.map(t => tiers[t].n > 0 ? (tiers[t].w / tiers[t].n * 100) : 0) : labels.map(t => tiers[t].n);
+
+    new Chart(document.getElementById('chartEdgeAcc'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{ label: useResolved ? 'Win Rate %' : 'Signal Count', data: data, backgroundColor: ['#6c757d', '#d4740a', '#e65100', '#f44336'] }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1e2130' } }, x: { grid: { display: false } } } }
+    });
+})();
+
+// ─── MY BETS TABLE ───
+(function() {
+    const wrap = document.getElementById('betTableWrap');
+
+    if (myBets.length === 0) {
+        wrap.innerHTML = '<div class="empty-msg">No bets tracked yet. Use the "I BET THIS" buttons on the betting card to start tracking your bets.</div>';
+        return;
+    }
+
+    // Match bets against picks for outcome data
+    const enriched = myBets.map(bet => {
+        const match = picks.find(p =>
+            p.match === bet.match && p.bet_on === bet.bet_on &&
+            (p.logged_at || '').slice(0,10) === (bet.card_date || '').slice(0,10)
+        );
+        return {
+            ...bet,
+            outcome: match ? match.outcome : null,
+            pnl: match ? match.pnl : null,
+            actual_winner: match ? match.actual_winner : null,
+        };
+    });
+
+    const bWins = enriched.filter(b => b.outcome === 'win').length;
+    const bLosses = enriched.filter(b => b.outcome === 'loss').length;
+    const bPending = enriched.filter(b => !b.outcome).length;
+    const bPnl = enriched.reduce((s, b) => s + (b.pnl || 0), 0);
+
+    let html = `<div style="margin-bottom:12px; font-size:11px; color:#6c757d">
+        <strong style="color:#e0e0e0">${enriched.length}</strong> bets |
+        <strong style="color:#4caf50">${bWins}W</strong> -
+        <strong style="color:#f44336">${bLosses}L</strong> -
+        <strong style="color:#6c757d">${bPending} pending</strong> |
+        P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(0)}</strong>
+    </div>`;
+
+    html += `<table><thead><tr>
+        <th>Date</th><th>Match</th><th>Tournament</th><th>Pick</th>
+        <th>Poly</th><th>Model</th><th>Edge</th><th>Kelly</th>
+        <th>Result</th><th>P&L</th>
+    </tr></thead><tbody>`;
+
+    enriched.forEach(b => {
+        const date = (b.timestamp || b.card_date || '').slice(0, 10);
+        const res = b.outcome === 'win' ? '<span class="w">W</span>' : b.outcome === 'loss' ? '<span class="l">L</span>' : '<span class="p">...</span>';
+        const pnl = b.pnl != null ? `<span class="${b.pnl >= 0 ? 'w' : 'l'}">$${b.pnl.toFixed(0)}</span>` : '—';
+        html += `<tr>
+            <td>${date}</td>
+            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${b.match}</td>
+            <td>${(b.tournament || '—').slice(0, 20)}</td>
+            <td style="font-weight:700">${(b.bet_on || '').split(' ').pop()}</td>
+            <td>${b.poly_price}c</td>
+            <td>${b.model_prob}%</td>
+            <td style="color:${Math.abs(b.edge||0) >= 10 ? '#f44336' : '#d4740a'}">${(b.edge||0) > 0 ? '+' : ''}${(b.edge||0).toFixed(1)}%</td>
+            <td>${(b.kelly||0).toFixed(1)}%</td>
+            <td>${res}</td>
+            <td>${pnl}</td>
+        </tr>`;
+    });
+
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+})();
+
+// ─── SIGNALS TAB ───
+function renderSignals() {
+    const grid = document.getElementById('signalsGrid');
+    const filterType = document.getElementById('sigFilterType').value;
+    const filterSurface = document.getElementById('sigFilterSurface').value;
+    const sortBy = document.getElementById('sigSort').value;
+
+    // Get the latest run's picks
+    const latestRun = picks.length > 0 ? picks[picks.length - 1].run_id : null;
+    let latest = latestRun ? picks.filter(p => p.run_id === latestRun) : picks;
+
+    // Apply filters
+    if (filterType === 'edge') latest = latest.filter(p => p.has_edge);
+    else if (filterType === 'outright') latest = latest.filter(p => p.market_type === 'outright');
+    else if (filterType === 'h2h') latest = latest.filter(p => p.market_type === 'h2h');
+    if (filterSurface !== 'all') latest = latest.filter(p => p.surface === filterSurface);
+
+    // Sort
+    if (sortBy === 'edge') latest.sort((a, b) => Math.abs(b.edge || 0) - Math.abs(a.edge || 0));
+    else if (sortBy === 'confidence') latest.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+    else if (sortBy === 'volume') latest.sort((a, b) => (b.volume || 0) - (a.volume || 0));
+
+    if (latest.length === 0) {
+        grid.innerHTML = '<div class="empty-msg">No signals match your filters.</div>';
+        return;
+    }
+
+    // Summary bar
+    const edgeCount = latest.filter(p => p.has_edge).length;
+    const avgEdge = edgeCount > 0 ? (latest.filter(p => p.has_edge).reduce((s, p) => s + Math.abs(p.edge), 0) / edgeCount).toFixed(1) : '0';
+    const totalVol = latest.reduce((s, p) => s + (p.volume || 0), 0);
+    let html = `<div class="sig-summary">
+        <span>Showing: <strong>${latest.length}</strong> signals</span>
+        <span>Edge Signals: <strong>${edgeCount}</strong></span>
+        <span>Avg Edge: <strong>${avgEdge}%</strong></span>
+        <span>Total Volume: <strong>$${(totalVol/1000).toFixed(0)}K</strong></span>
+    </div>`;
+
+    html += '<div class="sig-grid">';
+
+    latest.forEach(s => {
+        const edge = Math.abs(s.edge || 0);
+        const isBet = myBets.some(b => b.match === s.match && b.bet_on === (s.bet_on || s.predicted_winner));
+
+        // Edge tier badge
+        let tierBadge = '';
+        if (edge >= 10) tierBadge = '<span class="sig-badge badge-strong">STRONG</span>';
+        else if (edge >= 7) tierBadge = '<span class="sig-badge badge-solid">SOLID</span>';
+        else if (edge >= 5) tierBadge = '<span class="sig-badge badge-watch">WATCH</span>';
+
+        // Value badge
+        let valBadge = '';
+        const modelP = s.model_prob || 0;
+        const polyP = s.poly_price || 0;
+        const gap = modelP - polyP;
+        if (gap >= 15 && modelP >= 60) valBadge = '<span class="sig-badge badge-bestvalue">BEST VALUE</span>';
+        else if (gap >= 8 && modelP >= 55) valBadge = '<span class="sig-badge badge-value">VALUE</span>';
+        else if (gap >= 3 && modelP > polyP) valBadge = '<span class="sig-badge badge-edge">EDGE+</span>';
+
+        const tourney = s.tournament || '';
+        const surface = s.surface || '';
+        const round = s.round || '';
+        const meta = [tourney, surface, round].filter(Boolean).join(' · ');
+
+        const polyLink = s.poly_link || 'https://polymarket.com/sports/tennis/games';
+        const winner = s.predicted_winner || s.bet_on || '';
+        const betOn = s.bet_on || winner;
+
+        // Player stats
+        const wrA = s.sa_wr != null ? s.sa_wr + '%' : '—';
+        const wrB = s.sb_wr != null ? s.sb_wr + '%' : '—';
+        const swrA = s.sa_swr != null ? s.sa_swr + '%' : '—';
+        const swrB = s.sb_swr != null ? s.sb_swr + '%' : '—';
+        const formA = s.sa_form || '—';
+        const formB = s.sb_form || '—';
+        const h2h = s.h2h || { total: 0, p1_wins: 0, p2_wins: 0 };
+        const h2hStr = h2h.total > 0 ? `${h2h.p1_wins}-${h2h.p2_wins}` : 'No H2H';
+
+        const edgeSign = (s.edge || 0) >= 0 ? '+' : '';
+        const edgeColor = edge >= 10 ? '#f44336' : edge >= 7 ? '#e65100' : edge >= 5 ? '#d4740a' : '#6c757d';
+
+        html += `
+        <div class="sig-card ${isBet ? 'is-bet' : ''}" id="sig-${s.match.replace(/[^a-zA-Z0-9]/g, '')}">
+            <div class="sig-top">
+                <div>
+                    <div class="sig-match">${s.match}</div>
+                    <div class="sig-tourney">${meta || '—'}</div>
+                </div>
+                <div>${tierBadge}${valBadge}</div>
+            </div>
+            <div class="sig-body">
+                <div class="sig-pick">
+                    <div style="flex:1">
+                        <div class="sig-pick-label">${s.market_type === 'outright' ? 'PREDICTED WINNER' : 'BET ON'}</div>
+                        <div class="sig-pick-name">${betOn}</div>
+                    </div>
+                    <div style="background:${(s.confidence||0) >= 65 ? '#1b5e20' : (s.confidence||0) >= 55 ? '#4a2800' : '#2d3139'}; border:1px solid ${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}; padding:6px 12px; text-align:center; min-width:70px">
+                        <div style="font-size:7px; color:${(s.confidence||0) >= 65 ? '#81c784' : (s.confidence||0) >= 55 ? '#ffb74d' : '#aaa'}; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:2px">${(s.confidence||0) >= 65 ? 'HIGH' : (s.confidence||0) >= 55 ? 'MED' : 'LOW'}</div>
+                        <div style="font-size:16px; font-weight:700; color:${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}">${(s.confidence||0).toFixed(1)}%</div>
+                    </div>
+                </div>
+                <div class="sig-nums">
+                    <div class="sig-num"><div class="sn-label">Poly Price</div><div class="sn-val" style="color:#6c757d">${polyP.toFixed(1)}c</div></div>
+                    <div class="sig-num"><div class="sn-label">Model</div><div class="sn-val" style="color:#e0e0e0">${modelP.toFixed(1)}%</div></div>
+                    <div class="sig-num"><div class="sn-label">Edge</div><div class="sn-val" style="color:${edgeColor}">${edgeSign}${(s.edge||0).toFixed(1)}%</div></div>
+                    <div class="sig-num"><div class="sn-label">Kelly</div><div class="sn-val" style="color:#d4740a">${(s.kelly_stake||0).toFixed(1)}%</div></div>
+                </div>
+                <div class="sig-stats">
+                    <div>
+                        <div class="stat-header">${s.player_a || '—'}</div>
+                        <div>WR: ${wrA}</div>
+                        <div>Surface: ${swrA}</div>
+                        <div>Form: ${formA}</div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center">
+                        <div class="sig-h2h">${h2hStr}</div>
+                        <div style="font-size:8px; color:#6c757d">${h2h.total > 0 ? h2h.total + ' meetings' : ''}</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div class="stat-header">${s.player_b || '—'}</div>
+                        <div>WR: ${wrB}</div>
+                        <div>Surface: ${swrB}</div>
+                        <div>Form: ${formB}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="sig-footer">
+                <button class="sig-bet-btn ${isBet ? 'active' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}')">${isBet ? '✓ BET PLACED' : 'I BET THIS'}</button>
+                <a href="${polyLink}" target="_blank" class="sig-poly-link">Open on Polymarket →</a>
+            </div>
+        </div>`;
+    });
+
+    html += '</div>';
+    grid.innerHTML = html;
+}
+
+function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, marketType, tournament, surface) {
+    const data = {
+        match, bet_on: betOn, poly_price: polyPrice, model_prob: modelProb,
+        edge, kelly, market_type: marketType, tournament, surface,
+        timestamp: new Date().toISOString(),
+        card_date: new Date().toISOString().slice(0, 10),
+    };
+
+    const idx = myBets.findIndex(b => b.match === match && b.bet_on === betOn);
+    if (idx >= 0) {
+        myBets.splice(idx, 1);
+        btn.classList.remove('active');
+        btn.textContent = 'I BET THIS';
+        btn.closest('.sig-card').classList.remove('is-bet');
+    } else {
+        myBets.push(data);
+        btn.classList.add('active');
+        btn.textContent = '✓ BET PLACED';
+        btn.closest('.sig-card').classList.add('is-bet');
+    }
+    localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
+}
+
+// Initial render
+renderSignals();
+</script>
+
+</body>
+</html>
