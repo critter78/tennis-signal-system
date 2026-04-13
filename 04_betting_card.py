@@ -696,6 +696,8 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "h2h":          h2,
             "has_edge":     abs(edge) >= min_edge,
             "rank":         rank_a,
+            "rank_a":       rank_a,
+            "rank_b":       rank_b,
             "market_type":  "h2h",
             "tournament":   tournament,
             "round":        round_name,

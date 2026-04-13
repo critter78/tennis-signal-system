@@ -804,7 +804,7 @@ function renderSignals() {
                 <div>
                     <div class="sig-match">${s.match}${activeBadge}</div>
                     ${tourney ? '<div class="sig-tournament-badge">' + tourney + '</div>' : ''}
-                    <div class="sig-tourney">${[surface, round].filter(Boolean).join(' · ') || '—'}</div>
+                    <div class="sig-tourney">${[surface, round ? 'Round: ' + round : ''].filter(Boolean).join(' · ') || '—'}</div>
                 </div>
                 <div>${tierBadge}${valBadge}</div>
             </div>
@@ -827,7 +827,7 @@ function renderSignals() {
                 </div>
                 <div class="sig-stats">
                     <div>
-                        <div class="stat-header">${s.player_a || '—'}</div>
+                        <div class="stat-header">${s.player_a || '—'} ${s.rank_a ? '<span style="color:#d4740a; font-size:9px">#' + s.rank_a + '</span>' : ''}</div>
                         <div>WR: ${wrA}</div>
                         <div>Surface: ${swrA}</div>
                         <div>Form: ${formA}</div>
@@ -837,7 +837,7 @@ function renderSignals() {
                         <div style="font-size:8px; color:#6c757d">${h2h.total > 0 ? h2h.total + ' meetings' : ''}</div>
                     </div>
                     <div style="text-align:right">
-                        <div class="stat-header">${s.player_b || '—'}</div>
+                        <div class="stat-header">${s.rank_b ? '<span style="color:#d4740a; font-size:9px">#' + s.rank_b + '</span> ' : ''}${s.player_b || '—'}</div>
                         <div>WR: ${wrB}</div>
                         <div>Surface: ${swrB}</div>
                         <div>Form: ${formB}</div>
