@@ -618,6 +618,32 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         except Exception:
             model_prob = poly_pa / 100
 
+        # LSTM adjustment (if trained)
+        lstm_adj = 0.0
+        try:
+            from importlib import import_module
+            lstm = import_module("06_lstm_learner")
+            if Path("models/lstm_adjuster.pkl").exists():
+                resolved = lstm.load_resolved_picks()
+                if len(resolved) >= 20:
+                    pick_stub = {
+                        "model_prob": model_prob * 100,
+                        "confidence": max(model_prob, 1 - model_prob) * 100,
+                        "poly_price": poly_pa,
+                        "edge": (model_prob - poly_pa / 100) * 100,
+                        "kelly_stake": 0,
+                        "volume": int(mkt.get("volume", 0)),
+                        "surface": surface,
+                        "tournament": tournament,
+                        "market_type": "h2h",
+                    }
+                    lstm_adj = lstm.predict_adjustment(pick_stub, resolved)
+                    model_prob = max(0.01, min(0.99, model_prob + lstm_adj))
+                    if debug:
+                        print(f"    LSTM adj: {lstm_adj*100:+.1f}% -> prob={model_prob*100:.1f}%")
+        except Exception:
+            pass
+
         edge_a = model_prob - poly_pa / 100
         edge_b = (1 - model_prob) - poly_pb / 100
 

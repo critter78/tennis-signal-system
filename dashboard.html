@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tennis Signal System — P&L Dashboard</title>
+    <title>Tennis Betting Signal System — All-in-One Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23c8e645' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M8 32c0-6 8-12 24-12s24 6 24 12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Cpath d='M8 32c0 6 8 12 24 12s24-6 24-12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Cpath d='M32 2c-6 0-12 8-12 24s6 24 12 24' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Cpath d='M32 2c6 0 12 8 12 24s-6 24-12 24' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3C/svg%3E">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
@@ -65,7 +66,9 @@
         .sig-card.is-bet { border-color: #e65100; border-width: 2px; }
         .sig-top { padding: 12px 14px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #2d3139; }
         .sig-match { font-size: 13px; font-weight: 700; color: #e0e0e0; }
-        .sig-tourney { font-size: 10px; color: #d4740a; margin-top: 3px; }
+        .sig-tourney { font-size: 11px; color: #d4740a; margin-top: 3px; font-weight: 600; }
+        .sig-tournament-badge { display: inline-block; background: #1e2130; border: 1px solid #d4740a; color: #d4740a; font-size: 10px; font-weight: 700; padding: 2px 8px; margin-top: 4px; letter-spacing: 0.04em; }
+        .active-bet-badge { display: inline-block; background: #e65100; color: white; font-size: 9px; font-weight: 700; padding: 2px 8px; letter-spacing: 0.06em; margin-left: 6px; }
         .sig-badge { font-size: 9px; font-weight: 700; padding: 2px 8px; letter-spacing: 0.04em; display: inline-block; margin-left: 4px; }
         .badge-strong { background: #b71c1c; color: white; }
         .badge-solid { background: #e65100; color: white; }
@@ -90,7 +93,7 @@
         .sig-bet-btn.active { background: #e65100; }
         .sig-poly-link { color: #42a5f5; font-size: 10px; text-decoration: none; }
         .sig-poly-link:hover { text-decoration: underline; }
-        .sig-summary { background: #1a1d27; border: 1px solid #2d3139; padding: 12px 16px; margin-bottom: 14px; font-size: 12px; color: #aaa; display: flex; gap: 20px; flex-wrap: wrap; }
+        .sig-summary { background: #1a1d27; border: 1px solid #2d3139; padding: 14px 18px; margin-bottom: 14px; font-size: 14px; color: #aaa; display: flex; gap: 24px; flex-wrap: wrap; }
         .sig-summary strong { color: #e0e0e0; }
         .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
         .bar-label { font-size: 11px; color: #aaa; width: 120px; text-align: right; }
@@ -107,7 +110,7 @@ window.PICKS_DATA = [];
 </script>
 
 <div class="header">
-    <h1>TENNIS SIGNAL SYSTEM — P&L DASHBOARD</h1>
+    <h1>TENNIS BETTING SIGNAL SYSTEM — ALL-IN-ONE DASHBOARD</h1>
     <div class="sub" id="headerSub">Loading data...</div>
 </div>
 
@@ -123,6 +126,10 @@ window.PICKS_DATA = [];
 
 <!-- SIGNALS -->
 <div class="panel active" id="panel-signals">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+        <div style="font-size:13px; font-weight:600; color:#e0e0e0">Today's Signals</div>
+        <div id="dateTimeClock" style="font-size:13px; font-weight:600; color:#d4740a; display:flex; align-items:center; gap:6px"></div>
+    </div>
     <div class="filters">
         <label>Filter:</label>
         <select id="sigFilterType" onchange="renderSignals()">
@@ -226,12 +233,12 @@ const avgEdge = withEdge.length > 0 ? (withEdge.reduce((s, p) => s + Math.abs(p.
 const bestEdge = picks.length > 0 ? Math.max(...picks.map(p => Math.abs(p.edge || 0))).toFixed(1) + '%' : '—';
 
 document.getElementById('statsRow').innerHTML = [
-    statCard('Total Picks', picks.length, 'white'),
+    statCard('Total Signals', picks.length, 'white'),
     statCard('Bets Placed', myBets.length, 'amber'),
     statCard('Signals (Edge)', withEdge.length, 'amber'),
     statCard('Win Rate', winRate, resolved.length > 0 && wins.length/resolved.length >= 0.5 ? 'green' : 'red'),
     statCard('Total P&L', totalPnl === 0 ? '—' : pnlStr, totalPnl >= 0 ? 'green' : 'red'),
-    statCard('Avg Edge', avgEdge, 'amber'),
+    statCard('Avg Edge (All)', avgEdge, 'amber'),
     statCard('Best Edge', bestEdge, 'green'),
 ].join('');
 
@@ -743,7 +750,7 @@ function renderSignals() {
         <span>Showing: <strong>${latest.length}</strong> signals</span>
         <span>Edge Signals: <strong>${edgeCount}</strong></span>
         <span>Avg Edge: <strong>${avgEdge}%</strong></span>
-        <span>Total Volume: <strong>$${(totalVol/1000).toFixed(0)}K</strong></span>
+        <span>Total Volume: <strong>$${totalVol.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></span>
     </div>`;
 
     html += '<div class="sig-grid">';
@@ -789,12 +796,15 @@ function renderSignals() {
         const edgeSign = (s.edge || 0) >= 0 ? '+' : '';
         const edgeColor = edge >= 10 ? '#f44336' : edge >= 7 ? '#e65100' : edge >= 5 ? '#d4740a' : '#6c757d';
 
+        const activeBadge = isBet ? '<span class="active-bet-badge">ACTIVE BET</span>' : '';
+
         html += `
         <div class="sig-card ${isBet ? 'is-bet' : ''}" id="sig-${s.match.replace(/[^a-zA-Z0-9]/g, '')}">
             <div class="sig-top">
                 <div>
-                    <div class="sig-match">${s.match}</div>
-                    <div class="sig-tourney">${meta || '—'}</div>
+                    <div class="sig-match">${s.match}${activeBadge}</div>
+                    ${tourney ? '<div class="sig-tournament-badge">' + tourney + '</div>' : ''}
+                    <div class="sig-tourney">${[surface, round].filter(Boolean).join(' · ') || '—'}</div>
                 </div>
                 <div>${tierBadge}${valBadge}</div>
             </div>
@@ -835,7 +845,7 @@ function renderSignals() {
                 </div>
             </div>
             <div class="sig-footer">
-                <button class="sig-bet-btn ${isBet ? 'active' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}')">${isBet ? '✓ BET PLACED' : 'I BET THIS'}</button>
+                <button class="sig-bet-btn ${isBet ? 'active' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}')">${isBet ? '✓ Active Bet' : 'Place Bet'}</button>
                 <a href="${polyLink}" target="_blank" class="sig-poly-link">Open on Polymarket →</a>
             </div>
         </div>`;
@@ -857,12 +867,12 @@ function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, mark
     if (idx >= 0) {
         myBets.splice(idx, 1);
         btn.classList.remove('active');
-        btn.textContent = 'I BET THIS';
+        btn.textContent = 'Place Bet';
         btn.closest('.sig-card').classList.remove('is-bet');
     } else {
         myBets.push(data);
         btn.classList.add('active');
-        btn.textContent = '✓ BET PLACED';
+        btn.textContent = '✓ Active Bet';
         btn.closest('.sig-card').classList.add('is-bet');
     }
     localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
@@ -870,6 +880,19 @@ function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, mark
 
 // Initial render
 renderSignals();
+
+// ─── DATE/TIME CLOCK WITH SUN/MOON ───
+function updateClock() {
+    const now = new Date();
+    const h = now.getHours();
+    const icon = (h >= 6 && h < 18) ? '☀️' : '🌙';
+    const opts = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true };
+    const formatted = now.toLocaleDateString('en-US', opts);
+    const el = document.getElementById('dateTimeClock');
+    if (el) el.innerHTML = `<span>${icon}</span> <span>${formatted}</span>`;
+}
+updateClock();
+setInterval(updateClock, 30000);
 </script>
 
 </body>

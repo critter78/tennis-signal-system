@@ -11,3 +11,13 @@ services:
       - key: FLASK_ENV
         value: production
     healthCheckPath: /api/status
+  - type: cron
+    name: daily-signal-generator
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    schedule: "0 12 * * *"
+    startCommand: python3 run_daily_render.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
