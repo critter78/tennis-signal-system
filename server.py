@@ -470,6 +470,16 @@ function copyLink() {
     });
 }
 
+function copyShareLink(token) {
+    const url = window.location.origin + '/s/' + token;
+    navigator.clipboard.writeText(url).then(() => {
+        const btn = event.target;
+        const orig = btn.textContent;
+        btn.textContent = 'COPIED!';
+        setTimeout(() => btn.textContent = orig, 2000);
+    });
+}
+
 async function revokeShare(token) {
     await fetch('/admin/revoke-share', {
         method: 'POST',
@@ -504,7 +514,7 @@ async function loadShares() {
             '<td style="font-size:10px">' + remaining + '</td>' +
             '<td>' + info.views + '</td>' +
             '<td>' + status + '</td>' +
-            '<td>' + (isActive ? '<button class="revoke-btn" onclick="revokeShare(\\''+token+'\\')">REVOKE</button>' : '') + '</td>' +
+            '<td style="display:flex;gap:6px">' + (isActive ? '<button class="copy-btn" style="margin:0;font-size:9px;padding:4px 8px" onclick="copyShareLink(\\''+token+'\\')">COPY LINK</button><button class="revoke-btn" onclick="revokeShare(\\''+token+'\\')">REVOKE</button>' : '') + '</td>' +
             '</tr>';
     }
     html += '</tbody></table>';
