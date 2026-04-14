@@ -366,6 +366,16 @@ h1 { font-size: 16px; color: #d4740a; margin-bottom: 6px; letter-spacing: 0.06em
 .section { background: #1a1d27; border: 1px solid #2d3139; padding: 24px; margin-bottom: 20px; }
 .section h2 { font-size: 13px; color: #d4740a; margin-bottom: 16px; letter-spacing: 0.04em; }
 .duration-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+@media (max-width: 600px) {
+    body { padding: 15px; }
+    .section { padding: 16px; }
+    .duration-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .dur-btn { padding: 12px 6px; font-size: 12px; }
+    .result .url { font-size: 11px; }
+    table { font-size: 10px; }
+    th, td { padding: 6px; }
+    h1 { font-size: 14px; }
+}
 .dur-btn { background: #0f1117; border: 1px solid #2d3139; color: #e0e0e0; padding: 14px; text-align: center; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 700; transition: all 0.2s; }
 .dur-btn:hover { border-color: #d4740a; color: #d4740a; }
 .dur-btn.selected { border-color: #d4740a; background: #1e1200; color: #d4740a; }

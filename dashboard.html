@@ -37,6 +37,90 @@
         .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
         @media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
 
+        /* ── MOBILE RESPONSIVE ── */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+
+            /* Header */
+            .header { flex-direction: column !important; gap: 10px; }
+            .header h1 { font-size: 13px; letter-spacing: 0.03em; }
+            .header .sub { font-size: 9px; }
+
+            /* Stat cards — 2 per row on mobile */
+            .stats-row { gap: 8px; }
+            .stat-card { min-width: calc(50% - 8px); flex: 0 0 calc(50% - 4px); padding: 10px 12px; }
+            .stat-card .label { font-size: 8px; }
+            .stat-card .value { font-size: 16px; }
+
+            /* Tabs — scrollable horizontal */
+            .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; gap: 0; }
+            .tab { padding: 8px 14px; font-size: 10px; flex-shrink: 0; }
+
+            /* Filters — stack vertically */
+            .filters { flex-direction: column; gap: 6px; }
+            .filters select, .filters input { width: 100%; padding: 8px 10px; font-size: 12px; }
+            .filters label { display: none; }
+
+            /* Signal summary bar */
+            .sig-summary { font-size: 11px; padding: 10px 12px; gap: 12px; flex-direction: column; }
+
+            /* Signal cards — single column, full width */
+            .sig-grid { grid-template-columns: 1fr; gap: 10px; }
+            .sig-top { padding: 10px 12px; flex-wrap: wrap; gap: 6px; }
+            .sig-match { font-size: 12px; }
+            .sig-badge { font-size: 8px; padding: 2px 6px; }
+            .sig-tournament-badge { font-size: 9px; }
+            .active-bet-badge { font-size: 8px; padding: 2px 6px; }
+            .sig-body { padding: 10px 12px; }
+            .sig-pick { flex-wrap: wrap; gap: 8px; }
+            .sig-pick-name { font-size: 14px; }
+
+            /* Numbers grid — 2x2 on mobile */
+            .sig-nums { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+            .sig-num .sn-label { font-size: 7px; }
+            .sig-num .sn-val { font-size: 14px; }
+
+            /* Player stats — stack vertically */
+            .sig-stats { grid-template-columns: 1fr; gap: 10px; font-size: 10px; }
+            .sig-stats > div:last-child { text-align: left !important; }
+            .sig-h2h { text-align: left; padding: 6px 0; border-top: 1px solid #2d3139; border-bottom: 1px solid #2d3139; }
+
+            /* Footer */
+            .sig-footer { padding: 8px 12px; flex-wrap: wrap; gap: 8px; }
+            .sig-bet-btn { flex: 1; text-align: center; padding: 10px; font-size: 12px; }
+            .sig-poly-link { flex: 1; text-align: center; font-size: 10px; padding: 8px 0; }
+
+            /* Charts */
+            .chart-card { padding: 12px; }
+            .chart-card h3 { font-size: 10px; }
+
+            /* Mini stats */
+            .mini-stat { padding: 10px; }
+            .mini-stat .ms-label { font-size: 8px; }
+            .mini-stat .ms-value { font-size: 18px; }
+
+            /* Tables — horizontal scroll */
+            .chart-card { overflow-x: auto; }
+            table { min-width: 600px; }
+            th { font-size: 8px; padding: 6px 8px; }
+            td { font-size: 10px; padding: 6px 8px; }
+
+            /* Today's Signals header */
+            #panel-signals > div:first-child { flex-direction: column !important; gap: 6px; }
+            #dateTimeClock { font-size: 11px !important; }
+
+            /* Data freshness + buttons */
+            #dataFreshness { font-size: 9px !important; }
+        }
+
+        /* ── TABLET (601-900px) ── */
+        @media (min-width: 601px) and (max-width: 900px) {
+            .header h1 { font-size: 15px; }
+            .stat-card { min-width: calc(33% - 8px); }
+            .sig-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+            .tab { padding: 8px 16px; font-size: 11px; }
+        }
+
         .chart-card { background: #1a1d27; border: 1px solid #2d3139; padding: 16px; }
         .chart-card h3 { font-size: 12px; font-weight: 700; color: #d4740a; margin-bottom: 12px; letter-spacing: 0.04em; }
         .chart-card canvas { width: 100% !important; }
