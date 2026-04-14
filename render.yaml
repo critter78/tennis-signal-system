@@ -12,11 +12,11 @@ services:
         value: production
     healthCheckPath: /api/status
   - type: cron
-    name: daily-signal-generator
+    name: signal-generator-6h
     runtime: python
     plan: starter
     buildCommand: pip install -r requirements.txt
-    schedule: "0 12 * * *"
+    schedule: "0 2,8,14,20 * * *"
     startCommand: python3 run_daily_render.py
     envVars:
       - key: PYTHON_VERSION

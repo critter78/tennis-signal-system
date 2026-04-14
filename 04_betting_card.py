@@ -647,7 +647,32 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         edge_a = model_prob - poly_pa / 100
         edge_b = (1 - model_prob) - poly_pb / 100
 
-        if abs(edge_a) >= abs(edge_b):
+        # Data quality gate: if NEITHER player has meaningful historical data
+        # (win_rate is None = fewer than 5 matches), the model is just guessing ~50%.
+        # Skip this market entirely — no signal is better than a bad signal.
+        if sa.get("win_rate") is None and sb.get("win_rate") is None:
+            if debug:
+                print(f"  [skip] {pa} vs {pb}: both players lack historical data")
+            continue
+
+        # Pick the side with the HIGHEST POSITIVE edge.
+        # If neither side has positive edge, still include the market for display
+        # but mark it as no-edge (informational only).
+        if edge_a > 0 and edge_a >= edge_b:
+            bet_player = pa
+            edge       = edge_a
+            poly_price = poly_pa
+            prob       = model_prob
+            poly_url_player = pa
+        elif edge_b > 0 and edge_b > edge_a:
+            bet_player = pb
+            edge       = edge_b
+            poly_price = poly_pb
+            prob       = 1 - model_prob
+            poly_url_player = pb
+        elif edge_a >= edge_b:
+            # Neither side has positive edge — show the "less negative" side
+            # but it will be marked as no-edge
             bet_player = pa
             edge       = edge_a
             poly_price = poly_pa
@@ -694,7 +719,7 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "sa_rest":      sa.get("days_rest"),
             "sb_rest":      sb.get("days_rest"),
             "h2h":          h2,
-            "has_edge":     abs(edge) >= min_edge,
+            "has_edge":     edge >= min_edge,  # POSITIVE edge only (not abs)
             "rank":         rank_a,
             "rank_a":       rank_a,
             "rank_b":       rank_b,
@@ -704,7 +729,8 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "surface":      surface,
         })
 
-    return sorted(signals, key=lambda x: abs(x["edge"]), reverse=True)
+    # Sort by positive edge first (true signals), then by abs edge for the rest
+    signals.sort(key=lambda x: (x.get("has_edge", False), x["edge"]), reverse=True)
 
 
 def _ranking_to_tourney_prob(rank, n_rounds=7, surface_boost=1.0, form_factor=1.0):
@@ -989,17 +1015,19 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
         })
 
     print(f"  → {n_matched} players matched, {n_unmatched} unmatched in historical data")
-    return sorted(signals, key=lambda x: abs(x["edge"]), reverse=True)
+    # Sort: positive-edge signals first, then by edge value descending
+    signals.sort(key=lambda x: (x.get("has_edge", False), x["edge"]), reverse=True)
 
 
 # ─── HTML CARD GENERATOR ──────────────────────────────────────────────────────
 
 def edge_tier(edge):
-    e = abs(edge)
-    if e >= 10: return ("🔥 STRONG",  "#d84315", "strong")
-    if e >= 7:  return ("✅ SOLID",   "#d4740a", "solid")
-    if e >= 5:  return ("👀 WATCH",   "#495057", "watch")
-    return              ("〰️ MARGINAL","#6c757d",    "marginal")
+    # Only positive edges get signal tiers
+    if edge >= 10: return ("🔥 STRONG",  "#d84315", "strong")
+    if edge >= 7:  return ("✅ SOLID",   "#d4740a", "solid")
+    if edge >= 5:  return ("👀 WATCH",   "#495057", "watch")
+    if edge >= 0:  return ("〰️ MARGINAL","#6c757d",    "marginal")
+    return                 ("⛔ NO EDGE", "#f44336",    "no-edge")
 
 
 def value_badge(model_prob, poly_price):

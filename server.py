@@ -408,13 +408,15 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
 <div class="section">
     <h2>GENERATE TIME-LIMITED SHARE LINK</h2>
     <div class="duration-grid" id="durGrid">
-        <div class="dur-btn" data-min="10" onclick="selectDur(this)">10 min</div>
         <div class="dur-btn" data-min="15" onclick="selectDur(this)">15 min</div>
         <div class="dur-btn" data-min="30" onclick="selectDur(this)">30 min</div>
         <div class="dur-btn" data-min="45" onclick="selectDur(this)">45 min</div>
-        <div class="dur-btn" data-min="60" onclick="selectDur(this)">60 min</div>
-        <div class="dur-btn" data-min="75" onclick="selectDur(this)">75 min</div>
+        <div class="dur-btn" data-min="60" onclick="selectDur(this)">1 hr</div>
         <div class="dur-btn" data-min="90" onclick="selectDur(this)">90 min</div>
+        <div class="dur-btn" data-min="120" onclick="selectDur(this)">2 hr</div>
+        <div class="dur-btn" data-min="240" onclick="selectDur(this)">4 hr</div>
+        <div class="dur-btn" data-min="360" onclick="selectDur(this)">6 hr</div>
+        <div class="dur-btn" data-min="720" onclick="selectDur(this)">12 hr</div>
     </div>
     <div class="label-row">
         <input type="text" id="shareLabel" placeholder="Label (optional) — e.g. 'For Mike'">
@@ -600,7 +602,7 @@ def admin_create_share():
     label = data.get("label", "")
 
     # Validate duration
-    allowed = [10, 15, 30, 45, 60, 75, 90]
+    allowed = [15, 30, 45, 60, 90, 120, 240, 360, 720]
     if duration not in allowed:
         return jsonify({"error": f"Duration must be one of: {allowed}"}), 400
 
