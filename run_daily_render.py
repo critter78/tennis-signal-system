@@ -75,19 +75,25 @@ def main():
             [sys.executable, "04_betting_card.py", "--min-volume", "300"],
         )
 
-    # Step 2: LSTM learner — auto-retrain if enough resolved picks
+    # Step 2: Resolve outcomes — check Polymarket for completed matches
+    run_step(
+        "Resolve bet outcomes",
+        [sys.executable, "08_outcome_resolver.py"],
+    )
+
+    # Step 3: LSTM learner — auto-retrain if enough resolved picks
     run_step(
         "LSTM learner check/train",
         [sys.executable, "06_lstm_learner.py", "train"],
     )
 
-    # Step 3: Generate dashboard with latest picks
+    # Step 4: Generate dashboard with latest picks
     run_step(
         "Generate dashboard",
         [sys.executable, "07_dashboard.py"],
     )
 
-    # Step 4: Log summary
+    # Step 5: Log summary
     picks_file = BASE_DIR / "logs" / "picks.jsonl"
     if picks_file.exists():
         with open(picks_file) as f:

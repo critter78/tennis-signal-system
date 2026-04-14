@@ -282,6 +282,8 @@ window.PICKS_DATA = [];
 
 <!-- MODEL ACCURACY -->
 <div class="panel" id="panel-accuracy">
+    <!-- LSTM TRAINING PROGRESS -->
+    <div id="lstmProgress" class="chart-card" style="margin-bottom:20px"></div>
     <div class="grid-2">
         <div class="chart-card"><h3>CALIBRATION — MODEL PROB vs ACTUAL WIN RATE</h3><canvas id="chartCalib"></canvas></div>
         <div class="chart-card"><h3>MODEL vs MARKET PRICING</h3><canvas id="chartModelMarket"></canvas></div>
@@ -386,6 +388,64 @@ Chart.defaults.color = '#6c757d';
 Chart.defaults.borderColor = '#2d3139';
 Chart.defaults.font.family = "'IBM Plex Mono', monospace";
 Chart.defaults.font.size = 10;
+
+// ─── LSTM TRAINING PROGRESS ───
+(function() {
+    const el = document.getElementById('lstmProgress');
+    if (!el) return;
+
+    const lstmMin = 50;
+    const resolvedCount = resolved.length;
+    const progress = Math.min(resolvedCount, lstmMin);
+    const pct = Math.round((progress / lstmMin) * 100);
+    const isReady = resolvedCount >= lstmMin;
+
+    const statusColor = isReady ? '#4caf50' : '#d4740a';
+    const statusText = isReady ? 'LSTM ACTIVE — Learning from outcomes' : `${lstmMin - resolvedCount} more resolved bets needed`;
+    const barColor = isReady ? '#4caf50' : '#d4740a';
+
+    // Milestones
+    const milestones = [
+        { at: 10, label: 'Basic stats' },
+        { at: 25, label: 'Pattern detection' },
+        { at: 50, label: 'LSTM activates' },
+        { at: 100, label: 'High confidence' },
+        { at: 200, label: 'Full calibration' },
+    ];
+
+    let milestonesHtml = milestones.map(m => {
+        const reached = resolvedCount >= m.at;
+        const pos = Math.min((m.at / 200) * 100, 100);
+        return `<div style="position:absolute; left:${pos}%; transform:translateX(-50%); text-align:center; top:-2px">
+            <div style="width:2px; height:10px; background:${reached ? '#4caf50' : '#2d3139'}; margin:0 auto"></div>
+            <div style="font-size:8px; color:${reached ? '#4caf50' : '#6c757d'}; margin-top:2px; white-space:nowrap">${m.at}</div>
+            <div style="font-size:7px; color:${reached ? '#81c784' : '#6c757d'}; white-space:nowrap">${m.label}</div>
+        </div>`;
+    }).join('');
+
+    const barPct = Math.min((resolvedCount / 200) * 100, 100);
+
+    el.innerHTML = `
+        <h3>LSTM SEQUENTIAL LEARNER — TRAINING PROGRESS</h3>
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px">
+            <div style="flex:1">
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px">
+                    <span style="font-size:11px; color:#e0e0e0; font-weight:700">${resolvedCount} resolved outcomes</span>
+                    <span style="font-size:11px; color:${statusColor}; font-weight:600">${isReady ? 'ACTIVE' : pct + '% to activation'}</span>
+                </div>
+                <div style="height:24px; background:#0f1117; border:1px solid #2d3139; position:relative; overflow:hidden">
+                    <div style="height:100%; width:${barPct}%; background:linear-gradient(90deg, #d4740a, ${isReady ? '#4caf50' : '#e65100'}); transition:width 0.5s"></div>
+                    ${resolvedCount >= 50 ? '<div style="position:absolute; left:' + Math.min((50/200)*100, 100) + '%; top:0; bottom:0; width:2px; background:#4caf50"></div>' : ''}
+                </div>
+                <div style="position:relative; height:36px; margin-top:4px">
+                    ${milestonesHtml}
+                </div>
+            </div>
+        </div>
+        <div style="font-size:10px; color:#6c757d">${statusText}</div>
+        ${resolvedCount > 0 ? '<div style="font-size:10px; color:#aaa; margin-top:6px">Win rate: <strong style="color:' + (wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336') + '">' + (wins.length/resolved.length*100).toFixed(1) + '%</strong> (' + wins.length + 'W-' + losses.length + 'L) | PnL: <strong style="color:' + (totalPnl >= 0 ? '#4caf50' : '#f44336') + '">$' + totalPnl.toFixed(0) + '</strong></div>' : ''}
+    `;
+})();
 
 // ─── CUMULATIVE P&L CHART ───
 (function() {
