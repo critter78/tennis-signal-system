@@ -210,7 +210,40 @@ function switchTab(name) {
 
 // ─── DATA PROCESSING ───
 const picks = window.PICKS_DATA || [];
-const myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
+let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
+
+// Sync bets from server (so bets show across all devices)
+(async function syncBetsFromServer() {
+    try {
+        const res = await fetch('/api/bets');
+        const data = await res.json();
+        const serverBets = data.bets || {};
+        // Server stores as object keyed by match+betOn, convert to array
+        const serverArr = Object.values(serverBets);
+        if (serverArr.length > 0) {
+            // Merge: server wins for duplicates, keep local-only bets
+            const merged = [...serverArr];
+            const serverKeys = new Set(serverArr.map(b => b.match + '|' + b.bet_on));
+            myBets.forEach(b => {
+                if (!serverKeys.has(b.match + '|' + b.bet_on)) merged.push(b);
+            });
+            myBets.length = 0;
+            merged.forEach(b => myBets.push(b));
+            localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
+            // Push merged back to server
+            const obj = {};
+            myBets.forEach(b => obj[b.match + '|' + b.bet_on] = b);
+            fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(obj) });
+        } else if (myBets.length > 0) {
+            // Push local bets to server
+            const obj = {};
+            myBets.forEach(b => obj[b.match + '|' + b.bet_on] = b);
+            fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(obj) });
+        }
+        // Re-render signals after sync
+        if (typeof renderSignals === 'function') renderSignals();
+    } catch(e) { /* offline or shared view — use localStorage only */ }
+})();
 
 const resolved = picks.filter(p => p.outcome !== null && p.outcome !== undefined);
 const withEdge = picks.filter(p => p.has_edge);
@@ -876,6 +909,12 @@ function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, mark
         btn.closest('.sig-card').classList.add('is-bet');
     }
     localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
+    // Sync to server so bets appear on all devices
+    try {
+        const obj = {};
+        myBets.forEach(b => obj[b.match + '|' + b.bet_on] = b);
+        fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(obj) });
+    } catch(e) {}
 }
 
 // Initial render

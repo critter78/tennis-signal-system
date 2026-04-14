@@ -130,7 +130,7 @@ def check_admin_cookie():
 def set_admin_cookie(response):
     """Set the admin session cookie."""
     token = hashlib.sha256(f"{ADMIN_PASSWORD}:{app.secret_key}".encode()).hexdigest()
-    response.set_cookie("tennis_admin", token, max_age=30*24*3600, httponly=True, samesite="Lax")
+    response.set_cookie("tennis_admin", token, max_age=3600, httponly=True, samesite="Lax")
     return response
 
 
