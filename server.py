@@ -141,7 +141,10 @@ def enable_cors(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         response = f(*args, **kwargs)
-        if isinstance(response, dict):
+        # Handle tuple responses like (jsonify(...), 401)
+        if isinstance(response, tuple):
+            response = make_response(*response)
+        elif isinstance(response, dict):
             response = make_response(jsonify(response))
         elif isinstance(response, str):
             response = make_response(response)
