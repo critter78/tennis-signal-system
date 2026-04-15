@@ -1,6 +1,6 @@
 #!/bin/bash
-# Render startup script — runs on every deploy before gunicorn starts
-# Ensures resolved outcomes and fresh cards are available immediately
+# Render startup script — starts gunicorn FIRST, then runs pipeline in background
+# This ensures the port opens immediately so Render doesn't time out
 set -e
 
 echo "=========================================="
@@ -10,22 +10,31 @@ echo "=========================================="
 # Create directories
 mkdir -p cards logs data
 
-# Step 1: Fetch live ATP/WTA rankings
-echo "[1/4] Fetching live rankings..."
-python3 09_rankings_fetcher.py 2>&1 | tail -5 || echo "  Warning: Rankings fetch failed (will use historical)"
+# Start gunicorn IMMEDIATELY so Render detects the port
+echo "[1/2] Starting gunicorn..."
+gunicorn server:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120 &
+GUNICORN_PID=$!
 
-# Step 2: Generate fresh betting cards (pulls latest Polymarket data, filters completed matches)
-echo "[2/4] Generating fresh betting cards..."
-python3 04_betting_card.py --min-volume 500 2>&1 | tail -5 || {
-    echo "  Card generation failed, trying lower volume threshold..."
-    python3 04_betting_card.py --min-volume 300 2>&1 | tail -5 || echo "  Warning: Card generation failed"
-}
+# Give gunicorn a moment to bind the port
+sleep 3
 
-# Step 3: Resolve outcomes for all picks (updates picks.jsonl with W/L results)
-echo "[3/4] Resolving bet outcomes..."
-python3 08_outcome_resolver.py 2>&1 | tail -10 || echo "  Warning: Outcome resolution failed"
+# Run pipeline in background — server is already serving
+echo "[2/2] Running data pipeline in background..."
+{
+    echo "  Fetching live rankings..."
+    python3 09_rankings_fetcher.py --refresh 2>&1 | tail -5 || echo "  Warning: Rankings fetch failed"
 
-# Step 4: Launch gunicorn
-echo "[4/4] Starting gunicorn..."
-echo "=========================================="
-exec gunicorn server:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    echo "  Generating fresh betting cards..."
+    python3 04_betting_card.py --min-volume 500 2>&1 | tail -5 || {
+        echo "  Card gen failed at $500, trying $300..."
+        python3 04_betting_card.py --min-volume 300 2>&1 | tail -5 || echo "  Warning: Card generation failed"
+    }
+
+    echo "  Resolving bet outcomes..."
+    python3 08_outcome_resolver.py 2>&1 | tail -10 || echo "  Warning: Outcome resolution failed"
+
+    echo "  Background pipeline complete."
+} &
+
+# Wait for gunicorn (keeps the script alive)
+wait $GUNICORN_PID
