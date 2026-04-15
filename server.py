@@ -1087,6 +1087,11 @@ def resolve_outcomes_route():
 
             slug = pick.get("slug", "")
             if not slug:
+                # Extract slug from poly_link if available
+                poly_link = pick.get("poly_link", "")
+                if "/event/" in poly_link:
+                    slug = poly_link.split("/event/")[-1].split("?")[0].split("/")[0]
+            if not slug:
                 continue
 
             try:
