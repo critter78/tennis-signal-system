@@ -58,6 +58,18 @@ def log_picks(signals, run_id=None):
                 "sa_wr": s.get("sa_wr"), "sb_wr": s.get("sb_wr"),
                 "sa_swr": s.get("sa_swr"), "sb_swr": s.get("sb_swr"),
                 "sa_form": s.get("sa_form"), "sb_form": s.get("sb_form"),
+                "sa_rest": s.get("sa_rest"), "sb_rest": s.get("sb_rest"),
+                # Advanced stats
+                "sa_elo": s.get("sa_elo"), "sb_elo": s.get("sb_elo"),
+                "sa_momentum": s.get("sa_momentum"), "sb_momentum": s.get("sb_momentum"),
+                "sa_vs_top10": s.get("sa_vs_top10"), "sb_vs_top10": s.get("sb_vs_top10"),
+                "sa_vs_top20": s.get("sa_vs_top20"), "sb_vs_top20": s.get("sb_vs_top20"),
+                "sa_vs_top50": s.get("sa_vs_top50"), "sb_vs_top50": s.get("sb_vs_top50"),
+                "sa_rank_now": s.get("sa_rank_now"), "sb_rank_now": s.get("sb_rank_now"),
+                "sa_rank_30d": s.get("sa_rank_30d"), "sb_rank_30d": s.get("sb_rank_30d"),
+                "sa_rank_180d": s.get("sa_rank_180d"), "sb_rank_180d": s.get("sb_rank_180d"),
+                "sa_rank_365d": s.get("sa_rank_365d"), "sb_rank_365d": s.get("sb_rank_365d"),
+                "sa_rank_move": s.get("sa_rank_move"), "sb_rank_move": s.get("sb_rank_move"),
                 "outcome": None, "actual_winner": None, "resolved_at": None, "pnl": None}
             f.write(json.dumps(entry) + "\n"); logged += 1
     if skipped:
