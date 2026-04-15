@@ -75,12 +75,13 @@ def fetch_resolved_markets():
     """
     Fetch recently resolved (closed) tennis markets from Polymarket.
     Returns list of market dicts with outcome info.
+    Uses minimal API calls with short timeouts to stay fast.
     """
     resolved = []
 
-    for tag in ["tennis", "atp-tennis", "wta-tennis", "atp", "wta"]:
+    # Use only the 2 most reliable tags to minimize API calls
+    for tag in ["tennis", "atp"]:
         try:
-            # Fetch closed markets
             r = requests.get(
                 f"{GAMMA_API}/events",
                 params={
@@ -90,7 +91,7 @@ def fetch_resolved_markets():
                     "order": "endDate",
                     "ascending": "false",
                 },
-                timeout=15,
+                timeout=8,
             )
             r.raise_for_status()
             events = r.json()
@@ -111,25 +112,24 @@ def fetch_resolved_markets():
         except Exception as e:
             print(f"  [warn] resolved events/{tag}: {e}")
 
-    # Also try markets endpoint directly
-    for tag in ["tennis", "atp-tennis", "wta-tennis", "atp", "wta"]:
-        try:
-            r = requests.get(
-                f"{GAMMA_API}/markets",
-                params={
-                    "tag_slug": tag,
-                    "closed": "true",
-                    "limit": 200,
-                },
-                timeout=15,
-            )
-            r.raise_for_status()
-            for m in r.json():
-                parsed = _parse_resolved(m)
-                if parsed:
-                    resolved.append(parsed)
-        except Exception as e:
-            print(f"  [warn] resolved markets/{tag}: {e}")
+    # One markets endpoint call for broader coverage
+    try:
+        r = requests.get(
+            f"{GAMMA_API}/markets",
+            params={
+                "tag_slug": "tennis",
+                "closed": "true",
+                "limit": 200,
+            },
+            timeout=8,
+        )
+        r.raise_for_status()
+        for m in r.json():
+            parsed = _parse_resolved(m)
+            if parsed:
+                resolved.append(parsed)
+    except Exception as e:
+        print(f"  [warn] resolved markets/tennis: {e}")
 
     # Deduplicate
     seen = set()
@@ -257,7 +257,7 @@ def fetch_market_by_slug(slug):
         r = requests.get(
             f"{GAMMA_API}/events",
             params={"slug": slug, "limit": 1},
-            timeout=15,
+            timeout=8,
         )
         r.raise_for_status()
         events = r.json()
@@ -283,7 +283,7 @@ def fetch_market_by_slug(slug):
         r = requests.get(
             f"{GAMMA_API}/markets",
             params={"slug": slug, "limit": 1},
-            timeout=15,
+            timeout=8,
         )
         r.raise_for_status()
         markets = r.json()
@@ -305,7 +305,7 @@ def fetch_market_by_id(market_id):
     try:
         r = requests.get(
             f"{GAMMA_API}/markets/{market_id}",
-            timeout=15,
+            timeout=8,
         )
         r.raise_for_status()
         m = r.json()
@@ -558,7 +558,7 @@ def resolve_picks(dry_run=False):
 
     # PHASE 2: Individual slug lookups for unmatched picks (capped at 50 API calls)
     import time
-    MAX_SLUG_LOOKUPS = 50
+    MAX_SLUG_LOOKUPS = 20
     slug_results = {}  # slug -> resolved market dict (cache)
 
     if unmatched_slugs and not dry_run:
