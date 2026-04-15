@@ -402,8 +402,17 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head><body>
 
-<h1>SHARE MANAGER</h1>
+<h1>ADMIN PANEL</h1>
 <div class="sub"><a href="/" class="back-link">&larr; Back to Dashboard</a></div>
+
+<div class="section">
+    <h2>SYSTEM ACTIONS</h2>
+    <div style="display:flex; gap:10px; flex-wrap:wrap">
+        <button class="gen-btn" style="width:auto; padding:12px 24px" onclick="resolveNow()">RESOLVE OUTCOMES NOW</button>
+        <button class="gen-btn" style="width:auto; padding:12px 24px; background:#1b5e20" onclick="generateNow()">GENERATE FRESH CARD</button>
+    </div>
+    <div id="actionResult" style="display:none; margin-top:12px; background:#0f1117; border:1px solid #2d3139; padding:12px; font-size:11px; white-space:pre-wrap; max-height:200px; overflow-y:auto"></div>
+</div>
 
 <div class="section">
     <h2>GENERATE TIME-LIMITED SHARE LINK</h2>
@@ -521,6 +530,48 @@ async function loadShares() {
     }
     html += '</tbody></table>';
     wrap.innerHTML = html;
+}
+
+async function resolveNow() {
+    const box = document.getElementById('actionResult');
+    box.style.display = 'block';
+    box.style.borderColor = '#d4740a';
+    box.textContent = 'Running outcome resolver...';
+    try {
+        const res = await fetch('/resolve', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            box.style.borderColor = '#1b5e20';
+            box.textContent = 'Done!\\n\\n' + (data.output || 'No output');
+        } else {
+            box.style.borderColor = '#f44336';
+            box.textContent = 'Error: ' + (data.error || data.message || 'Unknown') + '\\n\\n' + (data.output || '');
+        }
+    } catch(e) {
+        box.style.borderColor = '#f44336';
+        box.textContent = 'Request failed: ' + e.message;
+    }
+}
+
+async function generateNow() {
+    const box = document.getElementById('actionResult');
+    box.style.display = 'block';
+    box.style.borderColor = '#d4740a';
+    box.textContent = 'Generating fresh betting card... (this may take 1-2 minutes)';
+    try {
+        const res = await fetch('/generate', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            box.style.borderColor = '#1b5e20';
+            box.textContent = 'Done! Fresh card generated. Reload the dashboard to see updates.';
+        } else {
+            box.style.borderColor = '#f44336';
+            box.textContent = 'Error: ' + (data.error || data.message || 'Unknown');
+        }
+    } catch(e) {
+        box.style.borderColor = '#f44336';
+        box.textContent = 'Request failed: ' + e.message;
+    }
 }
 
 loadShares();
