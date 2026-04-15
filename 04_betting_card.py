@@ -467,6 +467,139 @@ def get_player_ranking(df, player, as_of=None):
     return best_rank, best_pts
 
 
+# ── ELO COMPUTATION ──
+# Global cache for ELO ratings (computed once per run across all players)
+_elo_cache = None
+
+def _build_elo_table(df, cutoff, k_base=32, initial=1500):
+    """
+    Compute ELO ratings for all players from match history.
+    Uses variable K-factor: higher for upsets, lower for expected results.
+    Surface-specific ELO is a weighted blend of overall + surface-only.
+    """
+    global _elo_cache
+    if _elo_cache is not None:
+        return _elo_cache
+
+    elo = {}  # player -> rating
+    matches = df[df["date"] < cutoff].sort_values("date")
+
+    for _, m in matches.iterrows():
+        w, l = m["winner"], m["loser"]
+        if w not in elo: elo[w] = initial
+        if l not in elo: elo[l] = initial
+
+        ra, rb = elo[w], elo[l]
+        ea = 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
+        eb = 1.0 - ea
+
+        # Variable K: bigger updates for upsets
+        k = k_base
+        if ea < 0.3:  # winner was underdog
+            k = k_base * 1.5
+        elif ea > 0.8:  # expected result
+            k = k_base * 0.7
+
+        elo[w] = ra + k * (1 - ea)
+        elo[l] = rb + k * (0 - eb)
+
+    _elo_cache = elo
+    return elo
+
+
+def _compute_elo(df, player, cutoff):
+    """Get a player's current ELO rating."""
+    elo_table = _build_elo_table(df, cutoff)
+    return round(elo_table.get(player, 1500))
+
+
+def _compute_momentum(df, player, cutoff, recent_matches):
+    """
+    Compute a psychological momentum score (0-100) based on:
+    - Recent form (last 5-10 matches): 40% weight
+    - Quality of wins (beating higher-ranked opponents): 25% weight
+    - Rest & fatigue: 15% weight
+    - Streak factor (winning/losing streak): 20% weight
+
+    Higher = more positive momentum.
+    """
+    from datetime import timedelta
+
+    if len(recent_matches) == 0:
+        return 50  # neutral
+
+    # ── RECENT FORM (last 10 matches) ── 40%
+    l10 = recent_matches.tail(10)
+    l5 = recent_matches.tail(5)
+    if len(l10) > 0:
+        form_10 = (l10["winner"] == player).mean()
+        form_5 = (l5["winner"] == player).mean() if len(l5) > 0 else form_10
+        # Weight recent matches more heavily
+        form_score = (form_5 * 0.6 + form_10 * 0.4) * 100
+    else:
+        form_score = 50
+
+    # ── QUALITY OF WINS ── 25%
+    # Wins vs higher-ranked opponents in last 20 matches
+    l20 = recent_matches.tail(20)
+    quality_score = 50
+    quality_wins = 0
+    quality_total = 0
+    for _, m in l20.iterrows():
+        is_win = m["winner"] == player
+        if is_win and "l_rank" in df.columns and pd.notna(m.get("l_rank")):
+            opp_rank = int(m["l_rank"])
+            if opp_rank <= 30:
+                quality_wins += 1
+            quality_total += 1
+        elif not is_win and "w_rank" in df.columns and pd.notna(m.get("w_rank")):
+            quality_total += 1
+    if quality_total > 0:
+        quality_score = min(100, 40 + quality_wins * 15)  # Each top-30 win adds 15 pts
+
+    # ── REST & FATIGUE ── 15%
+    if len(recent_matches) > 0:
+        last_date = recent_matches["date"].max()
+        days_rest = (cutoff - last_date).days
+        # Sweet spot: 3-7 days rest is ideal
+        if 3 <= days_rest <= 7:
+            rest_score = 80
+        elif days_rest < 3:
+            rest_score = max(30, 80 - (3 - days_rest) * 20)  # too little rest
+        elif days_rest <= 14:
+            rest_score = 65  # moderate break, still fine
+        else:
+            rest_score = max(30, 65 - (days_rest - 14) * 2)  # ring rust
+    else:
+        rest_score = 40
+
+    # ── STREAK FACTOR ── 20%
+    streak = 0
+    for i in range(len(recent_matches) - 1, -1, -1):
+        m = recent_matches.iloc[i]
+        if m["winner"] == player:
+            if streak >= 0:
+                streak += 1
+            else:
+                break
+        else:
+            if streak <= 0:
+                streak -= 1
+            else:
+                break
+    # Map streak to score: +5 streak = 95, -5 streak = 5
+    streak_score = min(100, max(0, 50 + streak * 9))
+
+    # ── COMPOSITE ──
+    momentum = (
+        form_score * 0.40 +
+        quality_score * 0.25 +
+        rest_score * 0.15 +
+        streak_score * 0.20
+    )
+    return round(min(100, max(0, momentum)))
+
+
 def get_player_stats(df, player, as_of, surface, window_days=365):
     from datetime import timedelta
     cutoff = pd.Timestamp(as_of)
@@ -561,6 +694,77 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
         breaks_won = opp_bpFaced - opp_bpSaved
         bp_convert_pct = _safe_ratio(breaks_won, opp_bpFaced)
 
+    # ── WIN/LOSS VS RANKED OPPONENTS ──
+    vs_ranked = {"top10": {"w": 0, "l": 0}, "top20": {"w": 0, "l": 0}, "top50": {"w": 0, "l": 0}}
+    if "l_rank" in df.columns:
+        for _, m in wins.iterrows():
+            opp_rank = m.get("l_rank")
+            if pd.notna(opp_rank) and opp_rank > 0:
+                opp_rank = int(opp_rank)
+                if opp_rank <= 10: vs_ranked["top10"]["w"] += 1
+                if opp_rank <= 20: vs_ranked["top20"]["w"] += 1
+                if opp_rank <= 50: vs_ranked["top50"]["w"] += 1
+    if "w_rank" in df.columns:
+        for _, m in losses.iterrows():
+            opp_rank = m.get("w_rank")
+            if pd.notna(opp_rank) and opp_rank > 0:
+                opp_rank = int(opp_rank)
+                if opp_rank <= 10: vs_ranked["top10"]["l"] += 1
+                if opp_rank <= 20: vs_ranked["top20"]["l"] += 1
+                if opp_rank <= 50: vs_ranked["top50"]["l"] += 1
+
+    # ── RANKING HISTORY & MOVEMENT ──
+    def _get_rank_at(matches_w, matches_l, target_date, window_days=60):
+        """Get player's rank closest to a target date within a window."""
+        start = target_date - timedelta(days=window_days)
+        end = target_date + timedelta(days=window_days)
+        candidates = []
+        if "w_rank" in df.columns:
+            nearby_w = matches_w[(matches_w["date"] >= start) & (matches_w["date"] <= end)]
+            for _, m in nearby_w.iterrows():
+                if pd.notna(m.get("w_rank")) and m["w_rank"] > 0:
+                    candidates.append((abs((m["date"] - target_date).days), int(m["w_rank"])))
+        if "l_rank" in df.columns:
+            nearby_l = matches_l[(matches_l["date"] >= start) & (matches_l["date"] <= end)]
+            for _, m in nearby_l.iterrows():
+                if pd.notna(m.get("l_rank")) and m["l_rank"] > 0:
+                    candidates.append((abs((m["date"] - target_date).days), int(m["l_rank"])))
+        if candidates:
+            candidates.sort(key=lambda x: x[0])
+            return candidates[0][1]
+        return None
+
+    # All matches for the player (for ranking lookups beyond the 365d window)
+    all_wins = df[(df["winner"] == player) & (df["date"] < cutoff)].sort_values("date")
+    all_losses = df[(df["loser"] == player) & (df["date"] < cutoff)].sort_values("date")
+
+    rank_now = None
+    if "w_rank" in df.columns and len(all_wins) > 0:
+        recent = all_wins.tail(3)["w_rank"].dropna()
+        if len(recent) > 0:
+            rank_now = int(recent.iloc[-1])
+    if "l_rank" in df.columns and len(all_losses) > 0:
+        recent = all_losses.tail(3)["l_rank"].dropna()
+        if len(recent) > 0:
+            l_rank_now = int(recent.iloc[-1])
+            if rank_now is None or l_rank_now < rank_now:
+                rank_now = l_rank_now
+
+    rank_30d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=30))
+    rank_180d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=180))
+    rank_365d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=365))
+
+    # Ranking movement: positive = improved (lower rank number), negative = dropped
+    rank_move_180d = None
+    if rank_now and rank_180d:
+        rank_move_180d = rank_180d - rank_now  # positive = improved
+
+    # ── ELO RATING ──
+    elo = _compute_elo(df, player, cutoff)
+
+    # ── PSYCHOLOGICAL MOMENTUM ──
+    momentum = _compute_momentum(df, player, cutoff, all_m)
+
     return {
         "win_rate":       round(n_w / n_t * 100, 1) if n_t > 5 else None,
         "surf_win_rate":  round(len(s_w) / s_t * 100, 1) if s_t > 3 else None,
@@ -575,6 +779,20 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
         "second_won_pct":   second_won_pct,
         "bp_saved_pct":     bp_saved_pct,
         "bp_convert_pct":   bp_convert_pct,
+        # vs ranked opponents (52-week window)
+        "vs_top10":         vs_ranked["top10"],
+        "vs_top20":         vs_ranked["top20"],
+        "vs_top50":         vs_ranked["top50"],
+        # Ranking history
+        "rank_now":         rank_now,
+        "rank_30d":         rank_30d,
+        "rank_180d":        rank_180d,
+        "rank_365d":        rank_365d,
+        "rank_move_180d":   rank_move_180d,
+        # ELO rating
+        "elo":              elo,
+        # Psychological momentum (composite 0-100)
+        "momentum":         momentum,
     }
 
 
@@ -969,6 +1187,27 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "tournament":   tournament,
             "round":        round_name,
             "surface":      surface,
+            # ── NEW: Advanced stats ──
+            "sa_vs_top10":      sa.get("vs_top10"),
+            "sb_vs_top10":      sb.get("vs_top10"),
+            "sa_vs_top20":      sa.get("vs_top20"),
+            "sb_vs_top20":      sb.get("vs_top20"),
+            "sa_vs_top50":      sa.get("vs_top50"),
+            "sb_vs_top50":      sb.get("vs_top50"),
+            "sa_rank_now":      sa.get("rank_now"),
+            "sb_rank_now":      sb.get("rank_now"),
+            "sa_rank_30d":      sa.get("rank_30d"),
+            "sb_rank_30d":      sb.get("rank_30d"),
+            "sa_rank_180d":     sa.get("rank_180d"),
+            "sb_rank_180d":     sb.get("rank_180d"),
+            "sa_rank_365d":     sa.get("rank_365d"),
+            "sb_rank_365d":     sb.get("rank_365d"),
+            "sa_rank_move":     sa.get("rank_move_180d"),
+            "sb_rank_move":     sb.get("rank_move_180d"),
+            "sa_elo":           sa.get("elo"),
+            "sb_elo":           sb.get("elo"),
+            "sa_momentum":      sa.get("momentum"),
+            "sb_momentum":      sb.get("momentum"),
         })
 
     # Sort by positive edge first (true signals), then by abs edge for the rest
@@ -1259,6 +1498,27 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
             "tournament":      tournament,
             "round":           "Outright Winner",
             "surface":         surface,
+            # Advanced stats (outright — only player A has data)
+            "sa_vs_top10":     sa.get("vs_top10"),
+            "sb_vs_top10":     None,
+            "sa_vs_top20":     sa.get("vs_top20"),
+            "sb_vs_top20":     None,
+            "sa_vs_top50":     sa.get("vs_top50"),
+            "sb_vs_top50":     None,
+            "sa_rank_now":     sa.get("rank_now"),
+            "sb_rank_now":     None,
+            "sa_rank_30d":     sa.get("rank_30d"),
+            "sb_rank_30d":     None,
+            "sa_rank_180d":    sa.get("rank_180d"),
+            "sb_rank_180d":    None,
+            "sa_rank_365d":    sa.get("rank_365d"),
+            "sb_rank_365d":    None,
+            "sa_rank_move":    sa.get("rank_move_180d"),
+            "sb_rank_move":    None,
+            "sa_elo":          sa.get("elo"),
+            "sb_elo":          None,
+            "sa_momentum":     sa.get("momentum"),
+            "sb_momentum":     None,
         })
 
     print(f"  → {n_matched} players matched, {n_unmatched} unmatched in historical data")
@@ -1375,6 +1635,17 @@ def generate_signals_data_only(markets_df, df_hist=None, debug=False):
             "round":        round_name,
             "surface":      surface,
             "data_only":    True,
+            # Advanced stats (null in data-only mode)
+            "sa_vs_top10": None, "sb_vs_top10": None,
+            "sa_vs_top20": None, "sb_vs_top20": None,
+            "sa_vs_top50": None, "sb_vs_top50": None,
+            "sa_rank_now": None, "sb_rank_now": None,
+            "sa_rank_30d": None, "sb_rank_30d": None,
+            "sa_rank_180d": None, "sb_rank_180d": None,
+            "sa_rank_365d": None, "sb_rank_365d": None,
+            "sa_rank_move": None, "sb_rank_move": None,
+            "sa_elo": None, "sb_elo": None,
+            "sa_momentum": None, "sb_momentum": None,
         })
 
     if debug:
@@ -1475,6 +1746,30 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
             rest_a = f'{s["sa_rest"]}d rest' if s["sa_rest"] is not None else "—"
             rest_b = f'{s["sb_rest"]}d rest' if s["sb_rest"] is not None else "—"
 
+            # Format new advanced stats
+            def fmt_vs(vs):
+                if vs is None: return "—"
+                return f'{vs["w"]}W-{vs["l"]}L'
+            def fmt_rank_move(move):
+                if move is None: return "—"
+                if move > 0: return f'<span style="color:#087f23">▲{move}</span>'
+                if move < 0: return f'<span style="color:#d84315">▼{abs(move)}</span>'
+                return "→0"
+            def fmt_elo(e):
+                return str(e) if e else "—"
+            def fmt_momentum(m):
+                if m is None: return "—"
+                if m >= 70: return f'<span style="color:#087f23">{m}/100</span>'
+                if m <= 30: return f'<span style="color:#d84315">{m}/100</span>'
+                return f'{m}/100'
+            def fmt_rank_hist(now, d30, d180, d365):
+                parts = []
+                if d365: parts.append(f"1y: #{d365}")
+                if d180: parts.append(f"6m: #{d180}")
+                if d30: parts.append(f"1m: #{d30}")
+                if now: parts.append(f"Now: #{now}")
+                return " → ".join(parts) if parts else "—"
+
             tourney = s.get('tournament', '')
             rnd = s.get('round', '')
             sfc = s.get('surface', '')
@@ -1572,6 +1867,32 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
                             </div>
                         </div>
                     </div>
+
+                    <details class="advanced-stats">
+                        <summary>Advanced Stats</summary>
+                        <div class="adv-grid">
+                            <div class="adv-col">
+                                <div class="adv-header">{pa}</div>
+                                <div class="stat-row"><span class="stat-label">ELO</span><span class="stat-val">{fmt_elo(s.get('sa_elo'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Momentum</span><span class="stat-val">{fmt_momentum(s.get('sa_momentum'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">vs Top 10</span><span class="stat-val">{fmt_vs(s.get('sa_vs_top10'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">vs Top 20</span><span class="stat-val">{fmt_vs(s.get('sa_vs_top20'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">vs Top 50</span><span class="stat-val">{fmt_vs(s.get('sa_vs_top50'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank Move (6m)</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank History</span><span class="stat-val rank-hist">{fmt_rank_hist(s.get('sa_rank_now'), s.get('sa_rank_30d'), s.get('sa_rank_180d'), s.get('sa_rank_365d'))}</span></div>
+                            </div>
+                            <div class="adv-col">
+                                <div class="adv-header">{pb}</div>
+                                <div class="stat-row"><span class="stat-label">ELO</span><span class="stat-val">{fmt_elo(s.get('sb_elo'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Momentum</span><span class="stat-val">{fmt_momentum(s.get('sb_momentum'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">vs Top 10</span><span class="stat-val">{fmt_vs(s.get('sb_vs_top10'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">vs Top 20</span><span class="stat-val">{fmt_vs(s.get('sb_vs_top20'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">vs Top 50</span><span class="stat-val">{fmt_vs(s.get('sb_vs_top50'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank Move (6m)</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank History</span><span class="stat-val rank-hist">{fmt_rank_hist(s.get('sb_rank_now'), s.get('sb_rank_30d'), s.get('sb_rank_180d'), s.get('sb_rank_365d'))}</span></div>
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="card-footer">
@@ -1993,6 +2314,47 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
     font-size: 10px;
     color: var(--text-dim);
     margin-top: 4px;
+  }}
+
+  /* ── ADVANCED STATS (expandable) ── */
+  .advanced-stats {{
+    margin-top: 8px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }}
+  .advanced-stats summary {{
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }}
+  .advanced-stats summary:hover {{
+    color: var(--text);
+  }}
+  .adv-grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 10px;
+  }}
+  .adv-col .adv-header {{
+    font-weight: 700;
+    font-size: 12px;
+    margin-bottom: 6px;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }}
+  .adv-col .stat-row {{
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }}
+  .rank-hist {{
+    font-size: 10px !important;
   }}
 
   /* ── CARD FOOTER ── */
@@ -2456,6 +2818,12 @@ function exportBets() {{
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 def main():
+    # Reset global caches for fresh run
+    global _elo_cache, _live_rankings_cache, _surface_history_cache
+    _elo_cache = None
+    _live_rankings_cache = None
+    _surface_history_cache = None
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--min-edge",   type=float, default=0.05)
     parser.add_argument("--min-volume", type=float, default=500)

@@ -1280,6 +1280,7 @@ function renderSignals() {
                         <div>WR: ${wrA}</div>
                         <div>Surface: ${swrA}</div>
                         <div>Form: ${formA}</div>
+                        <div>Rest: ${s.sa_rest != null ? s.sa_rest + 'd' : '—'}</div>
                     </div>
                     <div style="display:flex; flex-direction:column; align-items:center; justify-content:center">
                         <div class="sig-h2h">${h2hStr}</div>
@@ -1290,8 +1291,47 @@ function renderSignals() {
                         <div>WR: ${wrB}</div>
                         <div>Surface: ${swrB}</div>
                         <div>Form: ${formB}</div>
+                        <div>Rest: ${s.sb_rest != null ? s.sb_rest + 'd' : '—'}</div>
                     </div>
                 </div>
+                ${(function(){
+                    const fmtVs = (v) => v ? v.w + 'W-' + v.l + 'L' : '—';
+                    const fmtElo = (e) => e ? String(e) : '—';
+                    const fmtMom = (m) => m != null ? (m >= 70 ? '<span style="color:#4caf50">' + m + '/100</span>' : m <= 30 ? '<span style="color:#f44336">' + m + '/100</span>' : m + '/100') : '—';
+                    const fmtMove = (mv) => mv != null ? (mv > 0 ? '<span style="color:#4caf50">▲' + mv + '</span>' : mv < 0 ? '<span style="color:#f44336">▼' + Math.abs(mv) + '</span>' : '→0') : '—';
+                    const fmtHist = (now, d30, d180, d365) => {
+                        const p = [];
+                        if (d365) p.push('1y:#' + d365);
+                        if (d180) p.push('6m:#' + d180);
+                        if (d30) p.push('1m:#' + d30);
+                        if (now) p.push('Now:#' + now);
+                        return p.length ? p.join(' → ') : '—';
+                    };
+                    const hasData = s.sa_elo || s.sb_elo || s.sa_momentum != null || s.sb_momentum != null;
+                    if (!hasData) return '';
+                    return '<details class="sig-advanced" style="margin:8px 16px 0; padding:8px 0; border-top:1px solid #333">' +
+                        '<summary style="cursor:pointer; font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600">Advanced Stats</summary>' +
+                        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px; font-size:11px; color:#ccc">' +
+                        '<div>' +
+                            '<div style="font-weight:700; margin-bottom:4px; color:#e0e0e0; border-bottom:1px solid #333; padding-bottom:2px">' + (s.player_a||'') + '</div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">ELO</span><span>' + fmtElo(s.sa_elo) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">Momentum</span><span>' + fmtMom(s.sa_momentum) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 10</span><span>' + fmtVs(s.sa_vs_top10) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 20</span><span>' + fmtVs(s.sa_vs_top20) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 6m</span><span>' + fmtMove(s.sa_rank_move) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Hist</span><span style="font-size:9px">' + fmtHist(s.sa_rank_now,s.sa_rank_30d,s.sa_rank_180d,s.sa_rank_365d) + '</span></div>' +
+                        '</div>' +
+                        '<div style="text-align:right">' +
+                            '<div style="font-weight:700; margin-bottom:4px; color:#e0e0e0; border-bottom:1px solid #333; padding-bottom:2px">' + (s.player_b||'') + '</div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">ELO</span><span>' + fmtElo(s.sb_elo) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">Momentum</span><span>' + fmtMom(s.sb_momentum) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 10</span><span>' + fmtVs(s.sb_vs_top10) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 20</span><span>' + fmtVs(s.sb_vs_top20) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 6m</span><span>' + fmtMove(s.sb_rank_move) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Hist</span><span style="font-size:9px">' + fmtHist(s.sb_rank_now,s.sb_rank_30d,s.sb_rank_180d,s.sb_rank_365d) + '</span></div>' +
+                        '</div>' +
+                    '</div></details>';
+                })()}
             </div>
             <div class="sig-footer">
                 <button class="sig-bet-btn ${isBet ? 'active' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}')">${isBet ? '✓ Active Bet' : 'Place Bet'}</button>
