@@ -80,7 +80,7 @@ def fetch_resolved_markets():
     resolved = []
 
     # Use only the 2 most reliable tags to minimize API calls
-    for tag in ["tennis", "atp"]:
+    for tag in ["tennis", "atp", "wta"]:
         try:
             r = requests.get(
                 f"{GAMMA_API}/events",

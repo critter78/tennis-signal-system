@@ -914,9 +914,9 @@ def resolve_outcomes_route():
         if not eligible_indices:
             return jsonify({"status": "success", "output": "\n".join(output_lines) + "\nNo eligible picks to resolve."})
 
-        # Bulk fetch resolved markets from Polymarket (2 API calls)
+        # Bulk fetch resolved markets from Polymarket (3 API calls)
         resolved_markets = []
-        for tag in ["tennis", "atp"]:
+        for tag in ["tennis", "atp", "wta"]:
             try:
                 r = req.get(
                     "https://gamma-api.polymarket.com/events",
@@ -1068,6 +1068,89 @@ def resolve_outcomes_route():
                 f"{'WIN' if outcome == 'win' else 'LOSS'}: {pick.get('match', '?')} | "
                 f"Bet: {bet_on} | Winner: {winner_name} | PnL: ${pnl:+.0f}"
             )
+
+        # Phase 2: For still-unresolved picks with a slug, try direct market lookup (max 10)
+        slug_lookups = 0
+        max_slug_lookups = 10
+        for i, pick in enumerate(picks):
+            if slug_lookups >= max_slug_lookups:
+                break
+            if pick.get("outcome") is not None:
+                continue
+            mt = pick.get("market_type", "")
+            pb = pick.get("player_b", "").lower()
+            match_name = pick.get("match", "").lower()
+            if (mt == "outright" or any(kw in pb for kw in FUTURES_KW)
+                or any(kw in match_name for kw in FUTURES_KW)
+                or " — " in pick.get("match", "")):
+                continue
+
+            slug = pick.get("slug", "")
+            if not slug:
+                continue
+
+            try:
+                slug_lookups += 1
+                r = req.get(f"https://gamma-api.polymarket.com/events?slug={slug}", timeout=8)
+                r.raise_for_status()
+                events = r.json()
+                if not events:
+                    continue
+                ev = events[0] if isinstance(events, list) else events
+                markets = ev.get("markets", [])
+                for m in (markets if markets else [ev]):
+                    parsed = _parse_resolved_market(m)
+                    if not parsed:
+                        continue
+                    # Resolve this pick
+                    winner_raw = parsed.get("winner", "")
+                    pa = pick.get("player_a", "")
+                    pbb = pick.get("player_b", "")
+                    a_last = pa.split()[-1].lower() if pa else ""
+                    b_last = pbb.split()[-1].lower() if pbb else ""
+                    winner_lower = winner_raw.lower()
+                    wl = winner_lower.split()[-1] if winner_lower else ""
+
+                    if winner_lower in ["yes", "true", "1"]:
+                        winner_name = pa
+                    elif winner_lower in ["no", "false", "0"]:
+                        winner_name = pbb
+                    elif a_last == wl or a_last in winner_lower:
+                        winner_name = pa
+                    elif b_last == wl or b_last in winner_lower:
+                        winner_name = pbb
+                    else:
+                        continue
+
+                    bet_on = pick.get("bet_on", "")
+                    bl = bet_on.split()[-1].lower() if bet_on else ""
+                    wnl = winner_name.split()[-1].lower() if winner_name else ""
+                    bet_won = (bl == wnl) or (bet_on.lower() == winner_name.lower())
+
+                    poly_price = pick.get("poly_price", 50)
+                    price_dec = poly_price / 100
+                    if bet_won:
+                        pnl = round(100 * (1 - price_dec), 2)
+                        outcome = "win"
+                    else:
+                        pnl = round(-100 * price_dec, 2)
+                        outcome = "loss"
+
+                    pick["outcome"] = outcome
+                    pick["pnl"] = pnl
+                    pick["actual_winner"] = winner_name
+                    pick["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                    new_resolutions += 1
+                    output_lines.append(
+                        f"{'WIN' if outcome == 'win' else 'LOSS'} (slug): {pick.get('match', '?')} | "
+                        f"Bet: {bet_on} | Winner: {winner_name} | PnL: ${pnl:+.0f}"
+                    )
+                    break
+            except Exception as e:
+                output_lines.append(f"[warn] slug lookup {slug}: {e}")
+
+        if slug_lookups:
+            output_lines.append(f"Phase 2: {slug_lookups} slug lookups")
 
         output_lines.append(f"\nNew resolutions: {new_resolutions} ({time.time()-t0:.1f}s total)")
 
