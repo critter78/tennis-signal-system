@@ -43,6 +43,10 @@ DASHBOARD_TEMPLATE = BASE_DIR / "dashboard.html"
 # Admin password — set via environment variable on Render
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "tennis2026")
 
+# Polymarket wallet address — set via environment variable on Render
+POLY_WALLET = os.environ.get("POLY_WALLET", "0x0D2ad18A44ac2D4A001aEdd0EF9a7B016DAA031d")
+POLY_DATA_API = "https://data-api.polymarket.com"
+
 # Create necessary directories
 CARDS_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
@@ -811,6 +815,194 @@ def api_bets():
         return jsonify({"error": str(e)}), 500
 
 
+# ─── Polymarket Trade Data Integration ───
+
+def fetch_poly_trades(since_ts=None):
+    """Fetch user's actual trades from Polymarket Data API."""
+    import requests as req
+    trades = []
+    try:
+        params = {
+            "user": POLY_WALLET,
+            "type": "TRADE",
+            "sortBy": "TIMESTAMP",
+            "sortDirection": "DESC",
+            "limit": 200,
+        }
+        if since_ts:
+            params["start"] = str(int(since_ts))
+
+        r = req.get(f"{POLY_DATA_API}/activity", params=params, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+
+        if isinstance(data, list):
+            trades = data
+        elif isinstance(data, dict):
+            trades = data.get("data", data.get("activity", []))
+
+        logger.info(f"Fetched {len(trades)} trades from Polymarket Data API")
+    except Exception as e:
+        logger.error(f"Error fetching Polymarket trades: {e}")
+    return trades
+
+
+def match_trade_to_bet(trade, bet):
+    """Check if a Polymarket trade matches a user's bet selection."""
+    # Compare by market title/slug containing player names
+    trade_title = (trade.get("title", "") or trade.get("name", "")).lower()
+    trade_slug = (trade.get("eventSlug", "") or trade.get("slug", "")).lower()
+    trade_outcome = (trade.get("outcome", "") or "").lower()
+
+    bet_match = bet.get("match", "").lower()
+    bet_on = bet.get("bet_on", "").lower()
+
+    # Extract last names from the bet
+    players = bet_match.split(" vs ")
+    if len(players) != 2:
+        return False
+
+    a_last = players[0].strip().split()[-1].lower()
+    b_last = players[1].strip().split()[-1].lower()
+    bet_on_last = bet_on.strip().split()[-1].lower()
+
+    # Check if the trade is for this match (both last names in title or slug)
+    title_match = (a_last in trade_title and b_last in trade_title)
+    slug_match = (a_last in trade_slug and b_last in trade_slug)
+    if not title_match and not slug_match:
+        return False
+
+    # Check if the trade is for the same player we bet on
+    # Polymarket trades have an "outcome" field (player name) and "side" (BUY/SELL)
+    trade_side = trade.get("side", "BUY")
+    if trade_side == "BUY":
+        # Buying YES on this outcome = betting on this player
+        outcome_last = trade_outcome.strip().split()[-1].lower() if trade_outcome else ""
+        if outcome_last == bet_on_last or bet_on_last in trade_outcome:
+            return True
+    elif trade_side == "SELL":
+        # Selling YES on the other player = also effectively betting on our player
+        outcome_last = trade_outcome.strip().split()[-1].lower() if trade_outcome else ""
+        if outcome_last != bet_on_last and (outcome_last == a_last or outcome_last == b_last):
+            return True
+
+    return False
+
+
+def enrich_bets_with_trades(bets, trades):
+    """Match user bets with actual Polymarket trade data.
+
+    For each bet, find matching trades and aggregate:
+    - actual_buy_price (weighted avg price in cents)
+    - actual_stake (total USDC spent)
+    - actual_shares (total shares bought)
+    """
+    enriched = []
+    for bet in bets:
+        matching_trades = []
+        for trade in trades:
+            if match_trade_to_bet(trade, bet):
+                matching_trades.append(trade)
+
+        if matching_trades:
+            # Aggregate: sum up all matching BUY trades
+            total_usdc = 0
+            total_shares = 0
+            for t in matching_trades:
+                usdc = float(t.get("usdcSize", 0) or t.get("cash", 0) or 0)
+                shares = float(t.get("size", 0) or t.get("tokens", 0) or 0)
+                total_usdc += usdc
+                total_shares += shares
+
+            avg_price = (total_usdc / total_shares * 100) if total_shares > 0 else 0
+
+            bet["actual_buy_price"] = round(avg_price, 1)   # cents
+            bet["actual_stake"] = round(total_usdc, 2)       # USDC
+            bet["actual_shares"] = round(total_shares, 2)
+            bet["trade_count"] = len(matching_trades)
+            bet["trade_ids"] = [t.get("transactionHash", "")[:12] for t in matching_trades[:5]]
+        enriched.append(bet)
+
+    return enriched
+
+
+@app.route("/api/poly-trades", methods=["GET"])
+@enable_cors
+def api_poly_trades():
+    """Fetch and match Polymarket trades against user's tracked bets."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        # Fetch trades from Polymarket
+        trades = fetch_poly_trades()
+
+        # Load user's tracked bets
+        bets = load_bets()
+        bet_list = bets.get("bets", []) if isinstance(bets, dict) else bets
+
+        # If bets come from the POST body (client sends myBets array)
+        client_bets = request.args.get("from_client")
+        if client_bets:
+            # Client will send bets as query param or we read from saved
+            pass
+
+        # Enrich bets with trade data
+        enriched = enrich_bets_with_trades(bet_list, trades)
+
+        # Save enriched bets back
+        if isinstance(bets, dict):
+            bets["bets"] = enriched
+        save_bets(bets)
+
+        return jsonify({
+            "status": "success",
+            "trades_fetched": len(trades),
+            "bets_matched": sum(1 for b in enriched if b.get("actual_stake")),
+            "bets": enriched,
+        })
+
+    except Exception as e:
+        logger.error(f"Error in /api/poly-trades: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sync-bets", methods=["POST"])
+@enable_cors
+def api_sync_bets():
+    """Sync bets from client localStorage, then enrich with Polymarket trade data."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        client_bets = request.get_json() or []
+        if isinstance(client_bets, dict):
+            client_bets = client_bets.get("bets", [])
+
+        # Fetch real trade data from Polymarket
+        trades = fetch_poly_trades()
+
+        # Enrich each bet
+        enriched = enrich_bets_with_trades(client_bets, trades)
+
+        # Save to server
+        save_bets({"bets": enriched, "last_synced": datetime.utcnow().isoformat()})
+
+        matched = sum(1 for b in enriched if b.get("actual_stake"))
+        logger.info(f"Synced {len(enriched)} bets, {matched} matched to Polymarket trades")
+
+        return jsonify({
+            "status": "success",
+            "trades_fetched": len(trades),
+            "bets_matched": matched,
+            "bets": enriched,
+        })
+
+    except Exception as e:
+        logger.error(f"Error in /api/sync-bets: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/status", methods=["GET"])
 @enable_cors
 def api_status():
@@ -1172,6 +1364,23 @@ def resolve_outcomes_route():
             losses = len(all_resolved) - wins
             total_pnl = sum(p.get("pnl", 0) for p in all_resolved)
             output_lines.append(f"Record: {wins}W-{losses}L | PnL: ${total_pnl:+,.0f}")
+
+        # ── Phase 3: Auto-enrich tracked bets with Polymarket trade data ──
+        try:
+            bets_data = load_bets()
+            bet_list = bets_data.get("bets", []) if isinstance(bets_data, dict) else []
+            if bet_list:
+                trades = fetch_poly_trades()
+                if trades:
+                    enriched = enrich_bets_with_trades(bet_list, trades)
+                    matched = sum(1 for b in enriched if b.get("actual_stake"))
+                    if isinstance(bets_data, dict):
+                        bets_data["bets"] = enriched
+                        bets_data["last_trade_sync"] = datetime.utcnow().isoformat()
+                    save_bets(bets_data)
+                    output_lines.append(f"Trade sync: {matched}/{len(bet_list)} bets matched to Polymarket trades")
+        except Exception as e:
+            output_lines.append(f"[warn] Trade sync: {e}")
 
         return jsonify({
             "status": "success",

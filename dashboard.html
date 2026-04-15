@@ -839,6 +839,36 @@ Chart.defaults.font.size = 10;
 })();
 
 // ─── MY BETS TABLE ───
+let tradesSynced = false;
+
+async function syncPolyTrades() {
+    const btn = document.getElementById('syncTradesBtn');
+    if (btn) { btn.textContent = 'Syncing...'; btn.disabled = true; }
+    try {
+        const res = await fetch('/api/sync-bets', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ bets: myBets })
+        });
+        const data = await res.json();
+        if (data.status === 'success' && data.bets) {
+            // Update myBets with enriched data from server
+            myBets.length = 0;
+            data.bets.forEach(b => myBets.push(b));
+            localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
+            tradesSynced = true;
+            renderMyBets();
+            if (btn) btn.textContent = `Synced (${data.bets_matched} matched)`;
+        } else {
+            if (btn) btn.textContent = 'Sync failed';
+        }
+    } catch(e) {
+        console.error('Trade sync error:', e);
+        if (btn) btn.textContent = 'Sync failed';
+    }
+    setTimeout(() => { if (btn) { btn.textContent = 'Sync Polymarket Trades'; btn.disabled = false; } }, 4000);
+}
+
 function renderMyBets() {
     const wrap = document.getElementById('betTableWrap');
 
@@ -848,18 +878,14 @@ function renderMyBets() {
     }
 
     // Match bets against picks for outcome data
-    // Try multiple matching strategies (exact date, then fuzzy match by name only)
     const enriched = myBets.map(bet => {
-        // Strategy 1: exact match on match name + bet_on + date
         let match = picks.find(p =>
             p.match === bet.match && p.bet_on === bet.bet_on &&
             (p.logged_at || '').slice(0,10) === (bet.card_date || '').slice(0,10)
         );
-        // Strategy 2: match on match name + bet_on only (date might differ slightly)
         if (!match) {
             match = picks.find(p => p.match === bet.match && p.bet_on === bet.bet_on);
         }
-        // Strategy 3: match on player names (last names in match string)
         if (!match && bet.match) {
             const parts = bet.match.toLowerCase().split(/\s+vs\.?\s+/);
             if (parts.length === 2) {
@@ -871,55 +897,97 @@ function renderMyBets() {
                 });
             }
         }
+
+        // Use actual trade data if available (from Polymarket API enrichment)
+        const hasTradeData = bet.actual_stake && bet.actual_stake > 0;
+        let realPnl = null;
+        if (hasTradeData && match && match.outcome) {
+            // Real PnL: if won, payout = shares * $1 - stake; if lost, payout = -stake
+            if (match.outcome === 'win') {
+                realPnl = round2((bet.actual_shares || 0) * 1.0 - bet.actual_stake);
+            } else {
+                realPnl = round2(-bet.actual_stake);
+            }
+        }
+
         return {
             ...bet,
             outcome: match ? match.outcome : null,
-            pnl: match ? match.pnl : null,
+            pnl: hasTradeData ? realPnl : (match ? match.pnl : null),
             actual_winner: match ? match.actual_winner : null,
+            _hasTradeData: hasTradeData,
         };
     });
 
     const bWins = enriched.filter(b => b.outcome === 'win').length;
     const bLosses = enriched.filter(b => b.outcome === 'loss').length;
     const bPending = enriched.filter(b => !b.outcome).length;
-    const bPnl = enriched.reduce((s, b) => s + (b.pnl || 0), 0);
 
-    let html = `<div style="margin-bottom:12px; font-size:11px; color:#6c757d">
-        <strong style="color:#e0e0e0">${enriched.length}</strong> bets |
-        <strong style="color:#4caf50">${bWins}W</strong> -
-        <strong style="color:#f44336">${bLosses}L</strong> -
-        <strong style="color:#6c757d">${bPending} pending</strong> |
-        P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(0)}</strong>
+    // Calculate PnL — use real amounts when available, fallback to $100 notional
+    const bPnl = enriched.reduce((s, b) => s + (b.pnl || 0), 0);
+    const hasAnyTradeData = enriched.some(b => b._hasTradeData);
+    const totalStaked = enriched.reduce((s, b) => s + (b.actual_stake || 0), 0);
+
+    let html = `<div style="margin-bottom:12px; font-size:11px; color:#6c757d; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">
+        <div>
+            <strong style="color:#e0e0e0">${enriched.length}</strong> bets |
+            <strong style="color:#4caf50">${bWins}W</strong> -
+            <strong style="color:#f44336">${bLosses}L</strong> -
+            <strong style="color:#6c757d">${bPending} pending</strong> |
+            P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(2)}</strong>
+            ${hasAnyTradeData ? ` | Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>` : ''}
+        </div>
+        <button id="syncTradesBtn" onclick="syncPolyTrades()" style="background:#1b5e20; color:white; border:none; padding:5px 12px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.04em;">Sync Polymarket Trades</button>
     </div>`;
 
     html += `<table><thead><tr>
         <th>Date</th><th>Match</th><th>Tournament</th><th>Pick</th>
-        <th>Poly</th><th>Model</th><th>Edge</th><th>Kelly</th>
+        <th>Buy Price</th><th>Stake</th><th>Model</th><th>Edge</th>
         <th>Result</th><th>P&L</th>
     </tr></thead><tbody>`;
 
     enriched.forEach(b => {
         const date = (b.timestamp || b.card_date || '').slice(0, 10);
         const res = b.outcome === 'win' ? '<span class="w">W</span>' : b.outcome === 'loss' ? '<span class="l">L</span>' : '<span class="p">...</span>';
-        const pnl = b.pnl != null ? `<span class="${b.pnl >= 0 ? 'w' : 'l'}">$${b.pnl.toFixed(0)}</span>` : '—';
+        const pnl = b.pnl != null ? `<span class="${b.pnl >= 0 ? 'w' : 'l'}">${b.pnl >= 0 ? '+' : ''}$${b.pnl.toFixed(2)}</span>` : '—';
+
+        // Show actual trade data if available, otherwise show signal data
+        const buyPrice = b._hasTradeData
+            ? `<span style="color:#4caf50">${b.actual_buy_price}c</span>`
+            : `<span style="color:#6c757d">${b.poly_price}c</span>`;
+        const stake = b._hasTradeData
+            ? `<span style="color:#4caf50">$${b.actual_stake.toFixed(2)}</span>`
+            : `<span style="color:#6c757d">$100*</span>`;
+
         html += `<tr>
             <td>${date}</td>
             <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${b.match}</td>
             <td>${(b.tournament || '—').slice(0, 20)}</td>
             <td style="font-weight:700">${(b.bet_on || '').split(' ').pop()}</td>
-            <td>${b.poly_price}c</td>
+            <td>${buyPrice}</td>
+            <td>${stake}</td>
             <td>${b.model_prob}%</td>
             <td style="color:${Math.abs(b.edge||0) >= 10 ? '#f44336' : '#d4740a'}">${(b.edge||0) > 0 ? '+' : ''}${(b.edge||0).toFixed(1)}%</td>
-            <td>${(b.kelly||0).toFixed(1)}%</td>
             <td>${res}</td>
             <td>${pnl}</td>
         </tr>`;
     });
 
     html += '</tbody></table>';
+    if (!hasAnyTradeData) {
+        html += '<div style="margin-top:6px; font-size:9px; color:#6c757d">* $100 notional — click "Sync Polymarket Trades" to pull actual amounts from your wallet</div>';
+    }
     wrap.innerHTML = html;
 }
+
+function round2(n) { return Math.round(n * 100) / 100; }
+
 renderMyBets();
+
+// Auto-sync trades on page load (if there are bets)
+if (myBets.length > 0) {
+    setTimeout(() => syncPolyTrades(), 2000);
+}
 
 // ─── SIGNALS TAB ───
 function renderSignals() {
