@@ -1114,6 +1114,7 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
     print(f"  → {n_matched} players matched, {n_unmatched} unmatched in historical data")
     # Sort: positive-edge signals first, then by edge value descending
     signals.sort(key=lambda x: (x.get("has_edge", False), x["edge"]), reverse=True)
+    return signals
 
 
 # ─── HTML CARD GENERATOR ──────────────────────────────────────────────────────
