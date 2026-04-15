@@ -760,6 +760,48 @@ def generate_card():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/resolve", methods=["POST"])
+@enable_cors
+def resolve_outcomes():
+    """Manually trigger outcome resolution."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        script_path = BASE_DIR / "08_outcome_resolver.py"
+        if not script_path.exists():
+            return jsonify({"error": "08_outcome_resolver.py not found"}), 404
+
+        logger.info("Triggering outcome resolution...")
+        result = subprocess.run(
+            ["python3", str(script_path)],
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        output = result.stdout[-1000:] if result.stdout else ""
+        if result.returncode == 0:
+            return jsonify({
+                "status": "success",
+                "message": "Outcome resolution completed",
+                "output": output
+            }), 200
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Resolution failed",
+                "error": result.stderr[:500],
+                "output": output
+            }), 500
+
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Resolution timed out"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     """Simple health check for Render."""

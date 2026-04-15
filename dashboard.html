@@ -335,8 +335,9 @@ let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
             myBets.forEach(b => obj[b.match + '|' + b.bet_on] = b);
             fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(obj) });
         }
-        // Re-render signals after sync
+        // Re-render after sync so bets from other devices appear
         if (typeof renderSignals === 'function') renderSignals();
+        if (typeof renderMyBets === 'function') renderMyBets();
     } catch(e) { /* offline or shared view — use localStorage only */ }
 })();
 
@@ -838,20 +839,38 @@ Chart.defaults.font.size = 10;
 })();
 
 // ─── MY BETS TABLE ───
-(function() {
+function renderMyBets() {
     const wrap = document.getElementById('betTableWrap');
 
     if (myBets.length === 0) {
-        wrap.innerHTML = '<div class="empty-msg">No bets tracked yet. Use the "I BET THIS" buttons on the betting card to start tracking your bets.</div>';
+        wrap.innerHTML = '<div class="empty-msg">No bets tracked yet. Use the "Place Bet" buttons on the signals tab to start tracking your bets.</div>';
         return;
     }
 
     // Match bets against picks for outcome data
+    // Try multiple matching strategies (exact date, then fuzzy match by name only)
     const enriched = myBets.map(bet => {
-        const match = picks.find(p =>
+        // Strategy 1: exact match on match name + bet_on + date
+        let match = picks.find(p =>
             p.match === bet.match && p.bet_on === bet.bet_on &&
             (p.logged_at || '').slice(0,10) === (bet.card_date || '').slice(0,10)
         );
+        // Strategy 2: match on match name + bet_on only (date might differ slightly)
+        if (!match) {
+            match = picks.find(p => p.match === bet.match && p.bet_on === bet.bet_on);
+        }
+        // Strategy 3: match on player names (last names in match string)
+        if (!match && bet.match) {
+            const parts = bet.match.toLowerCase().split(/\s+vs\.?\s+/);
+            if (parts.length === 2) {
+                const lastA = parts[0].trim().split(' ').pop();
+                const lastB = parts[1].trim().split(' ').pop();
+                match = picks.find(p => {
+                    const pm = (p.match || '').toLowerCase();
+                    return pm.includes(lastA) && pm.includes(lastB);
+                });
+            }
+        }
         return {
             ...bet,
             outcome: match ? match.outcome : null,
@@ -899,7 +918,8 @@ Chart.defaults.font.size = 10;
 
     html += '</tbody></table>';
     wrap.innerHTML = html;
-})();
+}
+renderMyBets();
 
 // ─── SIGNALS TAB ───
 function renderSignals() {
