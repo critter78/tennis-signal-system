@@ -201,7 +201,7 @@ window.PICKS_DATA = [];
     <div style="text-align:right; flex-shrink:0">
         <div id="dataFreshness" style="font-size:10px; color:#4caf50; margin-bottom:6px"></div>
         <div style="display:flex; gap:8px; justify-content:flex-end">
-            <a href="/admin" style="font-size:10px; color:#d4740a; text-decoration:none; padding:4px 10px; border:1px solid #2d3139; letter-spacing:0.04em">SHARE</a>
+            <a href="/admin" style="font-size:10px; color:#d4740a; text-decoration:none; padding:4px 10px; border:1px solid #2d3139; letter-spacing:0.04em">ADMIN</a>
             <a href="/logout" style="font-size:10px; color:#f44336; text-decoration:none; padding:4px 10px; border:1px solid #2d3139; letter-spacing:0.04em">LOGOUT</a>
         </div>
     </div>
@@ -284,6 +284,8 @@ window.PICKS_DATA = [];
 <div class="panel" id="panel-accuracy">
     <!-- LSTM TRAINING PROGRESS -->
     <div id="lstmProgress" class="chart-card" style="margin-bottom:20px"></div>
+    <!-- LSTM INSIGHTS PANEL -->
+    <div id="lstmInsights" class="chart-card" style="margin-bottom:20px"></div>
     <div class="grid-2">
         <div class="chart-card"><h3>CALIBRATION — MODEL PROB vs ACTUAL WIN RATE</h3><canvas id="chartCalib"></canvas></div>
         <div class="chart-card"><h3>MODEL vs MARKET PRICING</h3><canvas id="chartModelMarket"></canvas></div>
@@ -459,6 +461,125 @@ Chart.defaults.font.size = 10;
         </div>
         <div style="font-size:10px; color:#6c757d">${statusText}</div>
         ${resolvedCount > 0 ? '<div style="font-size:10px; color:#aaa; margin-top:6px">Win rate: <strong style="color:' + (wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336') + '">' + (wins.length/resolved.length*100).toFixed(1) + '%</strong> (' + wins.length + 'W-' + losses.length + 'L) | PnL: <strong style="color:' + (totalPnl >= 0 ? '#4caf50' : '#f44336') + '">$' + totalPnl.toFixed(0) + '</strong></div>' : ''}
+    `;
+})();
+
+// ─── LSTM INSIGHTS & DRIFT ANALYSIS ───
+(function() {
+    const el = document.getElementById('lstmInsights');
+    if (!el || resolved.length < 10) { if (el) el.style.display = 'none'; return; }
+
+    // ── Model drift: compare recent vs overall performance ──
+    const sortedResolved = [...resolved].sort((a, b) => (a.logged_at || '').localeCompare(b.logged_at || ''));
+    const recentCount = Math.min(50, Math.floor(resolved.length * 0.25));
+    const recent = sortedResolved.slice(-recentCount);
+    const older = sortedResolved.slice(0, -recentCount);
+
+    const recentWinRate = recent.length > 0 ? (recent.filter(p => p.outcome === 'win').length / recent.length * 100) : 0;
+    const olderWinRate = older.length > 0 ? (older.filter(p => p.outcome === 'win').length / older.length * 100) : 0;
+    const overallWinRate = resolved.length > 0 ? (wins.length / resolved.length * 100) : 0;
+    const drift = recentWinRate - olderWinRate;
+
+    // ── Calibration error: how far off is model_prob from actual outcomes ──
+    const calibBuckets = {};
+    resolved.forEach(p => {
+        const mp = p.model_prob || 50;
+        const bucket = Math.round(mp / 10) * 10;
+        if (!calibBuckets[bucket]) calibBuckets[bucket] = { wins: 0, total: 0 };
+        calibBuckets[bucket].total++;
+        if (p.outcome === 'win') calibBuckets[bucket].wins++;
+    });
+    let calibError = 0;
+    let calibCount = 0;
+    Object.entries(calibBuckets).forEach(([bucket, data]) => {
+        if (data.total >= 3) {
+            const predicted = parseInt(bucket) / 100;
+            const actual = data.wins / data.total;
+            calibError += Math.abs(predicted - actual);
+            calibCount++;
+        }
+    });
+    const avgCalibError = calibCount > 0 ? (calibError / calibCount * 100).toFixed(1) : '—';
+
+    // ── Edge effectiveness: win rate when model says edge vs no edge ──
+    const edgePicks = resolved.filter(p => p.has_edge);
+    const noEdgePicks = resolved.filter(p => !p.has_edge);
+    const edgeWinRate = edgePicks.length > 0 ? (edgePicks.filter(p => p.outcome === 'win').length / edgePicks.length * 100) : 0;
+    const noEdgeWinRate = noEdgePicks.length > 0 ? (noEdgePicks.filter(p => p.outcome === 'win').length / noEdgePicks.length * 100) : 0;
+    const edgeLift = edgeWinRate - noEdgeWinRate;
+
+    // ── Brier score (probability accuracy) ──
+    let brierSum = 0;
+    resolved.forEach(p => {
+        const predicted = (p.model_prob || 50) / 100;
+        const actual = p.outcome === 'win' ? 1 : 0;
+        brierSum += Math.pow(predicted - actual, 2);
+    });
+    const brierScore = (brierSum / resolved.length).toFixed(4);
+
+    // ── Strong edge (>=10%) performance ──
+    const strongEdge = resolved.filter(p => Math.abs(p.edge || 0) >= 10);
+    const strongWins = strongEdge.filter(p => p.outcome === 'win').length;
+    const strongWinRate = strongEdge.length > 0 ? (strongWins / strongEdge.length * 100).toFixed(1) : '—';
+    const strongPnl = strongEdge.reduce((s, p) => s + (p.pnl || 0), 0);
+
+    // ── Rolling 7-day win rate trend ──
+    const last7d = sortedResolved.filter(p => {
+        const d = new Date(p.logged_at || '');
+        return (Date.now() - d.getTime()) < 7 * 86400000;
+    });
+    const last7dWr = last7d.length > 0 ? (last7d.filter(p => p.outcome === 'win').length / last7d.length * 100).toFixed(1) : '—';
+
+    // ── Drift arrow ──
+    const driftDir = drift > 2 ? '▲' : drift < -2 ? '▼' : '●';
+    const driftColor = drift > 2 ? '#4caf50' : drift < -2 ? '#f44336' : '#6c757d';
+    const driftLabel = drift > 2 ? 'Improving' : drift < -2 ? 'Declining' : 'Stable';
+
+    el.innerHTML = `
+        <h3>MODEL INTELLIGENCE — DRIFT & LEARNING METRICS</h3>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px">
+            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Model Drift</div>
+                <div style="font-size:20px; font-weight:700; color:${driftColor}">${driftDir} ${Math.abs(drift).toFixed(1)}%</div>
+                <div style="font-size:9px; color:${driftColor}; margin-top:2px">${driftLabel}</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">Recent ${recentCount} vs prior ${older.length} picks</div>
+            </div>
+            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Calibration Error</div>
+                <div style="font-size:20px; font-weight:700; color:${parseFloat(avgCalibError) < 10 ? '#4caf50' : parseFloat(avgCalibError) < 20 ? '#d4740a' : '#f44336'}">${avgCalibError}%</div>
+                <div style="font-size:9px; color:#aaa; margin-top:2px">${parseFloat(avgCalibError) < 10 ? 'Well calibrated' : parseFloat(avgCalibError) < 20 ? 'Moderate drift' : 'Needs retraining'}</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">Avg |predicted - actual| per bucket</div>
+            </div>
+            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Brier Score</div>
+                <div style="font-size:20px; font-weight:700; color:${parseFloat(brierScore) < 0.22 ? '#4caf50' : parseFloat(brierScore) < 0.25 ? '#d4740a' : '#f44336'}">${brierScore}</div>
+                <div style="font-size:9px; color:#aaa; margin-top:2px">${parseFloat(brierScore) < 0.22 ? 'Strong accuracy' : parseFloat(brierScore) < 0.25 ? 'Market-level' : 'Below market'}</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">Lower is better (0.25 = coin flip)</div>
+            </div>
+            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Edge Lift</div>
+                <div style="font-size:20px; font-weight:700; color:${edgeLift > 0 ? '#4caf50' : '#f44336'}">${edgeLift > 0 ? '+' : ''}${edgeLift.toFixed(1)}%</div>
+                <div style="font-size:9px; color:#aaa; margin-top:2px">Edge picks: ${edgeWinRate.toFixed(1)}% vs No-edge: ${noEdgeWinRate.toFixed(1)}%</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">${edgePicks.length} edge / ${noEdgePicks.length} no-edge picks</div>
+            </div>
+            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Strong Edge (>=10%)</div>
+                <div style="font-size:20px; font-weight:700; color:${parseFloat(strongWinRate) >= 60 ? '#4caf50' : '#d4740a'}">${strongWinRate}%</div>
+                <div style="font-size:9px; color:#aaa; margin-top:2px">${strongWins}W-${strongEdge.length - strongWins}L | PnL: $${strongPnl >= 0 ? '+' : ''}${strongPnl.toFixed(0)}</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">${strongEdge.length} strong-edge picks</div>
+            </div>
+            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">7-Day Win Rate</div>
+                <div style="font-size:20px; font-weight:700; color:${parseFloat(last7dWr) >= 60 ? '#4caf50' : parseFloat(last7dWr) >= 50 ? '#d4740a' : '#f44336'}">${last7dWr}%</div>
+                <div style="font-size:9px; color:#aaa; margin-top:2px">${last7d.length} picks in last 7 days</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">vs overall: ${overallWinRate.toFixed(1)}%</div>
+            </div>
+        </div>
+        <div style="font-size:9px; color:#6c757d; border-top:1px solid #2d3139; padding-top:10px">
+            <strong style="color:#d4740a">Base Model:</strong> HistGradientBoosting (AUC 0.695, ${(36303).toLocaleString()} training samples) &nbsp;|&nbsp;
+            <strong style="color:#d4740a">LSTM Adjuster:</strong> ${resolved.length >= 50 ? 'Active — adjusting base model probabilities using sequential patterns from ' + resolved.length + ' resolved outcomes' : 'Pending — needs ' + (50 - resolved.length) + ' more resolved outcomes to activate'} &nbsp;|&nbsp;
+            <strong style="color:#d4740a">Learning:</strong> Each resolved bet improves future edge detection through outcome-weighted pattern recalibration
+        </div>
     `;
 })();
 
