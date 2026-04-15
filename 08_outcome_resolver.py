@@ -557,25 +557,27 @@ def resolve_picks(dry_run=False):
             )
             new_resolutions += 1
         else:
-            # Collect unique slugs for phase 2
+            # Collect unique slugs for phase 2 (store ALL pick indices per slug)
             slug = pick.get("slug", "")
             if not slug:
                 poly_link = pick.get("poly_link", "")
                 if "/event/" in poly_link:
                     slug = poly_link.split("/event/")[-1].split("/")[0].split("?")[0]
-            if slug and slug not in unmatched_slugs:
-                unmatched_slugs[slug] = i  # just need one pick index per slug
+            if slug:
+                if slug not in unmatched_slugs:
+                    unmatched_slugs[slug] = []
+                unmatched_slugs[slug].append(i)
 
     print(f"  Phase 1 resolved: {new_resolutions}")
     print(f"  Unique unmatched slugs for Phase 2: {len(unmatched_slugs)}")
 
-    # PHASE 2: Individual slug lookups for unmatched picks (capped at 50 API calls)
+    # PHASE 2: Individual slug lookups — deduplicated, results applied to ALL matching picks
     import time
-    MAX_SLUG_LOOKUPS = 20
+    MAX_SLUG_LOOKUPS = 50
     slug_results = {}  # slug -> resolved market dict (cache)
 
     if unmatched_slugs and not dry_run:
-        print(f"  Phase 2: Checking up to {min(len(unmatched_slugs), MAX_SLUG_LOOKUPS)} slugs via API...")
+        print(f"  Phase 2: Checking up to {min(len(unmatched_slugs), MAX_SLUG_LOOKUPS)} unique slugs via API...")
         lookups_done = 0
         for slug in list(unmatched_slugs.keys())[:MAX_SLUG_LOOKUPS]:
             resolved = fetch_market_by_slug(slug)
@@ -585,29 +587,25 @@ def resolve_picks(dry_run=False):
             if lookups_done % 10 == 0:
                 time.sleep(0.5)
 
-        # Now match remaining unresolved picks against slug results
-        if slug_results:
-            for pick in picks:
+        print(f"  Phase 2: {lookups_done} lookups, {len(slug_results)} resolved")
+
+        # Apply results to ALL picks with matching slugs
+        for slug, rm in slug_results.items():
+            for pick_idx in unmatched_slugs.get(slug, []):
+                pick = picks[pick_idx]
                 if pick.get("outcome") is not None:
                     continue
-                slug = pick.get("slug", "")
-                if not slug:
-                    poly_link = pick.get("poly_link", "")
-                    if "/event/" in poly_link:
-                        slug = poly_link.split("/event/")[-1].split("/")[0].split("?")[0]
-                if slug and slug in slug_results:
-                    rm = slug_results[slug]
-                    outcome, pnl, actual_winner = determine_outcome(pick, rm)
-                    pick["outcome"] = outcome
-                    pick["pnl"] = pnl
-                    pick["actual_winner"] = actual_winner
-                    pick["resolved_at"] = rm.get("resolved_at", datetime.utcnow().isoformat())
-                    log_resolution(
-                        f"{'WIN' if outcome == 'win' else 'LOSS'}: "
-                        f"{pick.get('match', '?')} | Bet: {pick.get('bet_on', '?')} | "
-                        f"Winner: {actual_winner} | PnL: ${pnl:+.0f}"
-                    )
-                    new_resolutions += 1
+                outcome, pnl, actual_winner = determine_outcome(pick, rm)
+                pick["outcome"] = outcome
+                pick["pnl"] = pnl
+                pick["actual_winner"] = actual_winner
+                pick["resolved_at"] = rm.get("resolved_at", datetime.utcnow().isoformat())
+                log_resolution(
+                    f"{'WIN' if outcome == 'win' else 'LOSS'}: "
+                    f"{pick.get('match', '?')} | Bet: {pick.get('bet_on', '?')} | "
+                    f"Winner: {actual_winner} | PnL: ${pnl:+.0f}"
+                )
+                new_resolutions += 1
 
     if new_resolutions > 0 and not dry_run:
         save_picks(picks)
