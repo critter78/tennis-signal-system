@@ -46,19 +46,19 @@ def inject_data_into_template(template_path, picks_data, output_path):
     # Serialize picks data to JSON (safe for embedding in JavaScript)
     picks_json = json.dumps(picks_data, indent=2)
 
-    # Replace the placeholder with actual data
-    placeholder = "window.PICKS_DATA = []"
-    replacement = f"window.PICKS_DATA = {picks_json}"
+    # Replace the placeholder with actual data (handle with/without semicolon)
+    replacement = f"window.PICKS_DATA = {picks_json};"
 
-    if placeholder not in content:
+    if "window.PICKS_DATA = [];" in content:
+        content = content.replace("window.PICKS_DATA = [];", replacement)
+    elif "window.PICKS_DATA = []" in content:
+        content = content.replace("window.PICKS_DATA = []", replacement)
+    else:
         print("Warning: Placeholder 'window.PICKS_DATA = []' not found in template.")
-        print("Attempting to inject anyway...")
-        # Try to find and replace any PICKS_DATA assignment
         if "window.PICKS_DATA" in content:
-            content = content.replace("window.PICKS_DATA = []", replacement)
-            content = content.replace("window.PICKS_DATA = {}", replacement)
-
-    content = content.replace(placeholder, replacement)
+            print("Found window.PICKS_DATA, attempting regex replace...")
+            import re
+            content = re.sub(r'window\.PICKS_DATA\s*=\s*\[.*?\];?', replacement, content)
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)

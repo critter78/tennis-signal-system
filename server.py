@@ -238,13 +238,21 @@ def get_system_status():
 def serve_dashboard(is_shared=False, share_expires=None):
     """Serve the dashboard HTML with picks data injected."""
     try:
+        logger.info(f"DASHBOARD_TEMPLATE path: {DASHBOARD_TEMPLATE}")
+        logger.info(f"DASHBOARD_TEMPLATE exists: {DASHBOARD_TEMPLATE.exists()}")
         if DASHBOARD_TEMPLATE.exists():
             picks_data = load_picks_jsonl()
+            logger.info(f"Serving from template: {DASHBOARD_TEMPLATE} ({DASHBOARD_TEMPLATE.stat().st_size} bytes)")
             with open(DASHBOARD_TEMPLATE, 'r') as f:
                 content = f.read()
+            logger.info(f"Template has myOutcome: {'myOutcome' in content}")
 
             picks_json = json.dumps(picks_data, indent=2)
-            content = content.replace("window.PICKS_DATA = []", f"window.PICKS_DATA = {picks_json}")
+            # Handle both with and without semicolon
+            if "window.PICKS_DATA = [];" in content:
+                content = content.replace("window.PICKS_DATA = [];", f"window.PICKS_DATA = {picks_json};")
+            else:
+                content = content.replace("window.PICKS_DATA = []", f"window.PICKS_DATA = {picks_json}")
 
             # For shared views: hide bet buttons and admin features, show expiry banner
             if is_shared and share_expires:
@@ -285,10 +293,12 @@ def serve_dashboard(is_shared=False, share_expires=None):
             response.headers["Content-Type"] = "text/html"
             return response
     except Exception as e:
-        logger.warning(f"Error generating dashboard: {e}. Falling back to latest card.")
+        logger.warning(f"Error generating dashboard: {e}. Falling back to latest card.", exc_info=True)
 
+    logger.warning("FALLBACK: Serving from cards/ directory instead of template!")
     latest_card = get_latest_betting_card()
     if latest_card:
+        logger.warning(f"FALLBACK: Serving {latest_card}")
         try:
             with open(latest_card, 'r') as f:
                 content = f.read()
