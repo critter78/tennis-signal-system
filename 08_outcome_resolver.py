@@ -316,6 +316,52 @@ def fetch_market_by_id(market_id):
     return None
 
 
+def _match_bulk_only(pick, resolved_markets):
+    """
+    Match a pick against bulk-fetched resolved markets ONLY.
+    No individual API calls — fast. Used in Phase 1.
+    """
+    pick_market_id = pick.get("market_id", "")
+    pick_question = pick.get("question", "")
+    pick_player_a = pick.get("player_a", "")
+    pick_player_b = pick.get("player_b", "")
+    pick_match = pick.get("match", "")
+
+    for rm in resolved_markets:
+        # Method 1: market_id match
+        if pick_market_id and rm.get("market_id") == pick_market_id:
+            return rm
+
+        rm_question = rm.get("question", "")
+
+        # Method 2: Question text similarity
+        if pick_question and rm_question:
+            ratio = SequenceMatcher(None, pick_question.lower(), rm_question.lower()).ratio()
+            if ratio >= 0.85:
+                return rm
+
+        # Method 3: Both player last names in resolved question
+        if pick_player_a and pick_player_b:
+            q_lower = rm_question.lower()
+            a_last = pick_player_a.split()[-1].lower() if pick_player_a.split() else ""
+            b_last = pick_player_b.split()[-1].lower() if pick_player_b.split() else ""
+            if a_last and b_last and len(a_last) > 2 and len(b_last) > 2:
+                if a_last in q_lower and b_last in q_lower:
+                    return rm
+
+        # Method 4: Match string contains both last names
+        if pick_match:
+            q_lower = rm_question.lower()
+            parts = re.split(r'\s+vs\.?\s+', pick_match.lower())
+            if len(parts) == 2:
+                last_a = parts[0].strip().split()[-1]
+                last_b = parts[1].strip().split()[-1]
+                if last_a in q_lower and last_b in q_lower:
+                    return rm
+
+    return None
+
+
 def match_pick_to_resolved(pick, resolved_markets):
     """
     Try to match a pick to a resolved market.
@@ -461,18 +507,18 @@ def resolve_picks(dry_run=False):
     print(f"  Found {len(resolved_markets)} resolved tennis markets")
 
     # Only check picks that are likely finished (logged > 24 hours ago)
-    # This avoids hammering the API for matches still in progress
-    import time
     cutoff = datetime.utcnow() - timedelta(hours=24)
 
-    # Match and resolve
+    # PHASE 1: Try to match ALL eligible picks against bulk-fetched resolved markets
+    # (no individual API calls — fast)
+    print(f"\n  Phase 1: Matching against bulk-fetched markets...")
     new_resolutions = 0
-    api_calls = 0
-    for pick in picks:
-        if pick.get("outcome") is not None:
-            continue  # Already resolved
+    unmatched_slugs = {}  # slug -> list of pick indices (deduplicated)
 
-        # Skip very recent picks (match probably still in progress)
+    for i, pick in enumerate(picks):
+        if pick.get("outcome") is not None:
+            continue
+
         logged_at = pick.get("logged_at", "")
         if logged_at:
             try:
@@ -482,37 +528,73 @@ def resolve_picks(dry_run=False):
             except (ValueError, TypeError):
                 pass
 
-        rm = match_pick_to_resolved(pick, resolved_markets)
-
-        # Rate limit: pause briefly every 10 API calls to avoid hammering Polymarket
-        api_calls += 1
-        if api_calls % 10 == 0:
-            time.sleep(0.5)
-
+        # Try matching against bulk results ONLY (no API calls)
+        rm = _match_bulk_only(pick, resolved_markets)
         if rm:
             outcome, pnl, actual_winner = determine_outcome(pick, rm)
-
-            log_msg = (
-                f"{'WIN' if outcome == 'win' else 'LOSS'}: "
-                f"{pick.get('match', '?')} | "
-                f"Bet: {pick.get('bet_on', '?')} | "
-                f"Winner: {actual_winner} | "
-                f"PnL: ${pnl:+.0f} | "
-                f"Edge: {pick.get('edge', 0):.1f}%"
-            )
-
-            if dry_run:
-                print(f"  [DRY RUN] {log_msg}")
-            else:
+            if not dry_run:
                 pick["outcome"] = outcome
                 pick["pnl"] = pnl
                 pick["actual_winner"] = actual_winner
                 pick["resolved_at"] = rm.get("resolved_at", datetime.utcnow().isoformat())
-                log_resolution(log_msg)
-
+            log_resolution(
+                f"{'WIN' if outcome == 'win' else 'LOSS'}: "
+                f"{pick.get('match', '?')} | Bet: {pick.get('bet_on', '?')} | "
+                f"Winner: {actual_winner} | PnL: ${pnl:+.0f}"
+            )
             new_resolutions += 1
+        else:
+            # Collect unique slugs for phase 2
+            slug = pick.get("slug", "")
+            if not slug:
+                poly_link = pick.get("poly_link", "")
+                if "/event/" in poly_link:
+                    slug = poly_link.split("/event/")[-1].split("/")[0].split("?")[0]
+            if slug and slug not in unmatched_slugs:
+                unmatched_slugs[slug] = i  # just need one pick index per slug
 
-    print(f"\n  New resolutions: {new_resolutions}")
+    print(f"  Phase 1 resolved: {new_resolutions}")
+    print(f"  Unique unmatched slugs for Phase 2: {len(unmatched_slugs)}")
+
+    # PHASE 2: Individual slug lookups for unmatched picks (capped at 50 API calls)
+    import time
+    MAX_SLUG_LOOKUPS = 50
+    slug_results = {}  # slug -> resolved market dict (cache)
+
+    if unmatched_slugs and not dry_run:
+        print(f"  Phase 2: Checking up to {min(len(unmatched_slugs), MAX_SLUG_LOOKUPS)} slugs via API...")
+        lookups_done = 0
+        for slug in list(unmatched_slugs.keys())[:MAX_SLUG_LOOKUPS]:
+            resolved = fetch_market_by_slug(slug)
+            if resolved:
+                slug_results[slug] = resolved
+            lookups_done += 1
+            if lookups_done % 10 == 0:
+                time.sleep(0.5)
+
+        # Now match remaining unresolved picks against slug results
+        if slug_results:
+            for pick in picks:
+                if pick.get("outcome") is not None:
+                    continue
+                slug = pick.get("slug", "")
+                if not slug:
+                    poly_link = pick.get("poly_link", "")
+                    if "/event/" in poly_link:
+                        slug = poly_link.split("/event/")[-1].split("/")[0].split("?")[0]
+                if slug and slug in slug_results:
+                    rm = slug_results[slug]
+                    outcome, pnl, actual_winner = determine_outcome(pick, rm)
+                    pick["outcome"] = outcome
+                    pick["pnl"] = pnl
+                    pick["actual_winner"] = actual_winner
+                    pick["resolved_at"] = rm.get("resolved_at", datetime.utcnow().isoformat())
+                    log_resolution(
+                        f"{'WIN' if outcome == 'win' else 'LOSS'}: "
+                        f"{pick.get('match', '?')} | Bet: {pick.get('bet_on', '?')} | "
+                        f"Winner: {actual_winner} | PnL: ${pnl:+.0f}"
+                    )
+                    new_resolutions += 1
 
     if new_resolutions > 0 and not dry_run:
         save_picks(picks)
