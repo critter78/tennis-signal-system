@@ -825,6 +825,7 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
 
     # Sort by positive edge first (true signals), then by abs edge for the rest
     signals.sort(key=lambda x: (x.get("has_edge", False), x["edge"]), reverse=True)
+    return signals
 
 
 def _ranking_to_tourney_prob(rank, n_rounds=7, surface_boost=1.0, form_factor=1.0):
