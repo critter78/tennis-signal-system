@@ -641,6 +641,12 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             poly_pa = vals[0]  # Default: first outcome = first player
         poly_pb = 100 - poly_pa
 
+        # Skip effectively resolved markets (price > 95c or < 5c = match is over)
+        if poly_pa >= 95 or poly_pa <= 5:
+            if debug:
+                print(f"  [skip] {pa} vs {pb} — market effectively resolved (price {poly_pa:.0f}c)")
+            continue
+
         # Detect surface and tournament info from question
         surface = _detect_surface(mkt["question"])
         tournament, round_name = _extract_tournament_info(mkt["question"])
@@ -1174,6 +1180,12 @@ def generate_signals_data_only(markets_df, df_hist=None, debug=False):
         else:
             poly_pa = vals[0]
         poly_pb = 100 - poly_pa
+
+        # Skip effectively resolved markets (price > 95c or < 5c = match is over)
+        if poly_pa >= 95 or poly_pa <= 5:
+            if debug:
+                print(f"  [skip] {pa} vs {pb} — market effectively resolved (price {poly_pa:.0f}c)")
+            continue
 
         surface = _detect_surface(mkt["question"])
         tournament, round_name = _extract_tournament_info(mkt["question"])
