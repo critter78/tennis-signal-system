@@ -475,33 +475,42 @@ def _build_elo_table(df, cutoff, k_base=32, initial=1500):
     """
     Compute ELO ratings for all players from match history.
     Uses variable K-factor: higher for upsets, lower for expected results.
-    Surface-specific ELO is a weighted blend of overall + surface-only.
+    Optimized: uses numpy arrays extracted from DataFrame for speed.
     """
     global _elo_cache
     if _elo_cache is not None:
         return _elo_cache
 
-    elo = {}  # player -> rating
-    matches = df[df["date"] < cutoff].sort_values("date")
+    import time
+    t0 = time.time()
 
-    for _, m in matches.iterrows():
-        w, l = m["winner"], m["loser"]
+    matches = df[df["date"] < cutoff].sort_values("date")
+    winners = matches["winner"].values
+    losers = matches["loser"].values
+
+    elo = {}  # player -> rating
+
+    for i in range(len(winners)):
+        w, l = winners[i], losers[i]
         if w not in elo: elo[w] = initial
         if l not in elo: elo[l] = initial
 
         ra, rb = elo[w], elo[l]
         ea = 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
-        eb = 1.0 - ea
 
         # Variable K: bigger updates for upsets
-        k = k_base
-        if ea < 0.3:  # winner was underdog
+        if ea < 0.3:
             k = k_base * 1.5
-        elif ea > 0.8:  # expected result
+        elif ea > 0.8:
             k = k_base * 0.7
+        else:
+            k = k_base
 
         elo[w] = ra + k * (1 - ea)
-        elo[l] = rb + k * (0 - eb)
+        elo[l] = rb + k * (ea - 1)  # equivalent to rb + k * (0 - (1-ea))
+
+    elapsed = time.time() - t0
+    print(f"  [elo] Computed {len(elo)} player ratings in {elapsed:.1f}s")
 
     _elo_cache = elo
     return elo
@@ -540,22 +549,18 @@ def _compute_momentum(df, player, cutoff, recent_matches):
         form_score = 50
 
     # ── QUALITY OF WINS ── 25%
-    # Wins vs higher-ranked opponents in last 20 matches
+    # Wins vs higher-ranked opponents in last 20 matches (vectorized)
     l20 = recent_matches.tail(20)
     quality_score = 50
-    quality_wins = 0
-    quality_total = 0
-    for _, m in l20.iterrows():
-        is_win = m["winner"] == player
-        if is_win and "l_rank" in df.columns and pd.notna(m.get("l_rank")):
-            opp_rank = int(m["l_rank"])
-            if opp_rank <= 30:
-                quality_wins += 1
-            quality_total += 1
-        elif not is_win and "w_rank" in df.columns and pd.notna(m.get("w_rank")):
-            quality_total += 1
-    if quality_total > 0:
-        quality_score = min(100, 40 + quality_wins * 15)  # Each top-30 win adds 15 pts
+    if len(l20) > 0:
+        l20_wins = l20[l20["winner"] == player]
+        quality_wins = 0
+        if "l_rank" in df.columns and len(l20_wins) > 0:
+            opp_ranks = l20_wins["l_rank"].dropna()
+            quality_wins = int((opp_ranks[(opp_ranks > 0) & (opp_ranks <= 30)]).count())
+        quality_total = len(l20)
+        if quality_total > 0:
+            quality_score = min(100, 40 + quality_wins * 15)
 
     # ── REST & FATIGUE ── 15%
     if len(recent_matches) > 0:
@@ -575,18 +580,15 @@ def _compute_momentum(df, player, cutoff, recent_matches):
 
     # ── STREAK FACTOR ── 20%
     streak = 0
-    for i in range(len(recent_matches) - 1, -1, -1):
-        m = recent_matches.iloc[i]
-        if m["winner"] == player:
-            if streak >= 0:
-                streak += 1
+    if len(recent_matches) > 0:
+        win_flags = (recent_matches["winner"] == player).values
+        for i in range(len(win_flags) - 1, -1, -1):
+            if win_flags[i]:
+                if streak >= 0: streak += 1
+                else: break
             else:
-                break
-        else:
-            if streak <= 0:
-                streak -= 1
-            else:
-                break
+                if streak <= 0: streak -= 1
+                else: break
     # Map streak to score: +5 streak = 95, -5 streak = 5
     streak_score = min(100, max(0, 50 + streak * 9))
 
@@ -694,45 +696,45 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
         breaks_won = opp_bpFaced - opp_bpSaved
         bp_convert_pct = _safe_ratio(breaks_won, opp_bpFaced)
 
-    # ── WIN/LOSS VS RANKED OPPONENTS ──
+    # ── WIN/LOSS VS RANKED OPPONENTS (vectorized — no iterrows) ──
     vs_ranked = {"top10": {"w": 0, "l": 0}, "top20": {"w": 0, "l": 0}, "top50": {"w": 0, "l": 0}}
-    if "l_rank" in df.columns:
-        for _, m in wins.iterrows():
-            opp_rank = m.get("l_rank")
-            if pd.notna(opp_rank) and opp_rank > 0:
-                opp_rank = int(opp_rank)
-                if opp_rank <= 10: vs_ranked["top10"]["w"] += 1
-                if opp_rank <= 20: vs_ranked["top20"]["w"] += 1
-                if opp_rank <= 50: vs_ranked["top50"]["w"] += 1
-    if "w_rank" in df.columns:
-        for _, m in losses.iterrows():
-            opp_rank = m.get("w_rank")
-            if pd.notna(opp_rank) and opp_rank > 0:
-                opp_rank = int(opp_rank)
-                if opp_rank <= 10: vs_ranked["top10"]["l"] += 1
-                if opp_rank <= 20: vs_ranked["top20"]["l"] += 1
-                if opp_rank <= 50: vs_ranked["top50"]["l"] += 1
+    if "l_rank" in df.columns and len(wins) > 0:
+        opp_ranks_w = wins["l_rank"].dropna()
+        opp_ranks_w = opp_ranks_w[opp_ranks_w > 0]
+        vs_ranked["top10"]["w"] = int((opp_ranks_w <= 10).sum())
+        vs_ranked["top20"]["w"] = int((opp_ranks_w <= 20).sum())
+        vs_ranked["top50"]["w"] = int((opp_ranks_w <= 50).sum())
+    if "w_rank" in df.columns and len(losses) > 0:
+        opp_ranks_l = losses["w_rank"].dropna()
+        opp_ranks_l = opp_ranks_l[opp_ranks_l > 0]
+        vs_ranked["top10"]["l"] = int((opp_ranks_l <= 10).sum())
+        vs_ranked["top20"]["l"] = int((opp_ranks_l <= 20).sum())
+        vs_ranked["top50"]["l"] = int((opp_ranks_l <= 50).sum())
 
-    # ── RANKING HISTORY & MOVEMENT ──
+    # ── RANKING HISTORY & MOVEMENT (vectorized) ──
     def _get_rank_at(matches_w, matches_l, target_date, window_days=60):
         """Get player's rank closest to a target date within a window."""
         start = target_date - timedelta(days=window_days)
         end = target_date + timedelta(days=window_days)
-        candidates = []
-        if "w_rank" in df.columns:
-            nearby_w = matches_w[(matches_w["date"] >= start) & (matches_w["date"] <= end)]
-            for _, m in nearby_w.iterrows():
-                if pd.notna(m.get("w_rank")) and m["w_rank"] > 0:
-                    candidates.append((abs((m["date"] - target_date).days), int(m["w_rank"])))
-        if "l_rank" in df.columns:
-            nearby_l = matches_l[(matches_l["date"] >= start) & (matches_l["date"] <= end)]
-            for _, m in nearby_l.iterrows():
-                if pd.notna(m.get("l_rank")) and m["l_rank"] > 0:
-                    candidates.append((abs((m["date"] - target_date).days), int(m["l_rank"])))
-        if candidates:
-            candidates.sort(key=lambda x: x[0])
-            return candidates[0][1]
-        return None
+        best_dist, best_rank = 9999, None
+        for col, mdf in [("w_rank", matches_w), ("l_rank", matches_l)]:
+            if col not in df.columns or len(mdf) == 0:
+                continue
+            nearby = mdf[(mdf["date"] >= start) & (mdf["date"] <= end)]
+            if len(nearby) == 0:
+                continue
+            ranks = nearby[col].dropna()
+            ranks = ranks[ranks > 0]
+            if len(ranks) == 0:
+                continue
+            dates = nearby.loc[ranks.index, "date"]
+            dists = (dates - target_date).abs().dt.days
+            min_idx = dists.idxmin()
+            dist = int(dists[min_idx])
+            if dist < best_dist:
+                best_dist = dist
+                best_rank = int(ranks[min_idx])
+        return best_rank
 
     # All matches for the player (for ranking lookups beyond the 365d window)
     all_wins = df[(df["winner"] == player) & (df["date"] < cutoff)].sort_values("date")
@@ -1008,8 +1010,16 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         pa_hist = find_player(df_hist, pa)
         pb_hist = find_player(df_hist, pb)
 
-        sa = get_player_stats(df_hist, pa_hist, today, surface) if pa_hist else {}
-        sb = get_player_stats(df_hist, pb_hist, today, surface) if pb_hist else {}
+        try:
+            sa = get_player_stats(df_hist, pa_hist, today, surface) if pa_hist else {}
+        except Exception as e:
+            print(f"  WARNING: Stats failed for {pa}: {e}")
+            sa = {}
+        try:
+            sb = get_player_stats(df_hist, pb_hist, today, surface) if pb_hist else {}
+        except Exception as e:
+            print(f"  WARNING: Stats failed for {pb}: {e}")
+            sb = {}
         h2 = get_h2h(df_hist, pa_hist, pb_hist, today) if pa_hist and pb_hist else {"total":0,"p1_wins":0,"p2_wins":0}
 
         # Get rankings — prefer live rankings, fall back to historical
@@ -1408,7 +1418,11 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
             surface = "Grass"
 
         # Get player stats and ranking — prefer live rankings
-        sa = get_player_stats(df_hist, player_hist, today, surface)
+        try:
+            sa = get_player_stats(df_hist, player_hist, today, surface)
+        except Exception as e:
+            print(f"  WARNING: Stats failed for {player}: {e}")
+            sa = {}
         live_rank, _ = get_live_rank(player)
         hist_rank, rank_pts = get_player_ranking(df_hist, player_hist, today)
         rank = live_rank or hist_rank
