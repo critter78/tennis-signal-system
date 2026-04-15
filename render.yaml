@@ -10,6 +10,8 @@ services:
         value: "3.11"
       - key: FLASK_ENV
         value: production
+      - key: CRON_SECRET
+        sync: false  # Set manually in Render dashboard
     healthCheckPath: /api/status
   - type: cron
     name: signal-generator-6h
@@ -21,3 +23,7 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: CRON_SECRET
+        sync: false  # Must match the web service's CRON_SECRET
+      - key: WEB_SERVICE_URL
+        value: "https://tennis-betting-server.onrender.com"

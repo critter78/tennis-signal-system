@@ -43,6 +43,9 @@ DASHBOARD_TEMPLATE = BASE_DIR / "dashboard.html"
 # Admin password — set via environment variable on Render
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "tennis2026")
 
+# Cron secret — the cron job sends this to authenticate refresh requests
+CRON_SECRET = os.environ.get("CRON_SECRET", "tennis-cron-2026")
+
 # Polymarket wallet address — set via environment variable on Render
 POLY_WALLET = os.environ.get("POLY_WALLET", "0x0D2ad18A44ac2D4A001aEdd0EF9a7B016DAA031d")
 POLY_DATA_API = "https://data-api.polymarket.com"
@@ -1537,6 +1540,120 @@ def resolve_outcomes_route():
     except Exception as e:
         logger.error(f"Resolution error: {e}")
         return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/refresh", methods=["POST"])
+@enable_cors
+def api_refresh():
+    """
+    Full pipeline refresh — called by the cron job every 6 hours.
+    Runs: rankings fetch → card generation → outcome resolution → dashboard rebuild.
+    Secured with CRON_SECRET to prevent unauthorized triggers.
+    """
+    # Authenticate: accept via header or JSON body
+    secret = request.headers.get("X-Cron-Secret") or (request.json or {}).get("secret")
+    is_admin = check_admin_cookie()
+
+    if secret != CRON_SECRET and not is_admin:
+        logger.warning("Unauthorized /api/refresh attempt")
+        return jsonify({"error": "Unauthorized"}), 401
+
+    import time
+    t0 = time.time()
+    results = {}
+    logger.info("=" * 50)
+    logger.info("API REFRESH: Full pipeline starting")
+    logger.info("=" * 50)
+
+    # Step 1: Fetch live rankings
+    try:
+        logger.info("[1/4] Fetching live rankings...")
+        r = subprocess.run(
+            ["python3", str(BASE_DIR / "09_rankings_fetcher.py"), "--refresh"],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=60
+        )
+        results["rankings"] = {
+            "status": "ok" if r.returncode == 0 else "error",
+            "output": (r.stdout or "")[-200:],
+        }
+        if r.returncode != 0:
+            logger.warning(f"Rankings fetch failed: {r.stderr[-200:]}")
+    except Exception as e:
+        results["rankings"] = {"status": "error", "error": str(e)}
+        logger.warning(f"Rankings fetch exception: {e}")
+
+    # Step 2: Generate fresh betting card
+    try:
+        logger.info("[2/4] Generating betting card...")
+        r = subprocess.run(
+            ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "500"],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
+        )
+        if r.returncode != 0:
+            logger.info("  Card gen failed at $500, trying $300...")
+            r = subprocess.run(
+                ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300"],
+                cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
+            )
+        results["card"] = {
+            "status": "ok" if r.returncode == 0 else "error",
+            "output": (r.stdout or "")[-300:],
+        }
+        if r.returncode != 0:
+            logger.error(f"Card generation failed: {r.stderr[-300:]}")
+    except Exception as e:
+        results["card"] = {"status": "error", "error": str(e)}
+        logger.error(f"Card generation exception: {e}")
+
+    # Step 3: Resolve outcomes
+    try:
+        logger.info("[3/4] Resolving outcomes...")
+        r = subprocess.run(
+            ["python3", str(BASE_DIR / "08_outcome_resolver.py")],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=180
+        )
+        results["resolve"] = {
+            "status": "ok" if r.returncode == 0 else "error",
+            "output": (r.stdout or "")[-300:],
+        }
+        if r.returncode != 0:
+            logger.error(f"Outcome resolution failed: {r.stderr[-300:]}")
+    except Exception as e:
+        results["resolve"] = {"status": "error", "error": str(e)}
+        logger.error(f"Outcome resolution exception: {e}")
+
+    # Step 4: Rebuild dashboard
+    try:
+        logger.info("[4/4] Rebuilding dashboard...")
+        dash_script = BASE_DIR / "07_dashboard.py"
+        if dash_script.exists():
+            r = subprocess.run(
+                ["python3", str(dash_script)],
+                cwd=str(BASE_DIR), capture_output=True, text=True, timeout=60
+            )
+            results["dashboard"] = {
+                "status": "ok" if r.returncode == 0 else "error",
+                "output": (r.stdout or "")[-200:],
+            }
+        else:
+            results["dashboard"] = {"status": "skipped", "reason": "07_dashboard.py not found"}
+    except Exception as e:
+        results["dashboard"] = {"status": "error", "error": str(e)}
+
+    elapsed = time.time() - t0
+    ok_count = sum(1 for v in results.values() if v.get("status") == "ok")
+    total = len(results)
+
+    logger.info(f"API REFRESH complete: {ok_count}/{total} steps succeeded in {elapsed:.1f}s")
+    logger.info("=" * 50)
+
+    return jsonify({
+        "status": "ok" if ok_count == total else "partial",
+        "steps": results,
+        "elapsed_seconds": round(elapsed, 1),
+        "succeeded": ok_count,
+        "total": total,
+    }), 200
 
 
 @app.route("/health", methods=["GET"])
