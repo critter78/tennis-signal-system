@@ -312,9 +312,12 @@ let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
     try {
         const res = await fetch('/api/bets');
         const data = await res.json();
-        const serverBets = data.bets || {};
-        // Server stores as object keyed by match+betOn, convert to array
-        const serverArr = Object.values(serverBets);
+        let serverBets = data.bets || {};
+        // Handle both array and object formats
+        let serverArr = Array.isArray(serverBets) ? serverBets : Object.values(serverBets);
+        // Filter out non-bet entries (like last_synced, last_trade_sync)
+        serverArr = serverArr.filter(b => b && typeof b === 'object' && b.match && b.bet_on);
+
         if (serverArr.length > 0) {
             // Merge: server wins for duplicates, keep local-only bets
             const merged = [...serverArr];
@@ -325,15 +328,11 @@ let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
             myBets.length = 0;
             merged.forEach(b => myBets.push(b));
             localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
-            // Push merged back to server
-            const obj = {};
-            myBets.forEach(b => obj[b.match + '|' + b.bet_on] = b);
-            fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(obj) });
+            // Push merged back to server in array format
+            fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bets: myBets}) });
         } else if (myBets.length > 0) {
-            // Push local bets to server
-            const obj = {};
-            myBets.forEach(b => obj[b.match + '|' + b.bet_on] = b);
-            fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(obj) });
+            // Push local bets to server in array format
+            fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bets: myBets}) });
         }
         // Re-render after sync so bets from other devices appear
         if (typeof renderSignals === 'function') renderSignals();

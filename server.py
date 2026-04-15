@@ -794,19 +794,50 @@ def api_picks():
 @app.route("/api/bets", methods=["GET", "POST"])
 @enable_cors
 def api_bets():
-    """Get or save user bets."""
+    """Get or save user bets. Stores as {"bets": [array], ...}."""
     try:
         if request.method == "GET":
             bets = load_bets()
-            return jsonify({"bets": bets})
+            # Normalize: always return bets as an array
+            if isinstance(bets, dict):
+                bet_list = bets.get("bets", [])
+                if isinstance(bet_list, dict):
+                    # Old format: object keyed by "match|bet_on" — convert to array
+                    bet_list = [v for v in bet_list.values() if isinstance(v, dict) and "match" in v]
+                return jsonify({"bets": bet_list})
+            return jsonify({"bets": []})
 
         elif request.method == "POST":
             data = request.get_json() or {}
-            bets = load_bets()
-            bets.update(data)
+            # Accept both {"bets": [...]} and bare object format
+            if isinstance(data, dict) and "bets" in data:
+                new_bets = data["bets"]
+            elif isinstance(data, list):
+                new_bets = data
+            else:
+                # Old format: object keyed by "match|bet_on"
+                new_bets = [v for v in data.values() if isinstance(v, dict) and "match" in v]
 
-            if save_bets(bets):
-                return jsonify({"status": "success", "bets": bets}), 201
+            # Deduplicate by match + bet_on
+            seen = set()
+            unique = []
+            for b in new_bets:
+                key = (b.get("match", ""), b.get("bet_on", ""))
+                if key not in seen:
+                    seen.add(key)
+                    unique.append(b)
+
+            # Preserve trade sync metadata
+            existing = load_bets()
+            save_data = {"bets": unique}
+            if isinstance(existing, dict):
+                if "last_synced" in existing:
+                    save_data["last_synced"] = existing["last_synced"]
+                if "last_trade_sync" in existing:
+                    save_data["last_trade_sync"] = existing["last_trade_sync"]
+
+            if save_bets(save_data):
+                return jsonify({"status": "success", "bets": unique}), 201
             else:
                 return jsonify({"status": "error", "message": "Failed to save"}), 500
 
