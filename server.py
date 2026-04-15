@@ -961,10 +961,48 @@ def resolve_outcomes_route():
             words = set(w for w in q.replace("?", "").replace(",", "").split() if len(w) > 2)
             rm["_words"] = words
 
-        # Match picks using fast last-name lookups (no SequenceMatcher!)
+        # ── REVERT incorrectly resolved futures/outright picks ──
+        FUTURES_KW = ["french open", "us open", "australian open", "wimbledon",
+                       "roland garros", "grand slam", "men's", "women's"]
+        n_reverted = 0
+        for pick in picks:
+            if pick.get("outcome") is None:
+                continue
+            # Check if this is a futures pick that was wrongly resolved
+            mt = pick.get("market_type", "")
+            pb = pick.get("player_b", "").lower()
+            match_name = pick.get("match", "").lower()
+            is_futures = (mt == "outright"
+                          or any(kw in pb for kw in FUTURES_KW)
+                          or any(kw in match_name for kw in FUTURES_KW)
+                          or " — " in pick.get("match", ""))
+            if is_futures:
+                pick.pop("outcome", None)
+                pick.pop("pnl", None)
+                pick.pop("actual_winner", None)
+                pick.pop("resolved_at", None)
+                n_reverted += 1
+
+        if n_reverted:
+            output_lines.append(f"Reverted {n_reverted} incorrectly resolved futures picks")
+
+        # Match H2H picks using fast last-name lookups (no SequenceMatcher!)
         new_resolutions = 0
         for i, pick in enumerate(picks):
             if i not in eligible_indices:
+                continue
+            # Also skip newly-eligible picks that were just reverted
+            if pick.get("outcome") is not None:
+                continue
+
+            # Skip futures/outright picks — they resolve on a different timeline
+            mt = pick.get("market_type", "")
+            pb = pick.get("player_b", "").lower()
+            match_name = pick.get("match", "").lower()
+            if (mt == "outright"
+                or any(kw in pb for kw in FUTURES_KW)
+                or any(kw in match_name for kw in FUTURES_KW)
+                or " — " in pick.get("match", "")):
                 continue
 
             pick_player_a = pick.get("player_a", "")
@@ -1033,12 +1071,12 @@ def resolve_outcomes_route():
 
         output_lines.append(f"\nNew resolutions: {new_resolutions} ({time.time()-t0:.1f}s total)")
 
-        # Save if we resolved anything
-        if new_resolutions > 0:
+        # Save if anything changed (resolutions or reverts)
+        if new_resolutions > 0 or n_reverted > 0:
             PICKS_FILE.parent.mkdir(exist_ok=True)
             with open(PICKS_FILE, 'w') as f:
                 for p in picks:
-                    row = {k: v for k, v in p.items() if k != "_line_idx"}
+                    row = {k: v for k, v in p.items() if k != "_line_idx" and k != "_words"}
                     f.write(json.dumps(row) + "\n")
 
             all_resolved = [p for p in picks if p.get("outcome") is not None]

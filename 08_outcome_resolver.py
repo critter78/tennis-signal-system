@@ -515,8 +515,21 @@ def resolve_picks(dry_run=False):
     new_resolutions = 0
     unmatched_slugs = {}  # slug -> list of pick indices (deduplicated)
 
+    FUTURES_KW = ["french open", "us open", "australian open", "wimbledon",
+                   "roland garros", "grand slam", "men's", "women's"]
+
     for i, pick in enumerate(picks):
         if pick.get("outcome") is not None:
+            continue
+
+        # Skip futures/outright picks — they resolve on a different timeline
+        mt = pick.get("market_type", "")
+        pb = pick.get("player_b", "").lower()
+        match_name = pick.get("match", "").lower()
+        if (mt == "outright"
+            or any(kw in pb for kw in FUTURES_KW)
+            or any(kw in match_name for kw in FUTURES_KW)
+            or " — " in pick.get("match", "")):
             continue
 
         logged_at = pick.get("logged_at", "")

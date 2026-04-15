@@ -11,9 +11,34 @@ DATA_DIR = Path("data")
 def log_picks(signals, run_id=None):
     if not signals: return 0
     run_id = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Load existing unresolved picks to avoid duplicates
+    existing = load_picks_log()
+    existing_keys = set()
+    for p in existing:
+        if p.get("outcome") is not None:
+            continue  # resolved picks are fine to re-pick
+        # Key by sorted player pair + market_type to catch same match
+        pa = p.get("player_a", "").lower().strip()
+        pb = p.get("player_b", "").lower().strip()
+        mt = p.get("market_type", "")
+        key = (tuple(sorted([pa, pb])), mt)
+        existing_keys.add(key)
+
     logged = 0
+    skipped = 0
     with open(PICKS_LOG, "a") as f:
         for s in signals:
+            # Check for duplicate
+            pa = s.get("player_a", "").lower().strip()
+            pb = s.get("player_b", "").lower().strip()
+            mt = s.get("market_type", "")
+            key = (tuple(sorted([pa, pb])), mt)
+            if key in existing_keys:
+                skipped += 1
+                continue
+            existing_keys.add(key)  # prevent dupes within this batch too
+
             entry = {"run_id": run_id, "logged_at": datetime.now().isoformat(),
                 "market_id": s.get("market_id",""), "slug": s.get("slug",""),
                 "market_type": s.get("market_type","unknown"), "match": s.get("match",""),
@@ -35,7 +60,10 @@ def log_picks(signals, run_id=None):
                 "sa_form": s.get("sa_form"), "sb_form": s.get("sb_form"),
                 "outcome": None, "actual_winner": None, "resolved_at": None, "pnl": None}
             f.write(json.dumps(entry) + "\n"); logged += 1
-    print(f"  Logged {logged} picks to {PICKS_LOG}")
+    if skipped:
+        print(f"  Logged {logged} picks to {PICKS_LOG} (skipped {skipped} duplicates)")
+    else:
+        print(f"  Logged {logged} picks to {PICKS_LOG}")
     return logged
 
 def load_picks_log():
