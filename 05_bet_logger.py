@@ -15,6 +15,7 @@ def log_picks(signals, run_id=None):
     with open(PICKS_LOG, "a") as f:
         for s in signals:
             entry = {"run_id": run_id, "logged_at": datetime.now().isoformat(),
+                "market_id": s.get("market_id",""), "slug": s.get("slug",""),
                 "market_type": s.get("market_type","unknown"), "match": s.get("match",""),
                 "question": s.get("question",""), "tournament": s.get("tournament",""),
                 "round": s.get("round",""), "surface": s.get("surface",""),
@@ -24,6 +25,7 @@ def log_picks(signals, run_id=None):
                 "model_prob_b": s.get("model_prob_b"), "confidence": s.get("confidence"),
                 "edge": s.get("edge"), "kelly_stake": s.get("kelly_stake"),
                 "has_edge": s.get("has_edge",False), "rank": s.get("rank"),
+                "rank_a": s.get("rank_a"), "rank_b": s.get("rank_b"),
                 "poly_price": s.get("poly_price"), "poly_price_a": s.get("poly_price_a"),
                 "poly_price_b": s.get("poly_price_b"), "volume": s.get("volume"),
                 "liquidity": s.get("liquidity"), "end_date": s.get("end_date"),

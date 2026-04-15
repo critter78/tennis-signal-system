@@ -244,26 +244,129 @@ def names_match(name1, name2):
     return False
 
 
+def fetch_market_by_slug(slug):
+    """
+    Directly fetch a specific market/event by its slug.
+    This is the most reliable way to check if a specific pick's market has resolved.
+    """
+    if not slug:
+        return None
+
+    try:
+        # Try events endpoint first (slug-based lookup)
+        r = requests.get(
+            f"{GAMMA_API}/events",
+            params={"slug": slug, "limit": 1},
+            timeout=15,
+        )
+        r.raise_for_status()
+        events = r.json()
+        if events:
+            ev = events[0]
+            markets = ev.get("markets", [])
+            if markets:
+                for m in markets:
+                    parsed = _parse_resolved(m)
+                    if parsed:
+                        if not parsed.get("slug"):
+                            parsed["slug"] = ev.get("slug", "")
+                        return parsed
+            else:
+                parsed = _parse_resolved(ev)
+                if parsed:
+                    return parsed
+    except Exception as e:
+        pass  # Fall through to market lookup
+
+    try:
+        # Try markets endpoint with slug
+        r = requests.get(
+            f"{GAMMA_API}/markets",
+            params={"slug": slug, "limit": 1},
+            timeout=15,
+        )
+        r.raise_for_status()
+        markets = r.json()
+        if markets:
+            parsed = _parse_resolved(markets[0])
+            if parsed:
+                return parsed
+    except Exception:
+        pass
+
+    return None
+
+
+def fetch_market_by_id(market_id):
+    """Directly fetch a specific market by its condition ID."""
+    if not market_id:
+        return None
+
+    try:
+        r = requests.get(
+            f"{GAMMA_API}/markets/{market_id}",
+            timeout=15,
+        )
+        r.raise_for_status()
+        m = r.json()
+        return _parse_resolved(m)
+    except Exception:
+        pass
+
+    return None
+
+
 def match_pick_to_resolved(pick, resolved_markets):
     """
     Try to match a pick to a resolved market.
+    Uses multiple strategies in order of reliability:
+    1. Direct market ID match
+    2. Direct slug lookup (API call per pick)
+    3. Question text similarity
+    4. Player name matching
     Returns the resolved market dict if matched, None otherwise.
     """
+    pick_market_id = pick.get("market_id", "")
     pick_match = pick.get("match", "")
     pick_question = pick.get("question", "")
     pick_player_a = pick.get("player_a", "")
     pick_player_b = pick.get("player_b", "")
 
+    # Method 0: Direct market_id match against bulk-fetched resolved markets
+    if pick_market_id:
+        for rm in resolved_markets:
+            if rm.get("market_id") == pick_market_id:
+                return rm
+
+    # Method 1: Direct slug lookup via API (most reliable for picks with slug)
+    pick_slug = pick.get("slug", "")
+    if not pick_slug:
+        # Extract slug from poly_link if available
+        poly_link = pick.get("poly_link", "")
+        if "/event/" in poly_link:
+            pick_slug = poly_link.split("/event/")[-1].split("/")[0].split("?")[0]
+
+    if pick_slug:
+        resolved = fetch_market_by_slug(pick_slug)
+        if resolved:
+            return resolved
+
+    # Method 2: Direct market_id lookup via API
+    if pick_market_id:
+        resolved = fetch_market_by_id(pick_market_id)
+        if resolved:
+            return resolved
+
+    # Method 3: Question text similarity (from bulk-fetched resolved markets)
     for rm in resolved_markets:
         rm_question = rm.get("question", "")
 
-        # Method 1: Question text similarity
         if pick_question and rm_question:
             ratio = SequenceMatcher(None, pick_question.lower(), rm_question.lower()).ratio()
             if ratio >= 0.85:
                 return rm
 
-        # Method 2: Both player names appear in the resolved question
+        # Method 4: Both player names appear in the resolved question
         if pick_player_a and pick_player_b:
             q_lower = rm_question.lower()
             a_last = pick_player_a.split()[-1].lower() if pick_player_a.split() else ""
@@ -271,11 +374,10 @@ def match_pick_to_resolved(pick, resolved_markets):
             if a_last and b_last and a_last in q_lower and b_last in q_lower:
                 return rm
 
-        # Method 3: Match name contains both last names
+        # Method 5: Match name contains both last names
         if pick_match:
             match_lower = pick_match.lower()
             q_lower = rm_question.lower()
-            # Extract last names from pick match
             parts = re.split(r'\s+vs\.?\s+', match_lower)
             if len(parts) == 2:
                 last_a = parts[0].strip().split()[-1]
@@ -358,13 +460,35 @@ def resolve_picks(dry_run=False):
     resolved_markets = fetch_resolved_markets()
     print(f"  Found {len(resolved_markets)} resolved tennis markets")
 
+    # Only check picks that are likely finished (logged > 24 hours ago)
+    # This avoids hammering the API for matches still in progress
+    import time
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+
     # Match and resolve
     new_resolutions = 0
+    api_calls = 0
     for pick in picks:
         if pick.get("outcome") is not None:
             continue  # Already resolved
 
+        # Skip very recent picks (match probably still in progress)
+        logged_at = pick.get("logged_at", "")
+        if logged_at:
+            try:
+                pick_time = datetime.fromisoformat(logged_at.replace("Z", ""))
+                if pick_time > cutoff:
+                    continue
+            except (ValueError, TypeError):
+                pass
+
         rm = match_pick_to_resolved(pick, resolved_markets)
+
+        # Rate limit: pause briefly every 10 API calls to avoid hammering Polymarket
+        api_calls += 1
+        if api_calls % 10 == 0:
+            time.sleep(0.5)
+
         if rm:
             outcome, pnl, actual_winner = determine_outcome(pick, rm)
 

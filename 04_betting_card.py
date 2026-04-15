@@ -452,12 +452,92 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
     l10   = all_m.tail(10)
     l10_w = (l10["winner"] == player).sum()
     last_match = (cutoff - all_m["date"].max()).days if n_t > 0 else 30
+
+    # ── SERVE & RETURN STATS ──
+    # Compute per-match averages from raw serve columns
+    # When player won: stats are in w_* columns; when lost: in l_* columns
+    def _safe_avg(series):
+        s = series.dropna()
+        return float(s.mean()) if len(s) > 0 else None
+
+    def _safe_ratio(num_series, denom_series):
+        """Compute ratio (e.g. 1stWon / svpt) safely."""
+        n = num_series.dropna()
+        d = denom_series.dropna()
+        if len(n) == 0 or len(d) == 0:
+            return None
+        total_n = n.sum()
+        total_d = d.sum()
+        return round(float(total_n / total_d * 100), 1) if total_d > 0 else None
+
+    # Aces per match
+    ace_w = _safe_avg(wins["w_ace"]) if "w_ace" in wins.columns else None
+    ace_l = _safe_avg(losses["l_ace"]) if "l_ace" in losses.columns else None
+    aces_per_match = None
+    if ace_w is not None or ace_l is not None:
+        vals = [v for v in [ace_w, ace_l] if v is not None]
+        aces_per_match = round(sum(vals) / len(vals), 1)
+
+    # Double faults per match
+    df_w = _safe_avg(wins["w_df"]) if "w_df" in wins.columns else None
+    df_l = _safe_avg(losses["l_df"]) if "l_df" in losses.columns else None
+    dfs_per_match = None
+    if df_w is not None or df_l is not None:
+        vals = [v for v in [df_w, df_l] if v is not None]
+        dfs_per_match = round(sum(vals) / len(vals), 1)
+
+    # 1st serve % (1stIn / svpt)
+    first_in_pct = None
+    if "w_1stIn" in df.columns and "w_svpt" in df.columns:
+        all_1stIn = pd.concat([wins["w_1stIn"], losses["l_1stIn"]])
+        all_svpt  = pd.concat([wins["w_svpt"], losses["l_svpt"]])
+        first_in_pct = _safe_ratio(all_1stIn, all_svpt)
+
+    # 1st serve win % (1stWon / 1stIn)
+    first_won_pct = None
+    if "w_1stWon" in df.columns and "w_1stIn" in df.columns:
+        all_1stWon = pd.concat([wins["w_1stWon"], losses["l_1stWon"]])
+        all_1stIn  = pd.concat([wins["w_1stIn"], losses["l_1stIn"]])
+        first_won_pct = _safe_ratio(all_1stWon, all_1stIn)
+
+    # 2nd serve win % (2ndWon / (svpt - 1stIn))
+    second_won_pct = None
+    if "w_2ndWon" in df.columns and "w_svpt" in df.columns and "w_1stIn" in df.columns:
+        all_2ndWon = pd.concat([wins["w_2ndWon"], losses["l_2ndWon"]])
+        all_2nd_attempts = pd.concat([wins["w_svpt"] - wins["w_1stIn"], losses["l_svpt"] - losses["l_1stIn"]])
+        second_won_pct = _safe_ratio(all_2ndWon, all_2nd_attempts)
+
+    # Break points saved % (bpSaved / bpFaced)
+    bp_saved_pct = None
+    if "w_bpSaved" in df.columns and "w_bpFaced" in df.columns:
+        all_bpSaved = pd.concat([wins["w_bpSaved"], losses["l_bpSaved"]])
+        all_bpFaced = pd.concat([wins["w_bpFaced"], losses["l_bpFaced"]])
+        bp_saved_pct = _safe_ratio(all_bpSaved, all_bpFaced)
+
+    # Break points converted (opponent's bpFaced - bpSaved = breaks won by us)
+    bp_convert_pct = None
+    if "l_bpFaced" in df.columns and "l_bpSaved" in df.columns:
+        # When we won: opponent's bp stats are in l_bp columns (they were the loser)
+        # When we lost: opponent's bp stats are in w_bp columns (they were the winner)
+        opp_bpFaced = pd.concat([wins["l_bpFaced"], losses["w_bpFaced"]])
+        opp_bpSaved = pd.concat([wins["l_bpSaved"], losses["w_bpSaved"]])
+        breaks_won = opp_bpFaced - opp_bpSaved
+        bp_convert_pct = _safe_ratio(breaks_won, opp_bpFaced)
+
     return {
         "win_rate":       round(n_w / n_t * 100, 1) if n_t > 5 else None,
         "surf_win_rate":  round(len(s_w) / s_t * 100, 1) if s_t > 3 else None,
         "l10_form":       f"{l10_w}/{len(l10)}",
         "matches_52w":    n_t,
         "days_rest":      last_match,
+        # Serve & return stats
+        "aces_per_match":   aces_per_match,
+        "dfs_per_match":    dfs_per_match,
+        "first_in_pct":     first_in_pct,
+        "first_won_pct":    first_won_pct,
+        "second_won_pct":   second_won_pct,
+        "bp_saved_pct":     bp_saved_pct,
+        "bp_convert_pct":   bp_convert_pct,
     }
 
 
@@ -606,8 +686,11 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "h2h_total": h2["total"],
             "h2h_p1_wins": h2["p1_wins"] / h2["total"] if h2["total"] > 0 else 0.5,
             "h2h_surf_p1": 0.5, "h2h_advantage": 0,
-            "ace_diff": 0, "df_diff": 0, "first_in_diff": 0,
-            "win1st_diff": 0, "win2nd_diff": 0,
+            "ace_diff": (sa.get("aces_per_match") or 0) - (sb.get("aces_per_match") or 0),
+            "df_diff": (sa.get("dfs_per_match") or 0) - (sb.get("dfs_per_match") or 0),
+            "first_in_diff": (sa.get("first_in_pct") or 50) - (sb.get("first_in_pct") or 50),
+            "win1st_diff": (sa.get("first_won_pct") or 50) - (sb.get("first_won_pct") or 50),
+            "win2nd_diff": (sa.get("second_won_pct") or 50) - (sb.get("second_won_pct") or 50),
             "a_n_matches_52w": sa.get("matches_52w", 0),
             "b_n_matches_52w": sb.get("matches_52w", 0),
         })
@@ -690,6 +773,8 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         poly_link = f"https://polymarket.com/event/{slug}" if slug else "https://polymarket.com/sports/tennis/games"
 
         signals.append({
+            "market_id":    mkt.get("market_id", ""),
+            "slug":         slug,
             "match":        f"{pa} vs {pb}",
             "player_a":     pa,
             "player_b":     pb,
@@ -978,6 +1063,8 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
         poly_link = f"https://polymarket.com/event/{slug}" if slug else "https://polymarket.com/sports/tennis/games"
 
         signals.append({
+            "market_id":       mkt.get("market_id", ""),
+            "slug":            slug,
             "match":           f"{player} — {tournament}",
             "player_a":        player,
             "player_b":        tournament,
