@@ -902,14 +902,17 @@ function renderMyBets() {
     }
 
     // Match bets against picks for outcome data
+    // KEY: Find ANY resolved pick for this match, regardless of which side the model picked
     const enriched = myBets.map(bet => {
+        // Strategy 1: exact match name + same bet_on (ideal case)
         let match = picks.find(p =>
-            p.match === bet.match && p.bet_on === bet.bet_on &&
-            (p.logged_at || '').slice(0,10) === (bet.card_date || '').slice(0,10)
+            p.match === bet.match && p.bet_on === bet.bet_on && p.outcome
         );
+        // Strategy 2: same match name, ANY resolved pick (you might have bet the opposite side)
         if (!match) {
-            match = picks.find(p => p.match === bet.match && p.bet_on === bet.bet_on);
+            match = picks.find(p => p.match === bet.match && p.outcome);
         }
+        // Strategy 3: fuzzy match by player last names, ANY resolved pick
         if (!match && bet.match) {
             const parts = bet.match.toLowerCase().split(/\s+vs\.?\s+/);
             if (parts.length === 2) {
@@ -917,27 +920,54 @@ function renderMyBets() {
                 const lastB = parts[1].trim().split(' ').pop();
                 match = picks.find(p => {
                     const pm = (p.match || '').toLowerCase();
-                    return pm.includes(lastA) && pm.includes(lastB);
+                    return pm.includes(lastA) && pm.includes(lastB) && p.outcome;
                 });
             }
+        }
+        // Strategy 4: same as above but without requiring outcome (for pending display)
+        if (!match && bet.match) {
+            match = picks.find(p => p.match === bet.match);
+            if (!match) {
+                const parts = bet.match.toLowerCase().split(/\s+vs\.?\s+/);
+                if (parts.length === 2) {
+                    const lastA = parts[0].trim().split(' ').pop();
+                    const lastB = parts[1].trim().split(' ').pop();
+                    match = picks.find(p => {
+                        const pm = (p.match || '').toLowerCase();
+                        return pm.includes(lastA) && pm.includes(lastB);
+                    });
+                }
+            }
+        }
+
+        // Determine outcome relative to YOUR bet (not the model's pick)
+        let myOutcome = null;
+        let myPnl = null;
+        if (match && match.outcome && match.actual_winner) {
+            const betOnLast = (bet.bet_on || '').split(' ').pop().toLowerCase();
+            const winnerLast = (match.actual_winner || '').split(' ').pop().toLowerCase();
+            const iWon = betOnLast === winnerLast || (bet.bet_on || '').toLowerCase() === (match.actual_winner || '').toLowerCase();
+            myOutcome = iWon ? 'win' : 'loss';
         }
 
         // Use actual trade data if available (from Polymarket API enrichment)
         const hasTradeData = bet.actual_stake && bet.actual_stake > 0;
-        let realPnl = null;
-        if (hasTradeData && match && match.outcome) {
-            // Real PnL: if won, payout = shares * $1 - stake; if lost, payout = -stake
-            if (match.outcome === 'win') {
-                realPnl = round2((bet.actual_shares || 0) * 1.0 - bet.actual_stake);
+        if (hasTradeData && myOutcome) {
+            if (myOutcome === 'win') {
+                myPnl = round2((bet.actual_shares || 0) * 1.0 - bet.actual_stake);
             } else {
-                realPnl = round2(-bet.actual_stake);
+                myPnl = round2(-bet.actual_stake);
             }
+        } else if (myOutcome) {
+            // Fallback: $100 notional PnL
+            const polyDec = (bet.poly_price || 50) / 100;
+            myPnl = myOutcome === 'win' ? round2(100 * (1 - polyDec)) : round2(-100 * polyDec);
         }
 
         return {
             ...bet,
-            outcome: match ? match.outcome : null,
-            pnl: hasTradeData ? realPnl : (match ? match.pnl : null),
+            outcome: myOutcome,
+            pnl: myPnl,
             actual_winner: match ? match.actual_winner : null,
             _hasTradeData: hasTradeData,
         };
