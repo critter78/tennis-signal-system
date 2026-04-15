@@ -581,6 +581,57 @@ setInterval(loadShares, 30000);
 """
 
 
+# ─── POLYMARKET RESOLUTION HELPERS ────────────────────────────────────────────
+
+def _parse_resolved_market(m):
+    """Parse a resolved market to extract the winner."""
+    market_id = m.get("id") or m.get("condition_id") or m.get("conditionId", "")
+    question = m.get("question", "")
+    slug = m.get("slug", "")
+
+    if not question:
+        return None
+
+    outcomes_raw = m.get("outcomes", "")
+    prices_raw = m.get("outcomePrices", "")
+
+    try:
+        outcomes = json.loads(outcomes_raw) if isinstance(outcomes_raw, str) else (outcomes_raw or [])
+    except (json.JSONDecodeError, TypeError):
+        outcomes = []
+
+    try:
+        prices = json.loads(prices_raw) if isinstance(prices_raw, str) else (prices_raw or [])
+    except (json.JSONDecodeError, TypeError):
+        prices = []
+
+    winner = None
+    if outcomes and prices and len(outcomes) == len(prices):
+        for name, price in zip(outcomes, prices):
+            try:
+                if float(price) >= 0.95:
+                    winner = str(name)
+                    break
+            except (ValueError, TypeError):
+                continue
+
+    if not winner:
+        resolved_at = m.get("resolvedAt") or m.get("resolved_at")
+        if resolved_at:
+            winner = m.get("resolution") or m.get("resolvedOutcome")
+
+    if not winner:
+        return None
+
+    return {
+        "market_id": market_id,
+        "question": question,
+        "slug": slug,
+        "winner": winner,
+        "resolved_at": m.get("resolvedAt") or m.get("resolved_at") or datetime.utcnow().isoformat(),
+    }
+
+
 # ─── ROUTES ───────────────────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET"])
@@ -813,44 +864,190 @@ def generate_card():
 
 @app.route("/resolve", methods=["POST"])
 @enable_cors
-def resolve_outcomes():
-    """Manually trigger outcome resolution."""
+def resolve_outcomes_route():
+    """Manually trigger outcome resolution — runs inline for speed."""
     if not check_admin_cookie():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        script_path = BASE_DIR / "08_outcome_resolver.py"
-        if not script_path.exists():
-            return jsonify({"error": "08_outcome_resolver.py not found"}), 404
+        import requests as req
+        from difflib import SequenceMatcher
+        import re
 
-        logger.info("Triggering outcome resolution...")
-        result = subprocess.run(
-            ["python3", str(script_path)],
-            cwd=str(BASE_DIR),
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
+        logger.info("Running inline outcome resolution...")
+        output_lines = []
 
-        output = result.stdout[-1000:] if result.stdout else ""
-        if result.returncode == 0:
-            return jsonify({
-                "status": "success",
-                "message": "Outcome resolution completed",
-                "output": output
-            }), 200
-        else:
-            return jsonify({
-                "status": "error",
-                "message": "Resolution failed",
-                "error": result.stderr[:500],
-                "output": output
-            }), 500
+        # Load picks
+        picks = load_picks_jsonl()
+        if not picks:
+            return jsonify({"status": "success", "output": "No picks found."})
 
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "Resolution timed out"}), 504
+        unresolved = [p for p in picks if p.get("outcome") is None]
+        output_lines.append(f"Total picks: {len(picks)}, Unresolved: {len(unresolved)}")
+
+        if not unresolved:
+            return jsonify({"status": "success", "output": "All picks already resolved!"})
+
+        # Only check picks older than 24 hours
+        from datetime import timedelta
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+        eligible = []
+        for p in unresolved:
+            logged_at = p.get("logged_at", "")
+            if logged_at:
+                try:
+                    pt = datetime.fromisoformat(logged_at.replace("Z", ""))
+                    if pt > cutoff:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            eligible.append(p)
+
+        output_lines.append(f"Eligible (>24h old): {len(eligible)}")
+
+        # Bulk fetch resolved markets from Polymarket (just 2 fast calls)
+        resolved_markets = []
+        for tag in ["tennis", "atp"]:
+            try:
+                r = req.get(
+                    "https://gamma-api.polymarket.com/events",
+                    params={"tag_slug": tag, "closed": "true", "limit": 100,
+                            "order": "endDate", "ascending": "false"},
+                    timeout=8,
+                )
+                r.raise_for_status()
+                for ev in r.json():
+                    markets = ev.get("markets", [])
+                    if markets:
+                        for m in markets:
+                            parsed = _parse_resolved_market(m)
+                            if parsed:
+                                if not parsed.get("slug"):
+                                    parsed["slug"] = ev.get("slug", "")
+                                resolved_markets.append(parsed)
+                    else:
+                        parsed = _parse_resolved_market(ev)
+                        if parsed:
+                            resolved_markets.append(parsed)
+            except Exception as e:
+                output_lines.append(f"[warn] events/{tag}: {e}")
+
+        # Deduplicate
+        seen = set()
+        unique_resolved = []
+        for rm in resolved_markets:
+            mid = rm.get("market_id", "")
+            if mid and mid not in seen:
+                seen.add(mid)
+                unique_resolved.append(rm)
+
+        output_lines.append(f"Found {len(unique_resolved)} resolved markets from Polymarket")
+
+        # Match eligible picks against resolved markets
+        new_resolutions = 0
+        for pick in picks:
+            if pick.get("outcome") is not None:
+                continue
+
+            # Check eligibility
+            logged_at = pick.get("logged_at", "")
+            if logged_at:
+                try:
+                    pt = datetime.fromisoformat(logged_at.replace("Z", ""))
+                    if pt > cutoff:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+
+            # Try to match
+            rm = None
+            pick_question = pick.get("question", "").lower()
+            pick_player_a = pick.get("player_a", "")
+            pick_player_b = pick.get("player_b", "")
+
+            for candidate in unique_resolved:
+                cq = candidate.get("question", "").lower()
+
+                # Method 1: Question similarity
+                if pick_question and cq:
+                    ratio = SequenceMatcher(None, pick_question, cq).ratio()
+                    if ratio >= 0.85:
+                        rm = candidate
+                        break
+
+                # Method 2: Both player last names in question
+                if pick_player_a and pick_player_b:
+                    a_last = pick_player_a.split()[-1].lower()
+                    b_last = pick_player_b.split()[-1].lower()
+                    if len(a_last) > 2 and len(b_last) > 2 and a_last in cq and b_last in cq:
+                        rm = candidate
+                        break
+
+            if rm:
+                # Determine winner
+                winner_raw = rm.get("winner", "")
+                winner_name = winner_raw
+                if winner_raw.lower() in ["yes", "true", "1"]:
+                    winner_name = pick_player_a
+                elif winner_raw.lower() in ["no", "false", "0"]:
+                    winner_name = pick_player_b
+                else:
+                    pa_ratio = SequenceMatcher(None, winner_raw.lower(), pick_player_a.lower()).ratio()
+                    pb_ratio = SequenceMatcher(None, winner_raw.lower(), pick_player_b.lower()).ratio()
+                    if pa_ratio >= 0.7:
+                        winner_name = pick_player_a
+                    elif pb_ratio >= 0.7:
+                        winner_name = pick_player_b
+
+                # Check if our bet won
+                bet_on = pick.get("bet_on", "")
+                bet_on_ratio = SequenceMatcher(None, bet_on.lower(), winner_name.lower()).ratio()
+                bet_won = bet_on_ratio >= 0.7 or bet_on.split()[-1].lower() == winner_name.split()[-1].lower()
+
+                poly_price = pick.get("poly_price", 50)
+                price_dec = poly_price / 100
+                if bet_won:
+                    pnl = round(100 * (1 - price_dec), 2)
+                    outcome = "win"
+                else:
+                    pnl = round(-100 * price_dec, 2)
+                    outcome = "loss"
+
+                pick["outcome"] = outcome
+                pick["pnl"] = pnl
+                pick["actual_winner"] = winner_name
+                pick["resolved_at"] = rm.get("resolved_at", datetime.utcnow().isoformat())
+                new_resolutions += 1
+                output_lines.append(
+                    f"{'WIN' if outcome == 'win' else 'LOSS'}: {pick.get('match', '?')} | "
+                    f"Bet: {bet_on} | Winner: {winner_name} | PnL: ${pnl:+.0f}"
+                )
+
+        output_lines.append(f"\nNew resolutions: {new_resolutions}")
+
+        # Save if we resolved anything
+        if new_resolutions > 0:
+            PICKS_FILE.parent.mkdir(exist_ok=True)
+            with open(PICKS_FILE, 'w') as f:
+                for p in picks:
+                    row = {k: v for k, v in p.items() if k != "_line_idx"}
+                    f.write(json.dumps(row) + "\n")
+
+            all_resolved = [p for p in picks if p.get("outcome") is not None]
+            wins = sum(1 for p in all_resolved if p["outcome"] == "win")
+            losses = len(all_resolved) - wins
+            total_pnl = sum(p.get("pnl", 0) for p in all_resolved)
+            output_lines.append(f"Record: {wins}W-{losses}L | PnL: ${total_pnl:+,.0f}")
+
+        return jsonify({
+            "status": "success",
+            "message": f"Resolved {new_resolutions} picks",
+            "output": "\n".join(output_lines)
+        })
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Resolution error: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 @app.route("/health", methods=["GET"])
