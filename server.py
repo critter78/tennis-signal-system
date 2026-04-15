@@ -1230,8 +1230,96 @@ def resolve_outcomes_route():
         if n_reverted:
             output_lines.append(f"Reverted {n_reverted} incorrectly resolved futures picks")
 
-        # Match H2H picks using fast last-name lookups (no SequenceMatcher!)
+        # ── Phase 0: Resolve USER'S TRACKED BETS first (individual slug lookups) ──
+        # The user only has a handful of bets — prioritize resolving them
         new_resolutions = 0
+        try:
+            bets_data = load_bets()
+            bet_list = bets_data.get("bets", []) if isinstance(bets_data, dict) else []
+            bet_slugs = set()
+            for bet in bet_list:
+                poly_link = bet.get("poly_link", "")
+                if "/event/" in poly_link:
+                    bet_slugs.add(poly_link.split("/event/")[-1].split("?")[0].split("/")[0])
+
+            if bet_slugs:
+                output_lines.append(f"Phase 0: Resolving {len(bet_slugs)} tracked bet markets...")
+                slug_resolved_cache = {}  # slug -> parsed resolved market
+                for slug in bet_slugs:
+                    try:
+                        r = req.get(f"https://gamma-api.polymarket.com/events?slug={slug}", timeout=8)
+                        r.raise_for_status()
+                        events = r.json()
+                        if not events:
+                            continue
+                        ev = events[0] if isinstance(events, list) else events
+                        markets = ev.get("markets", [])
+                        for m in (markets if markets else [ev]):
+                            parsed = _parse_resolved_market(m)
+                            if parsed:
+                                slug_resolved_cache[slug] = parsed
+                                # Also add to unique_resolved for Phase 1 matching
+                                unique_resolved.append(parsed)
+                                break
+                    except Exception as e:
+                        output_lines.append(f"  [warn] bet slug {slug}: {e}")
+
+                # Now resolve ALL picks matching these slugs
+                for pick in picks:
+                    if pick.get("outcome") is not None:
+                        continue
+                    pslug = pick.get("slug", "")
+                    if not pslug:
+                        pl = pick.get("poly_link", "")
+                        if "/event/" in pl:
+                            pslug = pl.split("/event/")[-1].split("?")[0].split("/")[0]
+                    if pslug and pslug in slug_resolved_cache:
+                        parsed = slug_resolved_cache[pslug]
+                        winner_raw = parsed.get("winner", "")
+                        pa = pick.get("player_a", "")
+                        pbb = pick.get("player_b", "")
+                        a_last = pa.split()[-1].lower() if pa else ""
+                        b_last = pbb.split()[-1].lower() if pbb else ""
+                        winner_lower = winner_raw.lower()
+                        wl = winner_lower.split()[-1] if winner_lower else ""
+
+                        if winner_lower in ["yes", "true", "1"]:
+                            winner_name = pa
+                        elif winner_lower in ["no", "false", "0"]:
+                            winner_name = pbb
+                        elif a_last == wl or a_last in winner_lower:
+                            winner_name = pa
+                        elif b_last == wl or b_last in winner_lower:
+                            winner_name = pbb
+                        else:
+                            continue
+
+                        bet_on = pick.get("bet_on", "")
+                        bl = bet_on.split()[-1].lower() if bet_on else ""
+                        wnl = winner_name.split()[-1].lower() if winner_name else ""
+                        bet_won = (bl == wnl) or (bet_on.lower() == winner_name.lower())
+
+                        poly_price = pick.get("poly_price", 50)
+                        price_dec = poly_price / 100
+                        if bet_won:
+                            pnl = round(100 * (1 - price_dec), 2)
+                            outcome = "win"
+                        else:
+                            pnl = round(-100 * price_dec, 2)
+                            outcome = "loss"
+
+                        pick["outcome"] = outcome
+                        pick["pnl"] = pnl
+                        pick["actual_winner"] = winner_name
+                        pick["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                        new_resolutions += 1
+
+                output_lines.append(f"Phase 0: Resolved {new_resolutions} picks from tracked bets")
+        except Exception as e:
+            output_lines.append(f"  [warn] Phase 0: {e}")
+
+        # Match H2H picks using fast last-name lookups (no SequenceMatcher!)
+        phase1_start = new_resolutions
         for i, pick in enumerate(picks):
             if i not in eligible_indices:
                 continue
@@ -1313,12 +1401,11 @@ def resolve_outcomes_route():
                 f"Bet: {bet_on} | Winner: {winner_name} | PnL: ${pnl:+.0f}"
             )
 
-        # Phase 2: For still-unresolved picks with a slug, try direct market lookup (max 10)
-        slug_lookups = 0
-        max_slug_lookups = 10
+        # Phase 2: For still-unresolved picks, collect UNIQUE slugs and do batch lookups
+        # (Deduplicated: each slug looked up once, result applied to all matching picks)
+        max_slug_lookups = 30
+        unmatched_slugs = {}  # slug -> list of pick indices
         for i, pick in enumerate(picks):
-            if slug_lookups >= max_slug_lookups:
-                break
             if pick.get("outcome") is not None:
                 continue
             mt = pick.get("market_type", "")
@@ -1331,13 +1418,17 @@ def resolve_outcomes_route():
 
             slug = pick.get("slug", "")
             if not slug:
-                # Extract slug from poly_link if available
                 poly_link = pick.get("poly_link", "")
                 if "/event/" in poly_link:
                     slug = poly_link.split("/event/")[-1].split("?")[0].split("/")[0]
-            if not slug:
-                continue
+            if slug:
+                if slug not in unmatched_slugs:
+                    unmatched_slugs[slug] = []
+                unmatched_slugs[slug].append(i)
 
+        slug_lookups = 0
+        slug_cache = {}  # slug -> parsed resolved market
+        for slug in list(unmatched_slugs.keys())[:max_slug_lookups]:
             try:
                 slug_lookups += 1
                 r = req.get(f"https://gamma-api.polymarket.com/events?slug={slug}", timeout=8)
@@ -1349,57 +1440,60 @@ def resolve_outcomes_route():
                 markets = ev.get("markets", [])
                 for m in (markets if markets else [ev]):
                     parsed = _parse_resolved_market(m)
-                    if not parsed:
-                        continue
-                    # Resolve this pick
-                    winner_raw = parsed.get("winner", "")
-                    pa = pick.get("player_a", "")
-                    pbb = pick.get("player_b", "")
-                    a_last = pa.split()[-1].lower() if pa else ""
-                    b_last = pbb.split()[-1].lower() if pbb else ""
-                    winner_lower = winner_raw.lower()
-                    wl = winner_lower.split()[-1] if winner_lower else ""
-
-                    if winner_lower in ["yes", "true", "1"]:
-                        winner_name = pa
-                    elif winner_lower in ["no", "false", "0"]:
-                        winner_name = pbb
-                    elif a_last == wl or a_last in winner_lower:
-                        winner_name = pa
-                    elif b_last == wl or b_last in winner_lower:
-                        winner_name = pbb
-                    else:
-                        continue
-
-                    bet_on = pick.get("bet_on", "")
-                    bl = bet_on.split()[-1].lower() if bet_on else ""
-                    wnl = winner_name.split()[-1].lower() if winner_name else ""
-                    bet_won = (bl == wnl) or (bet_on.lower() == winner_name.lower())
-
-                    poly_price = pick.get("poly_price", 50)
-                    price_dec = poly_price / 100
-                    if bet_won:
-                        pnl = round(100 * (1 - price_dec), 2)
-                        outcome = "win"
-                    else:
-                        pnl = round(-100 * price_dec, 2)
-                        outcome = "loss"
-
-                    pick["outcome"] = outcome
-                    pick["pnl"] = pnl
-                    pick["actual_winner"] = winner_name
-                    pick["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
-                    new_resolutions += 1
-                    output_lines.append(
-                        f"{'WIN' if outcome == 'win' else 'LOSS'} (slug): {pick.get('match', '?')} | "
-                        f"Bet: {bet_on} | Winner: {winner_name} | PnL: ${pnl:+.0f}"
-                    )
-                    break
+                    if parsed:
+                        slug_cache[slug] = parsed
+                        break
             except Exception as e:
                 output_lines.append(f"[warn] slug lookup {slug}: {e}")
 
+        # Apply slug results to ALL matching picks
+        for slug, parsed in slug_cache.items():
+            for pick_idx in unmatched_slugs.get(slug, []):
+                pick = picks[pick_idx]
+                if pick.get("outcome") is not None:
+                    continue
+
+                winner_raw = parsed.get("winner", "")
+                pa = pick.get("player_a", "")
+                pbb = pick.get("player_b", "")
+                a_last = pa.split()[-1].lower() if pa else ""
+                b_last = pbb.split()[-1].lower() if pbb else ""
+                winner_lower = winner_raw.lower()
+                wl = winner_lower.split()[-1] if winner_lower else ""
+
+                if winner_lower in ["yes", "true", "1"]:
+                    winner_name = pa
+                elif winner_lower in ["no", "false", "0"]:
+                    winner_name = pbb
+                elif a_last == wl or a_last in winner_lower:
+                    winner_name = pa
+                elif b_last == wl or b_last in winner_lower:
+                    winner_name = pbb
+                else:
+                    continue
+
+                bet_on = pick.get("bet_on", "")
+                bl = bet_on.split()[-1].lower() if bet_on else ""
+                wnl = winner_name.split()[-1].lower() if winner_name else ""
+                bet_won = (bl == wnl) or (bet_on.lower() == winner_name.lower())
+
+                poly_price = pick.get("poly_price", 50)
+                price_dec = poly_price / 100
+                if bet_won:
+                    pnl = round(100 * (1 - price_dec), 2)
+                    outcome = "win"
+                else:
+                    pnl = round(-100 * price_dec, 2)
+                    outcome = "loss"
+
+                pick["outcome"] = outcome
+                pick["pnl"] = pnl
+                pick["actual_winner"] = winner_name
+                pick["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                new_resolutions += 1
+
         if slug_lookups:
-            output_lines.append(f"Phase 2: {slug_lookups} slug lookups")
+            output_lines.append(f"Phase 2: {slug_lookups} unique slug lookups, {len(slug_cache)} resolved")
 
         output_lines.append(f"\nNew resolutions: {new_resolutions} ({time.time()-t0:.1f}s total)")
 
