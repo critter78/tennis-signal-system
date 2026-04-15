@@ -868,14 +868,14 @@ def generate_card():
 @app.route("/resolve", methods=["POST"])
 @enable_cors
 def resolve_outcomes_route():
-    """Manually trigger outcome resolution — runs inline for speed."""
+    """Manually trigger outcome resolution — fast last-name matching."""
     if not check_admin_cookie():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
         import requests as req
-        from difflib import SequenceMatcher
-        import re
+        import time
+        t0 = time.time()
 
         logger.info("Running inline outcome resolution...")
         output_lines = []
@@ -894,8 +894,11 @@ def resolve_outcomes_route():
         # Only check picks older than 24 hours
         from datetime import timedelta
         cutoff = datetime.utcnow() - timedelta(hours=24)
-        eligible = []
-        for p in unresolved:
+
+        eligible_indices = set()
+        for i, p in enumerate(picks):
+            if p.get("outcome") is not None:
+                continue
             logged_at = p.get("logged_at", "")
             if logged_at:
                 try:
@@ -904,11 +907,14 @@ def resolve_outcomes_route():
                         continue
                 except (ValueError, TypeError):
                     pass
-            eligible.append(p)
+            eligible_indices.add(i)
 
-        output_lines.append(f"Eligible (>24h old): {len(eligible)}")
+        output_lines.append(f"Eligible (>24h old): {len(eligible_indices)}")
 
-        # Bulk fetch resolved markets from Polymarket (just 2 fast calls)
+        if not eligible_indices:
+            return jsonify({"status": "success", "output": "\n".join(output_lines) + "\nNo eligible picks to resolve."})
+
+        # Bulk fetch resolved markets from Polymarket (2 API calls)
         resolved_markets = []
         for tag in ["tennis", "atp"]:
             try:
@@ -916,7 +922,7 @@ def resolve_outcomes_route():
                     "https://gamma-api.polymarket.com/events",
                     params={"tag_slug": tag, "closed": "true", "limit": 100,
                             "order": "endDate", "ascending": "false"},
-                    timeout=8,
+                    timeout=10,
                 )
                 r.raise_for_status()
                 for ev in r.json():
@@ -944,89 +950,88 @@ def resolve_outcomes_route():
                 seen.add(mid)
                 unique_resolved.append(rm)
 
-        output_lines.append(f"Found {len(unique_resolved)} resolved markets from Polymarket")
+        output_lines.append(f"Found {len(unique_resolved)} resolved markets ({time.time()-t0:.1f}s)")
 
-        # Match eligible picks against resolved markets
+        # Build fast lookup index: map last-name pairs to resolved markets
+        # This replaces the O(n*m) SequenceMatcher loop with O(1) dict lookups
+        lastname_index = {}  # (last_a, last_b) -> resolved market
+        for rm in unique_resolved:
+            q = rm.get("question", "").lower()
+            # Extract all words > 2 chars as potential last names
+            words = set(w for w in q.replace("?", "").replace(",", "").split() if len(w) > 2)
+            rm["_words"] = words
+
+        # Match picks using fast last-name lookups (no SequenceMatcher!)
         new_resolutions = 0
-        for pick in picks:
-            if pick.get("outcome") is not None:
+        for i, pick in enumerate(picks):
+            if i not in eligible_indices:
                 continue
 
-            # Check eligibility
-            logged_at = pick.get("logged_at", "")
-            if logged_at:
-                try:
-                    pt = datetime.fromisoformat(logged_at.replace("Z", ""))
-                    if pt > cutoff:
-                        continue
-                except (ValueError, TypeError):
-                    pass
-
-            # Try to match
-            rm = None
-            pick_question = pick.get("question", "").lower()
             pick_player_a = pick.get("player_a", "")
             pick_player_b = pick.get("player_b", "")
 
+            if not pick_player_a or not pick_player_b:
+                continue
+
+            a_last = pick_player_a.split()[-1].lower()
+            b_last = pick_player_b.split()[-1].lower()
+
+            if len(a_last) <= 2 or len(b_last) <= 2:
+                continue
+
+            # Fast match: find resolved market containing both last names
+            rm = None
             for candidate in unique_resolved:
-                cq = candidate.get("question", "").lower()
+                if a_last in candidate["_words"] and b_last in candidate["_words"]:
+                    rm = candidate
+                    break
 
-                # Method 1: Question similarity
-                if pick_question and cq:
-                    ratio = SequenceMatcher(None, pick_question, cq).ratio()
-                    if ratio >= 0.85:
-                        rm = candidate
-                        break
+            if not rm:
+                continue
 
-                # Method 2: Both player last names in question
-                if pick_player_a and pick_player_b:
-                    a_last = pick_player_a.split()[-1].lower()
-                    b_last = pick_player_b.split()[-1].lower()
-                    if len(a_last) > 2 and len(b_last) > 2 and a_last in cq and b_last in cq:
-                        rm = candidate
-                        break
+            # Determine winner using simple last-name matching (no SequenceMatcher)
+            winner_raw = rm.get("winner", "")
+            winner_name = winner_raw
 
-            if rm:
-                # Determine winner
-                winner_raw = rm.get("winner", "")
-                winner_name = winner_raw
-                if winner_raw.lower() in ["yes", "true", "1"]:
+            if winner_raw.lower() in ["yes", "true", "1"]:
+                winner_name = pick_player_a
+            elif winner_raw.lower() in ["no", "false", "0"]:
+                winner_name = pick_player_b
+            else:
+                # Check if winner matches player A or B by last name
+                winner_lower = winner_raw.lower()
+                winner_last = winner_lower.split()[-1] if winner_lower else ""
+                if a_last == winner_last or a_last in winner_lower:
                     winner_name = pick_player_a
-                elif winner_raw.lower() in ["no", "false", "0"]:
+                elif b_last == winner_last or b_last in winner_lower:
                     winner_name = pick_player_b
-                else:
-                    pa_ratio = SequenceMatcher(None, winner_raw.lower(), pick_player_a.lower()).ratio()
-                    pb_ratio = SequenceMatcher(None, winner_raw.lower(), pick_player_b.lower()).ratio()
-                    if pa_ratio >= 0.7:
-                        winner_name = pick_player_a
-                    elif pb_ratio >= 0.7:
-                        winner_name = pick_player_b
 
-                # Check if our bet won
-                bet_on = pick.get("bet_on", "")
-                bet_on_ratio = SequenceMatcher(None, bet_on.lower(), winner_name.lower()).ratio()
-                bet_won = bet_on_ratio >= 0.7 or bet_on.split()[-1].lower() == winner_name.split()[-1].lower()
+            # Check if our bet won (simple last-name comparison)
+            bet_on = pick.get("bet_on", "")
+            bet_last = bet_on.split()[-1].lower() if bet_on else ""
+            winner_last = winner_name.split()[-1].lower() if winner_name else ""
+            bet_won = (bet_last == winner_last) or (bet_on.lower() == winner_name.lower())
 
-                poly_price = pick.get("poly_price", 50)
-                price_dec = poly_price / 100
-                if bet_won:
-                    pnl = round(100 * (1 - price_dec), 2)
-                    outcome = "win"
-                else:
-                    pnl = round(-100 * price_dec, 2)
-                    outcome = "loss"
+            poly_price = pick.get("poly_price", 50)
+            price_dec = poly_price / 100
+            if bet_won:
+                pnl = round(100 * (1 - price_dec), 2)
+                outcome = "win"
+            else:
+                pnl = round(-100 * price_dec, 2)
+                outcome = "loss"
 
-                pick["outcome"] = outcome
-                pick["pnl"] = pnl
-                pick["actual_winner"] = winner_name
-                pick["resolved_at"] = rm.get("resolved_at", datetime.utcnow().isoformat())
-                new_resolutions += 1
-                output_lines.append(
-                    f"{'WIN' if outcome == 'win' else 'LOSS'}: {pick.get('match', '?')} | "
-                    f"Bet: {bet_on} | Winner: {winner_name} | PnL: ${pnl:+.0f}"
-                )
+            pick["outcome"] = outcome
+            pick["pnl"] = pnl
+            pick["actual_winner"] = winner_name
+            pick["resolved_at"] = rm.get("resolved_at", datetime.utcnow().isoformat())
+            new_resolutions += 1
+            output_lines.append(
+                f"{'WIN' if outcome == 'win' else 'LOSS'}: {pick.get('match', '?')} | "
+                f"Bet: {bet_on} | Winner: {winner_name} | PnL: ${pnl:+.0f}"
+            )
 
-        output_lines.append(f"\nNew resolutions: {new_resolutions}")
+        output_lines.append(f"\nNew resolutions: {new_resolutions} ({time.time()-t0:.1f}s total)")
 
         # Save if we resolved anything
         if new_resolutions > 0:
