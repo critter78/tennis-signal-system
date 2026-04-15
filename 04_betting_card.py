@@ -638,15 +638,113 @@ def _extract_tournament_info(question):
 
 
 def _detect_surface(question):
-    """Detect surface from tournament name in the question."""
+    """Detect surface from tournament name in the question using comprehensive mapping."""
     q = question.lower()
-    clay_kw = ["french open", "roland garros", "monte carlo", "madrid", "rome",
-               "barcelona", "rio", "lyon", "geneva", "buenos aires", "acapulco"]
-    grass_kw = ["wimbledon", "queen", "halle", "s-hertogenbosch", "eastbourne", "mallorca"]
+
+    # ── CLAY COURT TOURNAMENTS ──
+    clay_kw = [
+        # Grand Slam
+        "french open", "roland garros",
+        # ATP Masters 1000
+        "monte carlo", "monte-carlo", "madrid", "rome", "roma", "internazionali",
+        # ATP 500
+        "barcelona", "rio", "rio de janeiro", "rio open", "hamburg",
+        # ATP 250
+        "lyon", "geneva", "buenos aires", "cordoba", "santiago", "marrakech",
+        "estoril", "munich", "munchen", "bastad", "umag", "kitzbuhel",
+        "gstaad", "bucharest", "houston", "sao paulo", "quito", "tiriac",
+        "banja luka", "cagliari", "parma", "sardegna", "perugia", "prospera",
+        "tallahassee", "sarasota", "santos",
+        # WTA
+        "strasbourg", "rabat", "bogota", "palermo", "lausanne", "budapest",
+        "prague", "istanbul", "iasi", "makarska", "bol",
+        # Challenger / ITF clay events
+        "aix-en-provence", "braunschweig", "heilbronn", "poznan", "meerbusch",
+        "troisdorf", "santa margherita", "francavilla", "todi",
+        # Generic clay indicators
+        "tierra", "terre battue",
+        # French cities commonly hosting clay events
+        "capfinances", "rouen",
+    ]
+
+    # ── GRASS COURT TOURNAMENTS ──
+    grass_kw = [
+        # Grand Slam
+        "wimbledon",
+        # ATP 500
+        "queen", "queen's", "queens",
+        "halle",
+        # ATP 250
+        "s-hertogenbosch", "hertogenbosch", "libema",
+        "eastbourne",
+        "mallorca",
+        "newport",
+        "stuttgart",  # WTA grass
+        "berlin",     # WTA grass
+        "bad homburg",
+        "birmingham", "nottingham",
+    ]
+
+    # ── INDOOR HARD (technically still "Hard" but worth noting) ──
+    # These are hard courts but played indoors — still return "Hard"
+
     if any(k in q for k in clay_kw):
         return "Clay"
     if any(k in q for k in grass_kw):
         return "Grass"
+
+    # ── FALLBACK: check historical data for tournament surface ──
+    # If we can't determine from keywords, try matching tournament name
+    # against our historical match data
+    return _detect_surface_from_history(q)
+
+
+# Cache for historical surface lookups
+_surface_history_cache = None
+
+def _detect_surface_from_history(question_lower):
+    """Try to determine surface from historical match data."""
+    global _surface_history_cache
+
+    if _surface_history_cache is None:
+        try:
+            hist_path = Path("data/raw")
+            if hist_path.exists():
+                import pandas as pd
+                dfs = []
+                for f in sorted(hist_path.glob("*.csv")):
+                    try:
+                        df = pd.read_csv(f, usecols=["tourney_name", "surface"],
+                                         dtype=str, low_memory=False)
+                        dfs.append(df)
+                    except Exception:
+                        continue
+                if dfs:
+                    combined = pd.concat(dfs, ignore_index=True)
+                    combined = combined.dropna(subset=["tourney_name", "surface"])
+                    # Build mapping: tournament name -> most common surface
+                    _surface_history_cache = (
+                        combined.groupby(combined["tourney_name"].str.lower())["surface"]
+                        .agg(lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else "Hard")
+                        .to_dict()
+                    )
+                else:
+                    _surface_history_cache = {}
+            else:
+                _surface_history_cache = {}
+        except Exception:
+            _surface_history_cache = {}
+
+    if not _surface_history_cache:
+        return "Hard"
+
+    # Try matching question text against known tournament names
+    for tourney_name, surface in _surface_history_cache.items():
+        # Check if any significant word from the tournament name appears in the question
+        words = [w for w in tourney_name.split() if len(w) > 3]
+        if words and all(w in question_lower for w in words):
+            return surface
+
     return "Hard"
 
 
