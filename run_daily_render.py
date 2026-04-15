@@ -62,6 +62,12 @@ def main():
     log("DAILY SIGNAL GENERATION - RENDER CRON")
     log("=" * 60)
 
+    # Step 0: Refresh live ATP/WTA rankings
+    run_step(
+        "Fetch live rankings",
+        [sys.executable, "09_rankings_fetcher.py", "--refresh"],
+    )
+
     # Step 1: Generate betting card (pulls fresh Polymarket data)
     success = run_step(
         "Generate betting card",

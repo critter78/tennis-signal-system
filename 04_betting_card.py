@@ -28,6 +28,43 @@ from pathlib import Path
 
 DATA_DIR   = Path("data")
 MODELS_DIR = Path("models")
+
+# Live rankings support
+_live_rankings_cache = None
+
+def _get_live_rankings():
+    """Load live rankings cache (lazy, once per run)."""
+    global _live_rankings_cache
+    if _live_rankings_cache is not None:
+        return _live_rankings_cache
+    try:
+        from importlib import import_module
+        # Try importing the rankings fetcher
+        fetcher = import_module("09_rankings_fetcher")
+        _live_rankings_cache = fetcher.load_cached_rankings()
+        count = _live_rankings_cache.get("count", 0)
+        if count > 0:
+            print(f"  [rankings] Loaded {count} live rankings")
+        else:
+            print(f"  [rankings] Cache empty, falling back to historical data")
+            _live_rankings_cache = {}
+    except Exception as e:
+        print(f"  [rankings] Live rankings unavailable ({e}), using historical data")
+        _live_rankings_cache = {}
+    return _live_rankings_cache
+
+
+def get_live_rank(player_name):
+    """Get a player's live world ranking. Returns (rank, tour) or (None, None)."""
+    cache = _get_live_rankings()
+    if not cache or not cache.get("rankings"):
+        return None, None
+    try:
+        from importlib import import_module
+        fetcher = import_module("09_rankings_fetcher")
+        return fetcher.lookup_player_rank(player_name, cache)
+    except Exception:
+        return None, None
 CARDS_DIR  = Path("cards")
 CARDS_DIR.mkdir(exist_ok=True)
 
@@ -659,15 +696,22 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         sb = get_player_stats(df_hist, pb_hist, today, surface) if pb_hist else {}
         h2 = get_h2h(df_hist, pa_hist, pb_hist, today) if pa_hist and pb_hist else {"total":0,"p1_wins":0,"p2_wins":0}
 
-        # Get rankings for feature engineering
-        rank_a, _ = get_player_ranking(df_hist, pa_hist, today) if pa_hist else (None, None)
-        rank_b, _ = get_player_ranking(df_hist, pb_hist, today) if pb_hist else (None, None)
+        # Get rankings — prefer live rankings, fall back to historical
+        live_rank_a, _ = get_live_rank(pa)
+        live_rank_b, _ = get_live_rank(pb)
+        hist_rank_a, _ = get_player_ranking(df_hist, pa_hist, today) if pa_hist else (None, None)
+        hist_rank_b, _ = get_player_ranking(df_hist, pb_hist, today) if pb_hist else (None, None)
+
+        rank_a = live_rank_a or hist_rank_a
+        rank_b = live_rank_b or hist_rank_b
         ra = rank_a or 100
         rb = rank_b or 100
 
         if debug:
-            print(f"  [h2h] {pa} (#{rank_a}, wr={sa.get('win_rate') if pa_hist else None}) vs "
-                  f"{pb} (#{rank_b}, wr={sb.get('win_rate') if pb_hist else None}) | "
+            src_a = "live" if live_rank_a else "hist"
+            src_b = "live" if live_rank_b else "hist"
+            print(f"  [h2h] {pa} (#{rank_a} {src_a}, wr={sa.get('win_rate') if pa_hist else None}) vs "
+                  f"{pb} (#{rank_b} {src_b}, wr={sb.get('win_rate') if pb_hist else None}) | "
                   f"poly={poly_pa:.1f}/{poly_pb:.1f} | surface={surface}")
 
         def wr(s): return (s.get("win_rate") or 50) / 100
@@ -1026,9 +1070,11 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
         elif "wimbledon" in t_lower or "queen" in t_lower or "halle" in t_lower:
             surface = "Grass"
 
-        # Get player stats and ranking
+        # Get player stats and ranking — prefer live rankings
         sa = get_player_stats(df_hist, player_hist, today, surface)
-        rank, rank_pts = get_player_ranking(df_hist, player_hist, today)
+        live_rank, _ = get_live_rank(player)
+        hist_rank, rank_pts = get_player_ranking(df_hist, player_hist, today)
+        rank = live_rank or hist_rank
 
         # Tournament rounds
         is_grand_slam = any(gs in t_lower for gs in ["french", "australian", "wimbledon", "us open", "roland"])
