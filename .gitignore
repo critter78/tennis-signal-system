@@ -44,13 +44,13 @@ env/
 .env.local
 .env.*.local
 
-# Project-specific (large/generated files)
-models/
-data/raw/
-data/features.parquet
-data/*.parquet
-data/*.csv
+# Project-specific (generated card HTML files)
 cards/
+
+# Keep model and data in git so Render has them!
+# models/ — INCLUDED (needed for ML predictions)
+# data/raw/ — INCLUDED (needed for feature building)
+# data/features.parquet — INCLUDED (needed for predictions)
 
 # Local bet tracking (but keep in git as it's important)
 # !logs/picks.jsonl

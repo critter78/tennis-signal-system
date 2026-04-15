@@ -1,0 +1,6 @@
+{
+  "path": "models/tennis_hgb_v1.pkl",
+  "version": 1,
+  "mean_auc": 0.6947,
+  "n_samples": 36303
+}

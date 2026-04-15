@@ -295,7 +295,11 @@ def generate_signals(markets_df: pd.DataFrame, model, feature_cols: list,
             feat_df  = pd.DataFrame([feat_row])
             model_prob_a = model.predict_proba(feat_df)[0, 1]
         except Exception as e:
-            model_prob_a = poly_pa / 100  # fallback to market price
+            # BUG FIX: Don't silently fall back to poly_price!
+            # This causes model_prob == poly_price, making edge always 0
+            print(f"WARNING: Model prediction failed for {pa} vs {pb}: {type(e).__name__}: {e}")
+            # Instead of falling back to poly_pa/100, use a neutral 50% estimate
+            model_prob_a = 0.5
 
         poly_prob_a = poly_pa / 100
         edge_a = model_prob_a - poly_prob_a

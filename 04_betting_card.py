@@ -697,9 +697,18 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
 
         try:
             feat_df     = pd.DataFrame([row])[feature_cols]
+            if model is None:
+                raise RuntimeError("Model is None - cannot predict")
             model_prob  = float(model.predict_proba(feat_df)[0, 1])
-        except Exception:
-            model_prob = poly_pa / 100
+        except Exception as e:
+            # BUG FIX: Don't silently fall back to poly_price!
+            # This causes model_prob == poly_price, making edge always 0
+            print(f"  WARNING: Model prediction failed for {pa} vs {pb}: {type(e).__name__}: {e}")
+            if debug:
+                import traceback
+                traceback.print_exc()
+            # Instead of falling back to poly_pa/100, use a neutral 50% estimate
+            model_prob = 0.5
 
         # LSTM adjustment (if trained)
         lstm_adj = 0.0
