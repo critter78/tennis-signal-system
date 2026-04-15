@@ -846,6 +846,17 @@ def api_bets():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/bets/raw", methods=["GET"])
+@enable_cors
+def api_bets_raw():
+    """Debug endpoint: return raw my_bets.json contents."""
+    try:
+        bets = load_bets()
+        return jsonify({"raw": bets, "type": str(type(bets).__name__)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ─── Polymarket Trade Data Integration ───
 
 def fetch_poly_trades(since_ts=None):

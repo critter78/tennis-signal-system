@@ -308,36 +308,51 @@ const picks = window.PICKS_DATA || [];
 let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
 
 // Sync bets from server (so bets show across all devices)
+// RULE: NEVER delete local bets. Only ADD from server.
 (async function syncBetsFromServer() {
     try {
         const res = await fetch('/api/bets');
+        if (!res.ok) return; // Don't touch local data on server error
         const data = await res.json();
-        let serverBets = data.bets || {};
+        let serverBets = data.bets || [];
         // Handle both array and object formats
-        let serverArr = Array.isArray(serverBets) ? serverBets : Object.values(serverBets);
-        // Filter out non-bet entries (like last_synced, last_trade_sync)
-        serverArr = serverArr.filter(b => b && typeof b === 'object' && b.match && b.bet_on);
+        if (!Array.isArray(serverBets)) serverBets = Object.values(serverBets);
+        // Filter to only real bet objects
+        serverBets = serverBets.filter(b => b && typeof b === 'object' && b.match && b.bet_on);
 
-        if (serverArr.length > 0) {
-            // Merge: server wins for duplicates, keep local-only bets
-            const merged = [...serverArr];
-            const serverKeys = new Set(serverArr.map(b => b.match + '|' + b.bet_on));
-            myBets.forEach(b => {
-                if (!serverKeys.has(b.match + '|' + b.bet_on)) merged.push(b);
+        if (serverBets.length > 0) {
+            // Merge: add any server bets we don't have locally (NEVER remove local bets)
+            const localKeys = new Set(myBets.map(b => b.match + '|' + b.bet_on));
+            let added = 0;
+            serverBets.forEach(sb => {
+                const key = sb.match + '|' + sb.bet_on;
+                if (!localKeys.has(key)) {
+                    myBets.push(sb);
+                    added++;
+                } else {
+                    // Update existing local bet with server trade data (if server has it)
+                    if (sb.actual_stake) {
+                        const idx = myBets.findIndex(b => b.match + '|' + b.bet_on === key);
+                        if (idx >= 0) {
+                            myBets[idx].actual_buy_price = sb.actual_buy_price;
+                            myBets[idx].actual_stake = sb.actual_stake;
+                            myBets[idx].actual_shares = sb.actual_shares;
+                            myBets[idx].trade_count = sb.trade_count;
+                        }
+                    }
+                }
             });
-            myBets.length = 0;
-            merged.forEach(b => myBets.push(b));
-            localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
-            // Push merged back to server in array format
-            fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bets: myBets}) });
-        } else if (myBets.length > 0) {
-            // Push local bets to server in array format
+            if (added > 0) localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
+        }
+
+        // Always push local bets to server (so other devices can see them)
+        if (myBets.length > 0) {
             fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bets: myBets}) });
         }
-        // Re-render after sync so bets from other devices appear
+
         if (typeof renderSignals === 'function') renderSignals();
         if (typeof renderMyBets === 'function') renderMyBets();
-    } catch(e) { /* offline or shared view — use localStorage only */ }
+    } catch(e) { console.warn('Bet sync skipped:', e); }
 })();
 
 const resolved = picks.filter(p => p.outcome !== null && p.outcome !== undefined);
@@ -841,17 +856,21 @@ Chart.defaults.font.size = 10;
 let tradesSynced = false;
 
 async function syncPolyTrades() {
+    if (myBets.length === 0) return;
     const btn = document.getElementById('syncTradesBtn');
     if (btn) { btn.textContent = 'Syncing...'; btn.disabled = true; }
+    // Save a backup before sync (NEVER lose bets)
+    const backup = JSON.stringify(myBets);
     try {
         const res = await fetch('/api/sync-bets', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ bets: myBets })
         });
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data = await res.json();
-        if (data.status === 'success' && data.bets) {
-            // Update myBets with enriched data from server
+        if (data.status === 'success' && Array.isArray(data.bets) && data.bets.length > 0) {
+            // Only update if server returned valid bets (NEVER replace with empty)
             myBets.length = 0;
             data.bets.forEach(b => myBets.push(b));
             localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
@@ -859,10 +878,16 @@ async function syncPolyTrades() {
             renderMyBets();
             if (btn) btn.textContent = `Synced (${data.bets_matched} matched)`;
         } else {
-            if (btn) btn.textContent = 'Sync failed';
+            // Server returned empty or error — restore backup
+            if (btn) btn.textContent = 'No trades found';
         }
     } catch(e) {
         console.error('Trade sync error:', e);
+        // Restore from backup if anything went wrong
+        const restored = JSON.parse(backup);
+        myBets.length = 0;
+        restored.forEach(b => myBets.push(b));
+        localStorage.setItem('tennis_all_bets', backup);
         if (btn) btn.textContent = 'Sync failed';
     }
     setTimeout(() => { if (btn) { btn.textContent = 'Sync Polymarket Trades'; btn.disabled = false; } }, 4000);
