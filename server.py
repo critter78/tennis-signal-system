@@ -259,7 +259,30 @@ def serve_dashboard(is_shared=False, share_expires=None):
 
             # For shared views: only show Today's Signals, hide everything else
             if is_shared and share_expires:
+                # CSS-based hiding — works immediately, no DOM timing issues
+                share_css = """
+                <style id="shared-view-styles">
+                    /* Hide all tabs except Today's Signals */
+                    .tab:not(.active) { display: none !important; }
+                    .tabs { pointer-events: none; }
+                    .tab.active { pointer-events: auto; cursor: default; }
+                    /* Hide non-signal panels */
+                    #panel-overview, #panel-mybets, #panel-performance, #panel-accuracy { display: none !important; }
+                    /* Hide admin/logout links */
+                    a[href*="admin"], a[href*="logout"] { display: none !important; }
+                    /* Hide Place Bet buttons */
+                    .sig-bet-btn { display: none !important; }
+                    /* Hide LSTM sections */
+                    #lstmProgress, #lstmInsights { display: none !important; }
+                    /* Hide header subtitle (picks logged, bets placed, resolved counts) */
+                    #headerSub { display: none !important; }
+                    /* Hide personal stat cards (Bets Placed, Win Rate, Total P&L) via nth-child */
+                    .stat-card:nth-child(2), .stat-card:nth-child(4), .stat-card:nth-child(5) { display: none !important; }
+                </style>
+                """
+
                 expiry_banner = f"""
+                {share_css}
                 <div id="shareBanner" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#e65100;color:white;text-align:center;padding:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">
                     SHARED VIEW — Expires: <span id="shareExpiry">{share_expires}</span>
                     <span id="shareCountdown" style="margin-left:12px"></span>
@@ -280,42 +303,21 @@ def serve_dashboard(is_shared=False, share_expires=None):
                     update();
                     setInterval(update, 1000);
 
-                    // Hide all tabs except Today's Signals
-                    document.querySelectorAll('.tab').forEach(function(tab) {{
-                        if (!tab.textContent.includes("Today")) tab.style.display = 'none';
+                    // Also handle via JS after DOM loads as extra safety
+                    document.addEventListener('DOMContentLoaded', function() {{
+                        // Disable tab switching to hidden panels
+                        window._origSwitchTab = window.switchTab;
+                        window.switchTab = function(name) {{
+                            if (name !== 'signals') return;
+                            if (window._origSwitchTab) window._origSwitchTab(name);
+                        }};
                     }});
-                    // Hide non-signal panels
-                    ['panel-overview','panel-mybets','panel-performance','panel-accuracy'].forEach(function(id) {{
-                        var el = document.getElementById(id);
-                        if (el) el.style.display = 'none';
-                    }});
-                    // Hide admin/logout links
-                    document.querySelectorAll('a[href*="admin"], a[href*="logout"]').forEach(function(a) {{
-                        a.style.display = 'none';
-                    }});
-                    // Hide LSTM progress section if visible
-                    var lstm = document.getElementById('lstmProgress');
-                    if (lstm) lstm.style.display = 'none';
-                    var lstmI = document.getElementById('lstmInsights');
-                    if (lstmI) lstmI.style.display = 'none';
-                    // Disable tab switching to hidden panels
-                    window._origSwitchTab = window.switchTab;
-                    window.switchTab = function(name) {{
-                        if (name !== 'signals') return;
-                        if (window._origSwitchTab) window._origSwitchTab(name);
-                    }};
                 }})();
                 </script>
                 """
                 # Inject banner after <body>
                 content = content.replace("<body>", f"<body>\n{expiry_banner}\n<div style='margin-top:40px'>", 1)
                 content = content.replace("</body>", "</div>\n</body>", 1)
-
-                # Hide Place Bet buttons and other sensitive elements in shared view
-                content = content.replace(
-                    ".sig-bet-btn {",
-                    ".shared-hide { display: none !important; }\n        .sig-bet-btn { display: none !important; }\n        .sig-bet-btn-ORIG {"
-                )
 
                 # For shared view: only include today's unresolved signals, strip sensitive fields
                 from datetime import date
