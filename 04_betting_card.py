@@ -1086,6 +1086,9 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             # Instead of falling back to poly_pa/100, use a neutral 50% estimate
             model_prob = 0.5
 
+        # Save base model probability BEFORE LSTM adjustment
+        base_model_prob = model_prob
+
         # LSTM adjustment (if trained)
         lstm_adj = 0.0
         try:
@@ -1112,6 +1115,9 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         except Exception:
             pass
 
+        # Calculate edges for BOTH base model and LSTM-adjusted model
+        base_edge_a = base_model_prob - poly_pa / 100
+        base_edge_b = (1 - base_model_prob) - poly_pb / 100
         edge_a = model_prob - poly_pa / 100
         edge_b = (1 - model_prob) - poly_pb / 100
 
@@ -1129,28 +1135,34 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         if edge_a > 0 and edge_a >= edge_b:
             bet_player = pa
             edge       = edge_a
+            base_edge  = base_edge_a
             poly_price = poly_pa
             prob       = model_prob
+            base_prob  = base_model_prob
             poly_url_player = pa
         elif edge_b > 0 and edge_b > edge_a:
             bet_player = pb
             edge       = edge_b
+            base_edge  = base_edge_b
             poly_price = poly_pb
             prob       = 1 - model_prob
+            base_prob  = 1 - base_model_prob
             poly_url_player = pb
         elif edge_a >= edge_b:
-            # Neither side has positive edge — show the "less negative" side
-            # but it will be marked as no-edge
             bet_player = pa
             edge       = edge_a
+            base_edge  = base_edge_a
             poly_price = poly_pa
             prob       = model_prob
+            base_prob  = base_model_prob
             poly_url_player = pa
         else:
             bet_player = pb
             edge       = edge_b
+            base_edge  = base_edge_b
             poly_price = poly_pb
             prob       = 1 - model_prob
+            base_prob  = 1 - base_model_prob
             poly_url_player = pb
 
         # Polymarket direct link
@@ -1173,6 +1185,10 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "predicted_winner": pa if model_prob >= 0.5 else pb,
             "confidence":   round(max(model_prob, 1 - model_prob) * 100, 1),
             "edge":         round(edge * 100, 1),
+            "base_edge":    round(base_edge * 100, 1),
+            "lstm_edge":    round((edge - base_edge) * 100, 1),
+            "base_prob":    round(base_prob * 100, 1),
+            "lstm_adj":     round(lstm_adj * 100, 1),
             "kelly_stake":  kelly(prob, poly_price),
             "volume":       int(mkt["volume"]),
             "liquidity":    int(mkt["liquidity"]),

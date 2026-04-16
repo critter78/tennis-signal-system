@@ -1171,9 +1171,21 @@ function renderSignals() {
     const filterSurface = document.getElementById('sigFilterSurface').value;
     const sortBy = document.getElementById('sigSort').value;
 
-    // Get the latest run's picks
-    const latestRun = picks.length > 0 ? picks[picks.length - 1].run_id : null;
-    let latest = latestRun ? picks.filter(p => p.run_id === latestRun) : picks;
+    // Show today's picks (all runs from today), deduplicated by market_id
+    const today = new Date().toISOString().slice(0, 10);
+    const todayPicks = picks.filter(p => (p.logged_at || '').startsWith(today));
+    // Deduplicate: keep the latest version of each market (last entry wins)
+    const seen = new Map();
+    todayPicks.forEach(p => {
+        const key = p.market_id || (p.player_a + ' vs ' + p.player_b + '|' + p.market_type);
+        seen.set(key, p);
+    });
+    let latest = Array.from(seen.values());
+    // If no picks today, fall back to latest run
+    if (latest.length === 0) {
+        const latestRun = picks.length > 0 ? picks[picks.length - 1].run_id : null;
+        latest = latestRun ? picks.filter(p => p.run_id === latestRun) : picks;
+    }
 
     // Apply filters
     if (filterType === 'edge') latest = latest.filter(p => p.has_edge);
@@ -1270,9 +1282,15 @@ function renderSignals() {
                 </div>
                 <div class="sig-nums">
                     <div class="sig-num"><div class="sn-label">Poly Price</div><div class="sn-val" style="color:#6c757d">${polyP.toFixed(1)}c</div></div>
-                    <div class="sig-num"><div class="sn-label">Model</div><div class="sn-val" style="color:#e0e0e0">${modelP.toFixed(1)}%</div></div>
-                    <div class="sig-num"><div class="sn-label">Edge</div><div class="sn-val" style="color:${edgeColor}">${edgeSign}${(s.edge||0).toFixed(1)}%</div></div>
+                    <div class="sig-num"><div class="sn-label">Base Model</div><div class="sn-val" style="color:#e0e0e0">${(s.base_prob||modelP).toFixed(1)}%</div></div>
+                    <div class="sig-num"><div class="sn-label">LSTM Model</div><div class="sn-val" style="color:#90caf9">${modelP.toFixed(1)}%</div></div>
                     <div class="sig-num"><div class="sn-label">Kelly</div><div class="sn-val" style="color:#d4740a">${(s.kelly_stake||0).toFixed(1)}%</div></div>
+                </div>
+                <div class="sig-nums" style="margin-top:4px; padding-top:4px; border-top:1px solid #2d3139">
+                    <div class="sig-num"><div class="sn-label" style="color:#888">Base Edge</div><div class="sn-val" style="color:${(s.base_edge||0) >= 3 ? '#d4740a' : '#6c757d'}">${(s.base_edge||0) >= 0 ? '+' : ''}${(s.base_edge||0).toFixed(1)}%</div></div>
+                    <div class="sig-num"><div class="sn-label" style="color:#888">LSTM Edge</div><div class="sn-val" style="color:${(s.edge||0) >= 3 ? '#42a5f5' : '#6c757d'}">${edgeSign}${(s.edge||0).toFixed(1)}%</div></div>
+                    <div class="sig-num"><div class="sn-label" style="color:#888">LSTM Adj</div><div class="sn-val" style="color:${(s.lstm_adj||0) > 0 ? '#4caf50' : (s.lstm_adj||0) < 0 ? '#f44336' : '#6c757d'}">${(s.lstm_adj||0) >= 0 ? '+' : ''}${(s.lstm_adj||0).toFixed(1)}%</div></div>
+                    <div class="sig-num"><div class="sn-label" style="color:#888">Combined</div><div class="sn-val" style="color:${edgeColor}; font-weight:700">${edgeSign}${(s.edge||0).toFixed(1)}%</div></div>
                 </div>
                 <div class="sig-stats">
                     <div>
