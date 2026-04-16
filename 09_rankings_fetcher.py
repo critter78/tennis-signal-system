@@ -42,13 +42,36 @@ def _normalize_name(name):
     if ',' in name:
         parts = name.split(',', 1)
         name = f"{parts[1].strip()} {parts[0].strip()}"
+    # Remove single-letter initials with dots (e.g., "B. Shelton" -> "shelton", "Shelton B." -> "shelton")
+    name = re.sub(r'\b[a-z]\.\s*', '', name).strip()
     return name
 
 
 def _last_name(name):
-    """Extract last name from a full name."""
-    parts = name.strip().split()
-    return parts[-1].lower() if parts else ""
+    """Extract last name from a full name. Handles 'First Last' and 'Last First' formats."""
+    clean = name.strip()
+    # Remove initials like "B." or "J."
+    clean = re.sub(r'\b[A-Za-z]\.\s*', '', clean).strip()
+    parts = clean.split()
+    if not parts:
+        return ""
+    # If only one word left (after removing initials), that's the last name
+    if len(parts) == 1:
+        return parts[0].lower()
+    # Standard assumption: last word is last name
+    return parts[-1].lower()
+
+
+def _all_name_keys(name):
+    """Generate multiple normalized keys for a player name to improve matching."""
+    keys = set()
+    norm = _normalize_name(name)
+    keys.add(norm)
+    # Also add reversed version (for "Last First" -> "First Last" and vice versa)
+    parts = norm.split()
+    if len(parts) == 2:
+        keys.add(f"{parts[1]} {parts[0]}")
+    return keys
 
 
 # ─── PRIMARY SOURCE: live-tennis.eu ──────────────────────────────────────────
@@ -109,10 +132,10 @@ def fetch_from_live_tennis():
                     # Skip if name looks like a number or HTML
                     if name.isdigit() or '<' in name:
                         continue
-                    key = _normalize_name(name)
-                    if key not in rankings:
-                        rankings[key] = {"rank": rank, "name": name, "tour": tour}
-                        found += 1
+                    for key in _all_name_keys(name):
+                        if key not in rankings:
+                            rankings[key] = {"rank": rank, "name": name, "tour": tour}
+                    found += 1
                 if found > 30:
                     break  # Good pattern found
 
@@ -164,10 +187,10 @@ def fetch_from_tennis_explorer():
                         rank = int(match.group(1))
                         name = match.group(2).strip()
                         if name and rank <= 500 and len(name) > 2:
-                            key = _normalize_name(name)
-                            if key not in rankings:
-                                rankings[key] = {"rank": rank, "name": name, "tour": tour}
-                                found_on_page += 1
+                            for key in _all_name_keys(name):
+                                if key not in rankings:
+                                    rankings[key] = {"rank": rank, "name": name, "tour": tour}
+                            found_on_page += 1
                     if found_on_page > 10:
                         break
 
@@ -292,6 +315,72 @@ def fetch_from_flashscore():
     return rankings
 
 
+# ─── FALLBACK 4: Sackman GitHub CSVs (reliable, updated weekly) ─────────────
+
+def fetch_from_sackman_github():
+    """
+    Fetch current rankings from Jeff Sackman's GitHub tennis data.
+    These CSVs are updated regularly and are highly reliable.
+    Format: ranking_date,rank,player_id,player,points
+    """
+    import csv
+    from io import StringIO
+    rankings = {}
+
+    sources = [
+        ("ATP", "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_rankings_current.csv"),
+        ("WTA", "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_rankings_current.csv"),
+    ]
+
+    for tour, url in sources:
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=15)
+            r.raise_for_status()
+            text = r.text
+
+            reader = csv.reader(StringIO(text))
+            header = None
+            found = 0
+
+            for row in reader:
+                if not header:
+                    # Detect header — could be ranking_date,rank,player_id,player,points
+                    # or just rank,player_id,player,points (no header)
+                    if row and any(h in str(row).lower() for h in ['rank', 'player', 'date']):
+                        header = [c.strip().lower() for c in row]
+                        continue
+                    else:
+                        # No header row — assume format: date, rank, player_id, player, points
+                        header = ['ranking_date', 'rank', 'player_id', 'player', 'points']
+
+                if len(row) < 4:
+                    continue
+
+                try:
+                    data = dict(zip(header, row))
+                    rank = int(data.get('rank', 0))
+                    name = data.get('player', '').strip()
+
+                    # Some CSVs have no 'player' column — just date,rank,player_id,points
+                    # In that case, skip (we'd need a player ID lookup table)
+                    if not name or rank < 1 or rank > 500:
+                        continue
+
+                    for key in _all_name_keys(name):
+                        if key not in rankings:
+                            rankings[key] = {"rank": rank, "name": name, "tour": tour}
+                            found += 1
+                except (ValueError, KeyError):
+                    continue
+
+            print(f"    Sackman GitHub {tour}: {found} rankings")
+
+        except Exception as e:
+            print(f"    [warn] Sackman GitHub {tour}: {e}")
+
+    return rankings
+
+
 # ─── ORCHESTRATOR ─────────────────────────────────────────────────────────────
 
 def fetch_and_cache_rankings():
@@ -302,7 +391,7 @@ def fetch_and_cache_rankings():
     all_rankings = {}
 
     # ── Step 1: PRIMARY — live-tennis.eu (most accurate, server-rendered) ──
-    print("  [1/4] Primary: live-tennis.eu...")
+    print("  [1/5] Primary: live-tennis.eu...")
     lt = fetch_from_live_tennis()
     if lt:
         all_rankings.update(lt)
@@ -310,29 +399,42 @@ def fetch_and_cache_rankings():
     atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
     wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
 
-    # ── Step 2: FALLBACK 1 — Tennis Explorer (if live-tennis.eu didn't work well) ──
+    # ── Step 2: Sackman GitHub CSVs (reliable, updated regularly) ──
     if atp_count < 50 or wta_count < 50:
-        print(f"  [2/4] Fallback: Tennis Explorer (ATP={atp_count}, WTA={wta_count})...")
+        print(f"  [2/5] Sackman GitHub (ATP={atp_count}, WTA={wta_count})...")
+        sg = fetch_from_sackman_github()
+        for key, val in sg.items():
+            if key not in all_rankings:
+                all_rankings[key] = val
+    else:
+        print(f"  [2/5] Skipped Sackman GitHub (ATP={atp_count}, WTA={wta_count} sufficient)")
+
+    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
+    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
+
+    # ── Step 3: FALLBACK — Tennis Explorer (if still need more) ──
+    if atp_count < 50 or wta_count < 50:
+        print(f"  [3/5] Fallback: Tennis Explorer (ATP={atp_count}, WTA={wta_count})...")
         te = fetch_from_tennis_explorer()
         for key, val in te.items():
             if key not in all_rankings:
                 all_rankings[key] = val
     else:
-        print(f"  [2/4] Skipped Tennis Explorer (ATP={atp_count}, WTA={wta_count} sufficient)")
+        print(f"  [3/5] Skipped Tennis Explorer (ATP={atp_count}, WTA={wta_count} sufficient)")
 
     atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
     wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
 
-    # ── Step 3: FALLBACK 2 — ATP/WTA official APIs ──
+    # ── Step 4: FALLBACK — ATP/WTA official APIs ──
     if atp_count < 50:
-        print(f"  [3/4] Fallback: ATP official API...")
+        print(f"  [4/5] Fallback: ATP official API...")
         atp_off = fetch_atp_rankings()
         for key, val in atp_off.items():
             if key not in all_rankings:
                 all_rankings[key] = val
 
     if wta_count < 50:
-        print(f"  [3/4] Fallback: WTA official API...")
+        print(f"  [4/5] Fallback: WTA official API...")
         wta_off = fetch_wta_rankings()
         for key, val in wta_off.items():
             if key not in all_rankings:
@@ -341,15 +443,15 @@ def fetch_and_cache_rankings():
     atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
     wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
 
-    # ── Step 4: FALLBACK 3 — Flashscore ──
+    # ── Step 5: FALLBACK — Flashscore ──
     if atp_count < 30 or wta_count < 30:
-        print(f"  [4/4] Fallback: Flashscore...")
+        print(f"  [5/5] Fallback: Flashscore...")
         fs = fetch_from_flashscore()
         for key, val in fs.items():
             if key not in all_rankings:
                 all_rankings[key] = val
     else:
-        print(f"  [4/4] Skipped Flashscore (ATP={atp_count}, WTA={wta_count} sufficient)")
+        print(f"  [5/5] Skipped Flashscore (ATP={atp_count}, WTA={wta_count} sufficient)")
 
     atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
     wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
@@ -416,12 +518,11 @@ def lookup_player_rank(player_name, cache=None):
     rankings = cache.get("rankings", {})
     lastname_index = cache.get("lastname_index", {})
 
-    norm = _normalize_name(player_name)
-
-    # Exact match
-    if norm in rankings:
-        r = rankings[norm]
-        return r["rank"], r["tour"]
+    # Try all name variants (normal + reversed)
+    for norm in _all_name_keys(player_name):
+        if norm in rankings:
+            r = rankings[norm]
+            return r["rank"], r["tour"]
 
     # Last name match (most reliable for fuzzy matching)
     last = _last_name(player_name)

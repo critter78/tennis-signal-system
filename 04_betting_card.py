@@ -470,6 +470,7 @@ def get_player_ranking(df, player, as_of=None):
 # ── ELO COMPUTATION ──
 # Global cache for ELO ratings (computed once per run across all players)
 _elo_cache = None
+_lstm_log_once = {}  # prevents spamming LSTM logs for every pick
 
 def _build_elo_table(df, cutoff, k_base=32, initial=1500):
     """
@@ -1112,7 +1113,8 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         try:
             from importlib import import_module
             lstm = import_module("06_lstm_learner")
-            if Path("models/lstm_adjuster.pkl").exists():
+            model_path = Path("models/lstm_adjuster.pkl")
+            if model_path.exists():
                 resolved = lstm.load_resolved_picks()
                 if len(resolved) >= 20:
                     pick_stub = {
@@ -1130,8 +1132,16 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
                     model_prob = max(0.01, min(0.99, model_prob + lstm_adj))
                     if debug:
                         print(f"    LSTM adj: {lstm_adj*100:+.1f}% -> prob={model_prob*100:.1f}%")
-        except Exception:
-            pass
+                elif _lstm_log_once.get("low_resolved") is None:
+                    _lstm_log_once["low_resolved"] = True
+                    print(f"  [LSTM] Only {len(resolved)} resolved picks (need 20+). Skipping LSTM adjustment.")
+            elif _lstm_log_once.get("no_model") is None:
+                _lstm_log_once["no_model"] = True
+                print(f"  [LSTM] Model not found at {model_path.resolve()}. Skipping LSTM adjustment.")
+        except Exception as e:
+            if _lstm_log_once.get("error") is None:
+                _lstm_log_once["error"] = True
+                print(f"  [LSTM] ERROR: {type(e).__name__}: {e}")
 
         # Calculate edges for BOTH base model and LSTM-adjusted model
         base_edge_a = base_model_prob - poly_pa / 100
