@@ -459,6 +459,8 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
     <div style="display:flex; gap:10px; flex-wrap:wrap">
         <button class="gen-btn" style="width:auto; padding:12px 24px" onclick="resolveNow()">RESOLVE OUTCOMES NOW</button>
         <button class="gen-btn" style="width:auto; padding:12px 24px; background:#1b5e20" onclick="generateNow()">GENERATE FRESH CARD</button>
+        <button class="gen-btn" style="width:auto; padding:12px 24px; background:#1565c0" onclick="dedupNow()">CLEAN DUPLICATES</button>
+        <button class="gen-btn" style="width:auto; padding:12px 24px; background:#6a1b9a" onclick="fullRefresh()">RUN FULL PIPELINE</button>
     </div>
     <div id="actionResult" style="display:none; margin-top:12px; background:#0f1117; border:1px solid #2d3139; padding:12px; font-size:11px; white-space:pre-wrap; max-height:200px; overflow-y:auto"></div>
 </div>
@@ -617,6 +619,51 @@ async function generateNow() {
             box.style.borderColor = '#f44336';
             box.textContent = 'Error: ' + (data.error || data.message || 'Unknown');
         }
+    } catch(e) {
+        box.style.borderColor = '#f44336';
+        box.textContent = 'Request failed: ' + e.message;
+    }
+}
+
+async function dedupNow() {
+    const box = document.getElementById('actionResult');
+    box.style.display = 'block';
+    box.style.borderColor = '#1565c0';
+    box.textContent = 'Cleaning duplicate picks...';
+    try {
+        const res = await fetch('/admin/dedup', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            box.style.borderColor = '#1b5e20';
+            box.textContent = 'Done!\\n\\n' + (data.output || 'Dedup complete');
+        } else {
+            box.style.borderColor = '#f44336';
+            box.textContent = 'Error: ' + (data.error || data.output || 'Unknown');
+        }
+    } catch(e) {
+        box.style.borderColor = '#f44336';
+        box.textContent = 'Request failed: ' + e.message;
+    }
+}
+
+async function fullRefresh() {
+    const box = document.getElementById('actionResult');
+    box.style.display = 'block';
+    box.style.borderColor = '#6a1b9a';
+    box.textContent = 'Running full pipeline (rankings > card > dedup > dashboard)... This may take 2-3 minutes.';
+    try {
+        const res = await fetch('/admin/full-refresh', { method: 'POST' });
+        const data = await res.json();
+        box.style.borderColor = data.status === 'ok' ? '#1b5e20' : '#d4740a';
+        let output = 'Pipeline ' + data.status + ' (' + (data.elapsed_seconds || '?') + 's)\\n\\n';
+        if (data.steps) {
+            for (const [step, info] of Object.entries(data.steps)) {
+                output += step.toUpperCase() + ': ' + (info.status || '?') + '\\n';
+                if (info.output) output += info.output.trim() + '\\n';
+                output += '\\n';
+            }
+        }
+        box.textContent = output;
     } catch(e) {
         box.style.borderColor = '#f44336';
         box.textContent = 'Request failed: ' + e.message;
@@ -1569,6 +1616,86 @@ def resolve_outcomes_route():
     except Exception as e:
         logger.error(f"Resolution error: {e}")
         return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/admin/dedup", methods=["POST"])
+@enable_cors
+def admin_dedup():
+    """Run deduplication on picks — accessible from admin panel."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        logger.info("Admin triggered dedup...")
+        r = subprocess.run(
+            ["python3", str(BASE_DIR / "05_bet_logger.py"), "dedup"],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=30
+        )
+        output = (r.stdout or "") + (r.stderr or "")
+        if r.returncode == 0:
+            return jsonify({"status": "success", "output": output})
+        else:
+            return jsonify({"status": "error", "output": output}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/admin/full-refresh", methods=["POST"])
+@enable_cors
+def admin_full_refresh():
+    """Full pipeline refresh triggered from admin panel (uses admin cookie, no CRON_SECRET needed)."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # Delegate to the main refresh logic by setting is_admin flag
+    # We reuse the same code path as /api/refresh
+    import time
+    t0 = time.time()
+    results = {}
+    logger.info("=" * 50)
+    logger.info("ADMIN FULL REFRESH: Pipeline starting")
+    logger.info("=" * 50)
+
+    steps = [
+        ("rankings", ["python3", str(BASE_DIR / "09_rankings_fetcher.py"), "--refresh"], 60),
+        ("card", ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300"], 300),
+        ("dedup", ["python3", str(BASE_DIR / "05_bet_logger.py"), "dedup"], 30),
+    ]
+
+    for name, cmd, timeout in steps:
+        try:
+            logger.info(f"  Running {name}...")
+            r = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=timeout)
+            results[name] = {"status": "ok" if r.returncode == 0 else "error", "output": (r.stdout or "")[-300:]}
+            if r.returncode != 0:
+                logger.warning(f"  {name} failed: {r.stderr[-200:]}")
+                # Retry card gen at lower volume
+                if name == "card":
+                    r2 = subprocess.run(
+                        ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100"],
+                        cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
+                    )
+                    results[name] = {"status": "ok" if r2.returncode == 0 else "error", "output": (r2.stdout or "")[-300:]}
+        except Exception as e:
+            results[name] = {"status": "error", "error": str(e)}
+
+    # Dashboard rebuild
+    try:
+        dash_script = BASE_DIR / "07_dashboard.py"
+        if dash_script.exists():
+            r = subprocess.run(["python3", str(dash_script)], cwd=str(BASE_DIR), capture_output=True, text=True, timeout=60)
+            results["dashboard"] = {"status": "ok" if r.returncode == 0 else "error", "output": (r.stdout or "")[-200:]}
+    except Exception as e:
+        results["dashboard"] = {"status": "error", "error": str(e)}
+
+    elapsed = time.time() - t0
+    ok_count = sum(1 for v in results.values() if v.get("status") == "ok")
+
+    return jsonify({
+        "status": "ok" if ok_count == len(results) else "partial",
+        "steps": results,
+        "elapsed_seconds": round(elapsed, 1),
+    }), 200
 
 
 @app.route("/api/refresh", methods=["POST"])
