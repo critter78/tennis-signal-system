@@ -2839,7 +2839,7 @@ def main():
     _surface_history_cache = None
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--min-edge",   type=float, default=0.05)
+    parser.add_argument("--min-edge",   type=float, default=0.03)
     parser.add_argument("--min-volume", type=float, default=300)
     parser.add_argument("--open",       action="store_true",
                         help="Auto-open card in browser after generating")
