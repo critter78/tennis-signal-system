@@ -80,13 +80,13 @@ def print_report(picks, title="Performance Report"):
     total = len(picks)
     resolved = [p for p in picks if p.get("outcome") is not None]
     unresolved = [p for p in picks if p.get("outcome") is None]
-    wins = [p for p in resolved if p.get("outcome") == "W"]
-    losses = [p for p in resolved if p.get("outcome") == "L"]
+    wins = [p for p in resolved if p.get("outcome") == "win"]
+    losses = [p for p in resolved if p.get("outcome") == "loss"]
 
     # Edge breakdown
     has_edge = [p for p in picks if p.get("has_edge")]
     edge_resolved = [p for p in has_edge if p.get("outcome") is not None]
-    edge_wins = [p for p in edge_resolved if p.get("outcome") == "W"]
+    edge_wins = [p for p in edge_resolved if p.get("outcome") == "win"]
 
     # PnL
     total_pnl = sum(p.get("pnl") or 0 for p in resolved)
@@ -117,7 +117,7 @@ def print_report(picks, title="Performance Report"):
     for label, tier_picks in [("STRONG (10%+)", strong), ("SOLID (7-10%)", solid),
                                 ("WATCH (5-7%)", watch), ("MARGINAL (0-5%)", marginal)]:
         tr = [p for p in tier_picks if p.get("outcome") is not None]
-        tw = [p for p in tr if p.get("outcome") == "W"]
+        tw = [p for p in tr if p.get("outcome") == "win"]
         if tr:
             wr = len(tw) / len(tr) * 100
             pnl = sum(p.get("pnl") or 0 for p in tr)
@@ -130,14 +130,14 @@ def print_report(picks, title="Performance Report"):
     for surface in ["Hard", "Clay", "Grass"]:
         sp = [p for p in resolved if p.get("surface") == surface]
         if sp:
-            sw = [p for p in sp if p.get("outcome") == "W"]
+            sw = [p for p in sp if p.get("outcome") == "win"]
             pnl = sum(p.get("pnl") or 0 for p in sp)
             print(f"  {surface:10s}  {len(sw)}W-{len(sp)-len(sw)}L  ({len(sw)/len(sp)*100:.0f}%)  ${pnl:+,.0f}")
 
     # Top wins and worst losses
     if resolved:
         print(f"\n  ── Top 5 Wins ──")
-        top_wins = sorted([p for p in wins if p.get("pnl")], key=lambda x: x.get("pnl", 0), reverse=True)[:5]
+        top_wins = sorted([p for p in wins if p.get("pnl") and p.get("pnl") > 0], key=lambda x: x.get("pnl", 0), reverse=True)[:5]
         for p in top_wins:
             print(f"  ${p['pnl']:+.0f}  {p.get('match','?'):40s}  edge={p.get('edge',0):+.1f}%")
 
@@ -150,7 +150,7 @@ def print_report(picks, title="Performance Report"):
     print(f"\n  ── All Picks (Resolved) ──")
     for p in sorted(resolved, key=lambda x: x.get("pnl") or 0, reverse=True):
         outcome = p.get("outcome", "?")
-        icon = "W" if outcome == "W" else "L" if outcome == "L" else "?"
+        icon = "W" if outcome == "win" else "L" if outcome == "loss" else "?"
         pnl = p.get("pnl") or 0
         match = p.get("match", "?")[:40]
         edge = p.get("edge", 0)
