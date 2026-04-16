@@ -12,13 +12,19 @@ def log_picks(signals, run_id=None):
     if not signals: return 0
     run_id = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Load existing unresolved picks to avoid duplicates
+    # Load ALL existing picks (resolved AND unresolved) to avoid duplicates.
+    # Previously we skipped resolved picks, which meant the same match got
+    # re-logged every time the cron ran after the outcome resolver marked it.
     existing = load_picks_log()
     existing_keys = set()
+    existing_market_ids = set()
     for p in existing:
-        if p.get("outcome") is not None:
-            continue  # resolved picks are fine to re-pick
-        # Key by sorted player pair + market_type to catch same match
+        # Primary dedup: market_id (unique per Polymarket market)
+        mid = p.get("market_id", "")
+        if mid:
+            existing_market_ids.add(mid)
+        # Secondary dedup: sorted player pair + market_type (catches same match
+        # even if market_id differs across API calls)
         pa = p.get("player_a", "").lower().strip()
         pb = p.get("player_b", "").lower().strip()
         mt = p.get("market_type", "")
@@ -29,7 +35,11 @@ def log_picks(signals, run_id=None):
     skipped = 0
     with open(PICKS_LOG, "a") as f:
         for s in signals:
-            # Check for duplicate
+            # Check for duplicate — market_id first, then player pair fallback
+            mid = s.get("market_id", "")
+            if mid and mid in existing_market_ids:
+                skipped += 1
+                continue
             pa = s.get("player_a", "").lower().strip()
             pb = s.get("player_b", "").lower().strip()
             mt = s.get("market_type", "")
@@ -38,6 +48,8 @@ def log_picks(signals, run_id=None):
                 skipped += 1
                 continue
             existing_keys.add(key)  # prevent dupes within this batch too
+            if mid:
+                existing_market_ids.add(mid)
 
             entry = {"run_id": run_id, "logged_at": datetime.now().isoformat(),
                 "market_id": s.get("market_id",""), "slug": s.get("slug",""),
@@ -177,9 +189,63 @@ def export_lstm_data():
     df = pd.DataFrame(rows); df.to_csv(LSTM_EXPORT, index=False)
     print(f"  Exported {len(df)} resolved picks to {LSTM_EXPORT}")
 
+def dedup_picks():
+    """Remove duplicate picks, keeping the first occurrence of each match.
+    For resolved duplicates, keeps the one with an outcome (if any)."""
+    picks = load_picks_log()
+    if not picks:
+        print("  No picks to deduplicate.")
+        return
+
+    seen_keys = set()
+    seen_market_ids = set()
+    unique = []
+    dupes = 0
+
+    # Sort so resolved picks come first (we want to keep resolved over unresolved)
+    picks_sorted = sorted(picks, key=lambda p: (
+        0 if p.get("outcome") is not None else 1,  # resolved first
+        p.get("logged_at", ""),                      # then by time
+    ))
+
+    for p in picks_sorted:
+        mid = p.get("market_id", "")
+        pa = p.get("player_a", "").lower().strip()
+        pb = p.get("player_b", "").lower().strip()
+        mt = p.get("market_type", "")
+        key = (tuple(sorted([pa, pb])), mt)
+
+        # Skip if we've seen this market_id or player pair already
+        if mid and mid in seen_market_ids:
+            dupes += 1
+            continue
+        if key in seen_keys:
+            dupes += 1
+            continue
+
+        seen_keys.add(key)
+        if mid:
+            seen_market_ids.add(mid)
+        unique.append(p)
+
+    # Re-sort by logged_at for clean output
+    unique.sort(key=lambda p: p.get("logged_at", ""))
+
+    print(f"  Before: {len(picks)} picks")
+    print(f"  Removed: {dupes} duplicates")
+    print(f"  After:  {len(unique)} unique picks")
+
+    resolved_before = len([p for p in picks if p.get("outcome") is not None])
+    resolved_after = len([p for p in unique if p.get("outcome") is not None])
+    print(f"  Resolved picks preserved: {resolved_after}/{resolved_before}")
+
+    save_picks_log(unique)
+    print(f"  Saved to {PICKS_LOG}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["log","resolve","report","export-lstm"])
+    parser.add_argument("action", choices=["log","resolve","report","export-lstm","dedup"])
     parser.add_argument("--signals-json", type=str)
     args = parser.parse_args()
     if args.action == "log":
@@ -189,3 +255,4 @@ if __name__ == "__main__":
     elif args.action == "resolve": resolve_outcomes()
     elif args.action == "report": generate_report()
     elif args.action == "export-lstm": export_lstm_data()
+    elif args.action == "dedup": dedup_picks()

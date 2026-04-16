@@ -1634,9 +1634,26 @@ def api_refresh():
         results["card"] = {"status": "error", "error": str(e)}
         logger.error(f"Card generation exception: {e}")
 
-    # Step 3: Resolve outcomes
+    # Step 3a: Deduplicate picks (remove duplicates from previous cron runs)
     try:
-        logger.info("[3/4] Resolving outcomes...")
+        logger.info("[3a/5] Deduplicating picks...")
+        r = subprocess.run(
+            ["python3", str(BASE_DIR / "05_bet_logger.py"), "dedup"],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=30
+        )
+        results["dedup"] = {
+            "status": "ok" if r.returncode == 0 else "error",
+            "output": (r.stdout or "")[-200:],
+        }
+        if r.returncode != 0:
+            logger.warning(f"Dedup failed: {r.stderr[-200:]}")
+    except Exception as e:
+        results["dedup"] = {"status": "error", "error": str(e)}
+        logger.warning(f"Dedup exception: {e}")
+
+    # Step 3b: Resolve outcomes
+    try:
+        logger.info("[3b/5] Resolving outcomes...")
         r = subprocess.run(
             ["python3", str(BASE_DIR / "08_outcome_resolver.py")],
             cwd=str(BASE_DIR), capture_output=True, text=True, timeout=180
