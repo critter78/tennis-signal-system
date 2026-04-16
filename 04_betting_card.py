@@ -523,6 +523,26 @@ def _compute_elo(df, player, cutoff):
     return round(elo_table.get(player, 1500))
 
 
+def _compute_elo_percentile(df, player, cutoff):
+    """Get the player's ELO percentile among all active players (played in last 365d)."""
+    elo_table = _build_elo_table(df, cutoff)
+    player_elo = elo_table.get(player, 1500)
+
+    # Only consider "active" players (who played at least 1 match in last 365d)
+    since = cutoff - timedelta(days=365)
+    active_players = set()
+    mask = (df["date"] >= since) & (df["date"] < cutoff)
+    active_players.update(df.loc[mask, "winner"].unique())
+    active_players.update(df.loc[mask, "loser"].unique())
+
+    if len(active_players) < 10:
+        return None
+
+    active_elos = [elo_table.get(p, 1500) for p in active_players]
+    below = sum(1 for e in active_elos if e < player_elo)
+    return round(below / len(active_elos) * 100)
+
+
 def _compute_momentum(df, player, cutoff, recent_matches):
     """
     Compute a psychological momentum score (0-100) based on:
@@ -713,8 +733,9 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
         vs_ranked["top50"]["l"] = int((opp_ranks_l <= 50).sum())
 
     # ── RANKING HISTORY & MOVEMENT (vectorized) ──
-    def _get_rank_at(matches_w, matches_l, target_date, window_days=60):
-        """Get player's rank closest to a target date within a window."""
+    def _get_rank_at(matches_w, matches_l, target_date, window_days=90):
+        """Get player's rank closest to a target date within a window.
+        Uses adaptive window: tries exact window first, then expands to find nearest data."""
         start = target_date - timedelta(days=window_days)
         end = target_date + timedelta(days=window_days)
         best_dist, best_rank = 9999, None
@@ -753,10 +774,11 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
             if rank_now is None or l_rank_now < rank_now:
                 rank_now = l_rank_now
 
-    rank_30d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=30))
-    rank_90d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=90))
-    rank_180d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=180))
-    rank_365d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=365))
+    # Use wider windows for longer lookbacks (data may have gaps)
+    rank_30d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=30),  window_days=45)
+    rank_90d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=90),  window_days=90)
+    rank_180d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=180), window_days=120)
+    rank_365d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=365), window_days=180)
 
     # Ranking movement: positive = improved (lower rank number), negative = dropped
     rank_move_90d = None
@@ -770,12 +792,22 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
         rank_move_365d = rank_365d - rank_now
 
     # ── YTD WINS / LOSSES ──
-    ytd_start = cutoff.replace(month=1, day=1)
-    wins_ytd = int(((wins["date"] >= ytd_start) & (wins["date"] < cutoff)).sum()) if len(wins) > 0 else 0
-    losses_ytd = int(((losses["date"] >= ytd_start) & (losses["date"] < cutoff)).sum()) if len(losses) > 0 else 0
+    # Use all_wins/all_losses (not 52w-filtered) and the ACTUAL as_of year
+    # so YTD reflects the current calendar year even if data is stale
+    actual_cutoff = pd.Timestamp(as_of)
+    ytd_start = actual_cutoff.replace(month=1, day=1)
+    wins_ytd = int(((all_wins["date"] >= ytd_start) & (all_wins["date"] < actual_cutoff)).sum()) if len(all_wins) > 0 else 0
+    losses_ytd = int(((all_losses["date"] >= ytd_start) & (all_losses["date"] < actual_cutoff)).sum()) if len(all_losses) > 0 else 0
+    # If no YTD data (data doesn't cover current year), fall back to most recent full year
+    if wins_ytd == 0 and losses_ytd == 0 and len(all_wins) + len(all_losses) > 0:
+        max_data_date = cutoff  # may be adjusted to data end
+        fb_ytd_start = max_data_date.replace(month=1, day=1)
+        wins_ytd = int(((all_wins["date"] >= fb_ytd_start) & (all_wins["date"] < max_data_date)).sum()) if len(all_wins) > 0 else 0
+        losses_ytd = int(((all_losses["date"] >= fb_ytd_start) & (all_losses["date"] < max_data_date)).sum()) if len(all_losses) > 0 else 0
 
     # ── ELO RATING ──
     elo = _compute_elo(df, player, cutoff)
+    elo_pct = _compute_elo_percentile(df, player, cutoff)
 
     # ── PSYCHOLOGICAL MOMENTUM ──
     momentum = _compute_momentum(df, player, cutoff, all_m)
@@ -809,6 +841,7 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
         "rank_move_365d":   rank_move_365d,
         # ELO rating
         "elo":              elo,
+        "elo_pct":          elo_pct,
         # Psychological momentum (composite 0-100)
         "momentum":         momentum,
         # YTD record
@@ -1266,6 +1299,8 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "sb_rank_move_365d":sb.get("rank_move_365d"),
             "sa_elo":           sa.get("elo"),
             "sb_elo":           sb.get("elo"),
+            "sa_elo_pct":       sa.get("elo_pct"),
+            "sb_elo_pct":       sb.get("elo_pct"),
             "sa_momentum":      sa.get("momentum"),
             "sb_momentum":      sb.get("momentum"),
             "sa_wins_ytd":      sa.get("wins_ytd"),
@@ -1589,6 +1624,8 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
             "sb_rank_move_365d":None,
             "sa_elo":          sa.get("elo"),
             "sb_elo":          None,
+            "sa_elo_pct":      sa.get("elo_pct"),
+            "sb_elo_pct":      None,
             "sa_momentum":     sa.get("momentum"),
             "sb_momentum":     None,
             "sa_wins_ytd":     sa.get("wins_ytd"),
@@ -1723,6 +1760,7 @@ def generate_signals_data_only(markets_df, df_hist=None, debug=False):
             "sa_rank_move_90d": None, "sb_rank_move_90d": None,
             "sa_rank_move_365d": None, "sb_rank_move_365d": None,
             "sa_elo": None, "sb_elo": None,
+            "sa_elo_pct": None, "sb_elo_pct": None,
             "sa_momentum": None, "sb_momentum": None,
             "sa_wins_ytd": None, "sb_wins_ytd": None,
             "sa_losses_ytd": None, "sb_losses_ytd": None,
@@ -1835,8 +1873,11 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
                 if move > 0: return f'<span style="color:#087f23">▲{move}</span>'
                 if move < 0: return f'<span style="color:#d84315">▼{abs(move)}</span>'
                 return "→0"
-            def fmt_elo(e):
-                return str(e) if e else "—"
+            def fmt_elo(e, pct=None):
+                if not e: return "—"
+                s = str(e)
+                if pct is not None: s += f' <span style="color:#888; font-size:9px">(P{pct})</span>'
+                return s
             def fmt_momentum(m):
                 if m is None: return "—"
                 if m >= 70: return f'<span style="color:#087f23">{m}/100</span>'
@@ -1953,7 +1994,7 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
                         <div class="adv-grid">
                             <div class="adv-col">
                                 <div class="adv-header">{pa}</div>
-                                <div class="stat-row"><span class="stat-label">ELO</span><span class="stat-val">{fmt_elo(s.get('sa_elo'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">ELO</span><span class="stat-val">{fmt_elo(s.get('sa_elo'), s.get('sa_elo_pct'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">vs Top 10</span><span class="stat-val">{fmt_vs(s.get('sa_vs_top10'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">vs Top 20</span><span class="stat-val">{fmt_vs(s.get('sa_vs_top20'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">Rank Move 12m</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move_365d'))}</span></div>
@@ -1963,7 +2004,7 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
                             </div>
                             <div class="adv-col">
                                 <div class="adv-header">{pb}</div>
-                                <div class="stat-row"><span class="stat-label">ELO</span><span class="stat-val">{fmt_elo(s.get('sb_elo'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">ELO</span><span class="stat-val">{fmt_elo(s.get('sb_elo'), s.get('sb_elo_pct'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">vs Top 10</span><span class="stat-val">{fmt_vs(s.get('sb_vs_top10'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">vs Top 20</span><span class="stat-val">{fmt_vs(s.get('sb_vs_top20'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">Rank Move 12m</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move_365d'))}</span></div>
