@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -34,7 +34,6 @@ _live_rankings_cache = None
 
 def _get_live_rankings():
     """Load live rankings cache (lazy, once per run)."""
-    import sys
     global _live_rankings_cache
     if _live_rankings_cache is not None:
         return _live_rankings_cache
@@ -61,7 +60,6 @@ _rank_debug_count = {"miss": 0, "hit": 0}
 
 def get_live_rank(player_name):
     """Get a player's live world ranking. Returns (rank, tour) or (None, None)."""
-    import sys
     cache = _get_live_rankings()
     if not cache or not cache.get("rankings"):
         return None, None
@@ -1165,7 +1163,6 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         base_model_prob = model_prob
 
         # LSTM adjustment (if trained)
-        import sys
         lstm_adj = 0.0
         try:
             from importlib import import_module
