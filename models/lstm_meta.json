@@ -1,6 +1,6 @@
 {
   "type": "MLPRegressor-Sequential-v2-hardened",
-  "trained_at": "2026-04-16T19:09:24.147805",
+  "trained_at": "2026-04-16T19:18:01.521975",
   "n_picks": 332,
   "n_samples": 312,
   "n_features": 24,
