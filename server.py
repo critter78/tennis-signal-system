@@ -1650,6 +1650,48 @@ def admin_dedup():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.route("/admin/debug-rank/<player_name>", methods=["GET"])
+@enable_cors
+def admin_debug_rank(player_name):
+    """Debug ranking lookup for a player — shows cache entries and lookup result."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    import sys
+    sys.path.insert(0, str(BASE_DIR))
+    try:
+        from importlib import import_module
+        fetcher = import_module("09_rankings_fetcher")
+        cache = fetcher.load_cached_rankings()
+        rankings = cache.get("rankings", {})
+        lastname_index = cache.get("lastname_index", {})
+
+        # Find all matching keys
+        search = player_name.lower().strip()
+        matching_keys = {k: v for k, v in rankings.items() if search in k}
+
+        # Try the actual lookup
+        rank, tour = fetcher.lookup_player_rank(player_name, cache)
+
+        # Check name variants
+        name_keys = list(fetcher._all_name_keys(player_name))
+        last = fetcher._last_name(player_name)
+        lastname_matches = lastname_index.get(last, [])
+
+        return jsonify({
+            "player": player_name,
+            "lookup_result": {"rank": rank, "tour": tour},
+            "name_keys_tried": name_keys,
+            "matching_cache_keys": matching_keys,
+            "lastname": last,
+            "lastname_index_matches": lastname_matches,
+            "cache_count": cache.get("count", 0),
+            "cache_fetched_at": cache.get("fetched_at"),
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()})
+
+
 @app.route("/admin/full-refresh", methods=["POST"])
 @enable_cors
 def admin_full_refresh():
@@ -1676,7 +1718,13 @@ def admin_full_refresh():
         try:
             logger.info(f"  Running {name}...")
             r = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=timeout)
-            results[name] = {"status": "ok" if r.returncode == 0 else "error", "output": (r.stdout or "")[-300:]}
+            # Include BOTH stdout and stderr in results for debugging
+            out = (r.stdout or "")[-500:]
+            err = (r.stderr or "")[-500:]
+            combined = out
+            if err:
+                combined += "\n--- STDERR ---\n" + err
+            results[name] = {"status": "ok" if r.returncode == 0 else "error", "output": combined[-800:]}
             if r.returncode != 0:
                 logger.warning(f"  {name} failed: {r.stderr[-200:]}")
                 # Retry card gen at lower volume
@@ -1685,7 +1733,12 @@ def admin_full_refresh():
                         ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100"],
                         cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
                     )
-                    results[name] = {"status": "ok" if r2.returncode == 0 else "error", "output": (r2.stdout or "")[-300:]}
+                    out2 = (r2.stdout or "")[-500:]
+                    err2 = (r2.stderr or "")[-500:]
+                    combined2 = out2
+                    if err2:
+                        combined2 += "\n--- STDERR ---\n" + err2
+                    results[name] = {"status": "ok" if r2.returncode == 0 else "error", "output": combined2[-800:]}
         except Exception as e:
             results[name] = {"status": "error", "error": str(e)}
 

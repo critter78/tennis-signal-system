@@ -49,92 +49,90 @@ def log_picks(signals, run_id=None):
     logged = 0
     skipped = 0
     updated = 0
-    dirty = False  # track if existing picks were modified
+    new_picks = []  # collect new picks to add to existing list
 
-    with open(PICKS_LOG, "a") as f:
-        for s in signals:
-            # Check for duplicate — market_id first, then player pair fallback
-            mid = s.get("market_id", "")
-            existing_idx = None
-            if mid and mid in existing_by_mid:
-                existing_idx = existing_by_mid[mid]
-            else:
-                pa = s.get("player_a", "").lower().strip()
-                pb = s.get("player_b", "").lower().strip()
-                mt = s.get("market_type", "")
-                key = (tuple(sorted([pa, pb])), mt)
-                if key in existing_by_key:
-                    existing_idx = existing_by_key[key]
-
-            if existing_idx is not None:
-                # Existing pick found — update stats if not yet resolved
-                pick = existing[existing_idx]
-                if pick.get("outcome") is None:
-                    for field in REFRESH_FIELDS:
-                        val = s.get(field)
-                        if val is not None:
-                            pick[field] = val
-                    updated += 1
-                    dirty = True
-                else:
-                    skipped += 1
-                continue
-
-            # New pick — add dedup keys and log
-            if mid:
-                existing_by_mid[mid] = len(existing)
+    for s in signals:
+        # Check for duplicate — market_id first, then player pair fallback
+        mid = s.get("market_id", "")
+        existing_idx = None
+        if mid and mid in existing_by_mid:
+            existing_idx = existing_by_mid[mid]
+        else:
             pa = s.get("player_a", "").lower().strip()
             pb = s.get("player_b", "").lower().strip()
             mt = s.get("market_type", "")
             key = (tuple(sorted([pa, pb])), mt)
-            existing_by_key[key] = len(existing)
+            if key in existing_by_key:
+                existing_idx = existing_by_key[key]
 
-            entry = {"run_id": run_id, "logged_at": datetime.now().isoformat(),
-                "market_id": s.get("market_id",""), "slug": s.get("slug",""),
-                "market_type": s.get("market_type","unknown"), "match": s.get("match",""),
-                "question": s.get("question",""), "tournament": s.get("tournament",""),
-                "round": s.get("round",""), "surface": s.get("surface",""),
-                "player_a": s.get("player_a",""), "player_b": s.get("player_b",""),
-                "predicted_winner": s.get("predicted_winner",""), "bet_on": s.get("bet_on",""),
-                "model_prob": s.get("model_prob"), "model_prob_a": s.get("model_prob_a"),
-                "model_prob_b": s.get("model_prob_b"), "confidence": s.get("confidence"),
-                "edge": s.get("edge"), "kelly_stake": s.get("kelly_stake"),
-                "has_edge": s.get("has_edge",False), "rank": s.get("rank"),
-                "rank_a": s.get("rank_a"), "rank_b": s.get("rank_b"),
-                "poly_price": s.get("poly_price"), "poly_price_a": s.get("poly_price_a"),
-                "poly_price_b": s.get("poly_price_b"), "volume": s.get("volume"),
-                "liquidity": s.get("liquidity"), "end_date": s.get("end_date"),
-                "poly_link": s.get("poly_link",""),
-                "sa_wr": s.get("sa_wr"), "sb_wr": s.get("sb_wr"),
-                "sa_swr": s.get("sa_swr"), "sb_swr": s.get("sb_swr"),
-                "sa_form": s.get("sa_form"), "sb_form": s.get("sb_form"),
-                "sa_rest": s.get("sa_rest"), "sb_rest": s.get("sb_rest"),
-                # Advanced stats
-                "sa_elo": s.get("sa_elo"), "sb_elo": s.get("sb_elo"),
-                "sa_elo_pct": s.get("sa_elo_pct"), "sb_elo_pct": s.get("sb_elo_pct"),
-                "sa_momentum": s.get("sa_momentum"), "sb_momentum": s.get("sb_momentum"),
-                "sa_vs_top10": s.get("sa_vs_top10"), "sb_vs_top10": s.get("sb_vs_top10"),
-                "sa_vs_top20": s.get("sa_vs_top20"), "sb_vs_top20": s.get("sb_vs_top20"),
-                "sa_vs_top50": s.get("sa_vs_top50"), "sb_vs_top50": s.get("sb_vs_top50"),
-                "sa_rank_now": s.get("sa_rank_now"), "sb_rank_now": s.get("sb_rank_now"),
-                "sa_rank_30d": s.get("sa_rank_30d"), "sb_rank_30d": s.get("sb_rank_30d"),
-                "sa_rank_180d": s.get("sa_rank_180d"), "sb_rank_180d": s.get("sb_rank_180d"),
-                "sa_rank_365d": s.get("sa_rank_365d"), "sb_rank_365d": s.get("sb_rank_365d"),
-                "sa_rank_move": s.get("sa_rank_move"), "sb_rank_move": s.get("sb_rank_move"),
-                "sa_rank_move_90d": s.get("sa_rank_move_90d"), "sb_rank_move_90d": s.get("sb_rank_move_90d"),
-                "sa_rank_move_365d": s.get("sa_rank_move_365d"), "sb_rank_move_365d": s.get("sb_rank_move_365d"),
-                "sa_matches_52w": s.get("sa_matches_52w"), "sb_matches_52w": s.get("sb_matches_52w"),
-                "sa_wins_ytd": s.get("sa_wins_ytd"), "sb_wins_ytd": s.get("sb_wins_ytd"),
-                "sa_losses_ytd": s.get("sa_losses_ytd"), "sb_losses_ytd": s.get("sb_losses_ytd"),
-                # LSTM adjustment tracking
-                "base_prob": s.get("base_prob"), "lstm_adj": s.get("lstm_adj"),
-                "base_edge": s.get("base_edge"), "lstm_edge": s.get("lstm_edge"),
-                "outcome": None, "actual_winner": None, "resolved_at": None, "pnl": None}
-            f.write(json.dumps(entry) + "\n"); logged += 1
+        if existing_idx is not None:
+            # Existing pick found — update stats if not yet resolved
+            pick = existing[existing_idx]
+            if pick.get("outcome") is None:
+                for field in REFRESH_FIELDS:
+                    val = s.get(field)
+                    if val is not None:
+                        pick[field] = val
+                updated += 1
+            else:
+                skipped += 1
+            continue
 
-    # If any existing picks were updated with fresh stats, rewrite the file
-    if dirty:
-        save_picks_log(existing)
+        # New pick — add dedup keys and collect
+        if mid:
+            existing_by_mid[mid] = len(existing) + len(new_picks)
+        pa = s.get("player_a", "").lower().strip()
+        pb = s.get("player_b", "").lower().strip()
+        mt = s.get("market_type", "")
+        key = (tuple(sorted([pa, pb])), mt)
+        existing_by_key[key] = len(existing) + len(new_picks)
+
+        entry = {"run_id": run_id, "logged_at": datetime.now().isoformat(),
+            "market_id": s.get("market_id",""), "slug": s.get("slug",""),
+            "market_type": s.get("market_type","unknown"), "match": s.get("match",""),
+            "question": s.get("question",""), "tournament": s.get("tournament",""),
+            "round": s.get("round",""), "surface": s.get("surface",""),
+            "player_a": s.get("player_a",""), "player_b": s.get("player_b",""),
+            "predicted_winner": s.get("predicted_winner",""), "bet_on": s.get("bet_on",""),
+            "model_prob": s.get("model_prob"), "model_prob_a": s.get("model_prob_a"),
+            "model_prob_b": s.get("model_prob_b"), "confidence": s.get("confidence"),
+            "edge": s.get("edge"), "kelly_stake": s.get("kelly_stake"),
+            "has_edge": s.get("has_edge",False), "rank": s.get("rank"),
+            "rank_a": s.get("rank_a"), "rank_b": s.get("rank_b"),
+            "poly_price": s.get("poly_price"), "poly_price_a": s.get("poly_price_a"),
+            "poly_price_b": s.get("poly_price_b"), "volume": s.get("volume"),
+            "liquidity": s.get("liquidity"), "end_date": s.get("end_date"),
+            "poly_link": s.get("poly_link",""),
+            "sa_wr": s.get("sa_wr"), "sb_wr": s.get("sb_wr"),
+            "sa_swr": s.get("sa_swr"), "sb_swr": s.get("sb_swr"),
+            "sa_form": s.get("sa_form"), "sb_form": s.get("sb_form"),
+            "sa_rest": s.get("sa_rest"), "sb_rest": s.get("sb_rest"),
+            # Advanced stats
+            "sa_elo": s.get("sa_elo"), "sb_elo": s.get("sb_elo"),
+            "sa_elo_pct": s.get("sa_elo_pct"), "sb_elo_pct": s.get("sb_elo_pct"),
+            "sa_momentum": s.get("sa_momentum"), "sb_momentum": s.get("sb_momentum"),
+            "sa_vs_top10": s.get("sa_vs_top10"), "sb_vs_top10": s.get("sb_vs_top10"),
+            "sa_vs_top20": s.get("sa_vs_top20"), "sb_vs_top20": s.get("sb_vs_top20"),
+            "sa_vs_top50": s.get("sa_vs_top50"), "sb_vs_top50": s.get("sb_vs_top50"),
+            "sa_rank_now": s.get("sa_rank_now"), "sb_rank_now": s.get("sb_rank_now"),
+            "sa_rank_30d": s.get("sa_rank_30d"), "sb_rank_30d": s.get("sb_rank_30d"),
+            "sa_rank_180d": s.get("sa_rank_180d"), "sb_rank_180d": s.get("sb_rank_180d"),
+            "sa_rank_365d": s.get("sa_rank_365d"), "sb_rank_365d": s.get("sb_rank_365d"),
+            "sa_rank_move": s.get("sa_rank_move"), "sb_rank_move": s.get("sb_rank_move"),
+            "sa_rank_move_90d": s.get("sa_rank_move_90d"), "sb_rank_move_90d": s.get("sb_rank_move_90d"),
+            "sa_rank_move_365d": s.get("sa_rank_move_365d"), "sb_rank_move_365d": s.get("sb_rank_move_365d"),
+            "sa_matches_52w": s.get("sa_matches_52w"), "sb_matches_52w": s.get("sb_matches_52w"),
+            "sa_wins_ytd": s.get("sa_wins_ytd"), "sb_wins_ytd": s.get("sb_wins_ytd"),
+            "sa_losses_ytd": s.get("sa_losses_ytd"), "sb_losses_ytd": s.get("sb_losses_ytd"),
+            # LSTM adjustment tracking
+            "base_prob": s.get("base_prob"), "lstm_adj": s.get("lstm_adj"),
+            "base_edge": s.get("base_edge"), "lstm_edge": s.get("lstm_edge"),
+            "outcome": None, "actual_winner": None, "resolved_at": None, "pnl": None}
+        new_picks.append(entry); logged += 1
+
+    # Write everything atomically — updated existing + new picks
+    if updated > 0 or new_picks:
+        save_picks_log(existing + new_picks)
 
     parts = [f"Logged {logged} new"]
     if updated: parts.append(f"updated {updated} existing")

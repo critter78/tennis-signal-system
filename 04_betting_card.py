@@ -1104,9 +1104,13 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         ra = rank_a or 100
         rb = rank_b or 100
 
+        # Always log rank source to stderr for debugging (visible in pipeline output)
+        src_a = "LIVE" if live_rank_a else "hist"
+        src_b = "LIVE" if live_rank_b else "hist"
+        print(f"  [rank] {pa}: #{rank_a} ({src_a}, live={live_rank_a}, hist={hist_rank_a}) | "
+              f"{pb}: #{rank_b} ({src_b}, live={live_rank_b}, hist={hist_rank_b})", file=sys.stderr)
+
         if debug:
-            src_a = "live" if live_rank_a else "hist"
-            src_b = "live" if live_rank_b else "hist"
             print(f"  [h2h] {pa} (#{rank_a} {src_a}, wr={sa.get('win_rate') if pa_hist else None}) vs "
                   f"{pb} (#{rank_b} {src_b}, wr={sb.get('win_rate') if pb_hist else None}) | "
                   f"poly={poly_pa:.1f}/{poly_pb:.1f} | surface={surface}")
