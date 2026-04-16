@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-LSTM Sequential Learner for Tennis Betting Signal System
+LSTM Sequential Learner for Tennis Betting Signal System  (v2 — hardened)
 
 Learns from resolved bet outcomes to improve predictions over time.
-Uses a lightweight GRU/dense neural network that adjusts model probabilities
-based on sequential patterns in recent picks.
+Uses a lightweight dense neural network that predicts RESIDUALS (not raw
+probabilities) based on sequential patterns in recent picks.
 
-The LSTM learner:
-1. Reads resolved picks from picks.jsonl
-2. Builds sequential feature vectors (recent win/loss streaks, edge accuracy, etc.)
-3. Trains a small neural net to predict an adjustment factor
-4. Saves the model for use by 04_betting_card.py
+v2 Safeguards (anti-overfitting):
+  1. Residual prediction — learns (actual - model_prob) minus the running
+     mean, so the target is centred on zero and the model can't just learn
+     the base rate.
+  2. Confidence cap — maximum adjustment clamped to ±5 pp (was ±15 pp).
+  3. Bayesian shrinkage — raw prediction is blended with a prior of 0
+     (no adjustment) using a configurable shrinkage factor (default 0.30).
+  4. Smaller model — (16, 8) hidden layers (~250 params vs ~3 500 before).
+  5. Stronger regularisation — L2 alpha raised from 0.01 → 0.10.
 
-Requirements: scikit-learn (no tensorflow/torch needed — uses sklearn MLPRegressor
-as a lightweight "sequential" learner that captures temporal patterns through
-hand-crafted sequential features)
+Requirements: scikit-learn (no tensorflow/torch needed)
 
 Usage:
     python3 06_lstm_learner.py status      # Show training readiness
@@ -43,6 +45,13 @@ LSTM_META = MODELS_DIR / "lstm_meta.json"
 PICKS_LOG = LOGS_DIR / "picks.jsonl"
 MIN_PICKS = 50
 SEQ_LEN = 20  # Look back 20 picks for sequential features
+
+# ── v2 SAFEGUARD CONSTANTS ──────────────────────────────────────────────────
+CONFIDENCE_CAP = 0.05          # Safeguard 2: max ±5 pp adjustment
+SHRINKAGE_FACTOR = 0.30        # Safeguard 3: only apply 30% of raw prediction
+HIDDEN_LAYERS = (16, 8)        # Safeguard 4: much smaller model
+L2_ALPHA = 0.10                # Safeguard 5: 10× stronger regularisation
+# ────────────────────────────────────────────────────────────────────────────
 
 
 def load_all_picks():
@@ -177,9 +186,17 @@ def build_sequential_features(picks, idx, seq_len=SEQ_LEN):
 
 
 def build_training_data(picks):
-    """Build X, y arrays for training from resolved picks."""
+    """
+    Build X, y arrays for training from resolved picks.
+
+    SAFEGUARD 1 — RESIDUAL PREDICTION:
+    Instead of raw (actual - model_prob), the target is the de-meaned residual:
+        residual_i = (actual_i - model_prob_i) - mean_residual
+    This centres the target on zero so the model can't just learn the base-rate
+    bias.  The mean_residual is stored in metadata and re-applied at inference.
+    """
     X_rows = []
-    y_values = []
+    y_raw = []
     feature_names = None
 
     for i in range(SEQ_LEN, len(picks)):
@@ -192,17 +209,21 @@ def build_training_data(picks):
 
         X_rows.append([features[k] for k in feature_names])
 
-        # Target: adjustment to model probability
-        # Positive if model was underconfident (pick won), negative if overconfident (pick lost)
+        # Raw residual: how far off was the model?
         model_prob = picks[i].get("model_prob", picks[i].get("confidence", 50)) / 100.0
         actual = 1.0 if picks[i]["outcome"] == "win" else 0.0
-        adjustment = actual - model_prob  # How much should we have adjusted?
-        y_values.append(adjustment)
+        y_raw.append(actual - model_prob)
 
     if not X_rows:
-        return None, None, None
+        return None, None, None, 0.0
 
-    return np.array(X_rows), np.array(y_values), feature_names
+    y_raw = np.array(y_raw)
+    mean_residual = float(np.mean(y_raw))
+
+    # SAFEGUARD 1: de-mean so model predicts deviation from the average error
+    y_centred = y_raw - mean_residual
+
+    return np.array(X_rows), y_centred, feature_names, mean_residual
 
 
 def show_status():
@@ -211,7 +232,7 @@ def show_status():
     resolved = load_resolved_picks()
 
     print("\n" + "=" * 60)
-    print("  LSTM SEQUENTIAL LEARNER — STATUS")
+    print("  LSTM SEQUENTIAL LEARNER — STATUS (v2 hardened)")
     print("=" * 60)
     print(f"  Total picks logged:    {len(all_picks)}")
     print(f"  Resolved picks:        {len(resolved)}")
@@ -221,6 +242,13 @@ def show_status():
     ready = len(resolved) >= MIN_PICKS
     print(f"  Ready to train:        {'YES' if ready else f'Need {MIN_PICKS - len(resolved)} more'}")
 
+    print(f"\n  ── v2 Safeguards ──")
+    print(f"  Confidence cap:        ±{CONFIDENCE_CAP*100:.0f} pp")
+    print(f"  Shrinkage factor:      {SHRINKAGE_FACTOR:.0%} (prior = 0)")
+    print(f"  Hidden layers:         {HIDDEN_LAYERS}")
+    print(f"  L2 alpha:              {L2_ALPHA}")
+    print(f"  Target:                de-meaned residuals")
+
     if LSTM_META.exists():
         with open(LSTM_META) as f:
             meta = json.load(f)
@@ -229,6 +257,7 @@ def show_status():
         print(f"  Trained on:            {meta.get('n_picks', 0)} picks")
         print(f"  Validation MAE:        {meta.get('val_mae', 'N/A')}")
         print(f"  Validation RMSE:       {meta.get('val_rmse', 'N/A')}")
+        print(f"  Mean residual:         {meta.get('mean_residual', 'N/A')}")
         print(f"  Feature count:         {meta.get('n_features', 'N/A')}")
 
         new_since = len(resolved) - meta.get("n_picks", 0)
@@ -264,7 +293,7 @@ def show_status():
 
 
 def train_lstm():
-    """Train the sequential learning model."""
+    """Train the sequential learning model with v2 safeguards."""
     picks = load_resolved_picks()
 
     if len(picks) < MIN_PICKS:
@@ -274,18 +303,22 @@ def train_lstm():
         return False
 
     print(f"\n{'='*60}")
-    print(f"  TRAINING LSTM SEQUENTIAL LEARNER")
+    print(f"  TRAINING LSTM SEQUENTIAL LEARNER (v2 hardened)")
     print(f"{'='*60}")
     print(f"  Resolved picks: {len(picks)}")
+    print(f"  Safeguards: residual targets, shrinkage={SHRINKAGE_FACTOR}, "
+          f"cap=±{CONFIDENCE_CAP*100:.0f}pp, layers={HIDDEN_LAYERS}, alpha={L2_ALPHA}")
 
-    # Build training data
-    X, y, feature_names = build_training_data(picks)
+    # Build training data — SAFEGUARD 1: residual prediction
+    X, y, feature_names, mean_residual = build_training_data(picks)
     if X is None or len(X) < 20:
         print(f"  Not enough sequential data to train. Need at least {SEQ_LEN + 20} resolved picks.")
         return False
 
     print(f"  Training samples: {len(X)}")
     print(f"  Features: {len(feature_names)}")
+    print(f"  Mean residual (base-rate bias): {mean_residual:+.4f}")
+    print(f"  Target std (de-meaned):         {np.std(y):.4f}")
 
     # Scale features
     scaler = StandardScaler()
@@ -301,8 +334,9 @@ def train_lstm():
         X_train, X_val = X_scaled[train_idx], X_scaled[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
 
+        # SAFEGUARD 4 & 5: smaller model, stronger regularisation
         model = MLPRegressor(
-            hidden_layer_sizes=(64, 32, 16),
+            hidden_layer_sizes=HIDDEN_LAYERS,
             activation="relu",
             solver="adam",
             max_iter=500,
@@ -311,7 +345,7 @@ def train_lstm():
             n_iter_no_change=20,
             learning_rate="adaptive",
             learning_rate_init=0.001,
-            alpha=0.01,  # L2 regularization
+            alpha=L2_ALPHA,
             random_state=42 + fold,
         )
         model.fit(X_train, y_train)
@@ -321,17 +355,29 @@ def train_lstm():
         rmse = np.sqrt(mean_squared_error(y_val, y_pred))
         val_maes.append(mae)
         val_rmses.append(rmse)
-        print(f"    Fold {fold+1}: MAE={mae:.4f}, RMSE={rmse:.4f}")
+
+        # Check if model beats naive baseline (always predict 0)
+        naive_mae = mean_absolute_error(y_val, np.zeros_like(y_val))
+        lift = (naive_mae - mae) / naive_mae * 100 if naive_mae > 0 else 0
+        print(f"    Fold {fold+1}: MAE={mae:.4f}, RMSE={rmse:.4f}, "
+              f"naive_MAE={naive_mae:.4f}, lift={lift:+.1f}%")
 
     avg_mae = np.mean(val_maes)
     avg_rmse = np.mean(val_rmses)
     print(f"\n  Average MAE:  {avg_mae:.4f}")
     print(f"  Average RMSE: {avg_rmse:.4f}")
 
+    # Warn if model doesn't beat naive baseline
+    naive_baseline_mae = mean_absolute_error(y, np.zeros_like(y))
+    if avg_mae >= naive_baseline_mae * 0.95:
+        print(f"\n  ⚠ WARNING: Model barely beats naive baseline (always 0).")
+        print(f"    naive_MAE={naive_baseline_mae:.4f} vs model_MAE={avg_mae:.4f}")
+        print(f"    Consider: more data, different features, or disabling LSTM adjustments.")
+
     # Train final model on all data
     print(f"\n  Training final model on all {len(X)} samples...")
     final_model = MLPRegressor(
-        hidden_layer_sizes=(64, 32, 16),
+        hidden_layer_sizes=HIDDEN_LAYERS,
         activation="relu",
         solver="adam",
         max_iter=500,
@@ -340,7 +386,7 @@ def train_lstm():
         n_iter_no_change=20,
         learning_rate="adaptive",
         learning_rate_init=0.001,
-        alpha=0.01,
+        alpha=L2_ALPHA,
         random_state=42,
     )
     final_model.fit(X_scaled, y)
@@ -355,7 +401,7 @@ def train_lstm():
         pickle.dump(scaler, f)
 
     meta = {
-        "type": "MLPRegressor-Sequential",
+        "type": "MLPRegressor-Sequential-v2-hardened",
         "trained_at": datetime.utcnow().isoformat(),
         "n_picks": len(picks),
         "n_samples": len(X),
@@ -363,8 +409,13 @@ def train_lstm():
         "feature_names": feature_names,
         "val_mae": round(avg_mae, 4),
         "val_rmse": round(avg_rmse, 4),
-        "hidden_layers": [64, 32, 16],
+        "mean_residual": round(mean_residual, 6),
+        "hidden_layers": list(HIDDEN_LAYERS),
+        "l2_alpha": L2_ALPHA,
+        "confidence_cap": CONFIDENCE_CAP,
+        "shrinkage_factor": SHRINKAGE_FACTOR,
         "seq_len": SEQ_LEN,
+        "naive_baseline_mae": round(naive_baseline_mae, 4),
     }
     with open(LSTM_META, "w") as f:
         json.dump(meta, f, indent=2)
@@ -393,7 +444,12 @@ def train_lstm():
 def predict_adjustment(pick_data, resolved_history):
     """
     Predict the probability adjustment for a new pick.
-    Returns adjustment value (-0.3 to +0.3 range typically).
+
+    v2 pipeline:
+      1. Model predicts de-meaned residual
+      2. Add back mean_residual to get raw adjustment
+      3. Apply Bayesian shrinkage (blend with prior of 0)
+      4. Clip to confidence cap (±5 pp)
     """
     if not LSTM_MODEL.exists() or not LSTM_SCALER.exists() or not LSTM_META.exists():
         return 0.0
@@ -421,10 +477,19 @@ def predict_adjustment(pick_data, resolved_history):
         model = pickle.load(f)
 
     X_scaled = scaler.transform(X)
-    adjustment = model.predict(X_scaled)[0]
+    raw_pred = model.predict(X_scaled)[0]
 
-    # Clip to reasonable range
-    adjustment = np.clip(adjustment, -0.15, 0.15)
+    # SAFEGUARD 1: add back the mean residual
+    mean_residual = meta.get("mean_residual", 0.0)
+    raw_adjustment = raw_pred + mean_residual
+
+    # SAFEGUARD 3: Bayesian shrinkage — blend with prior of 0 (no adjustment)
+    shrinkage = meta.get("shrinkage_factor", SHRINKAGE_FACTOR)
+    shrunk_adjustment = raw_adjustment * shrinkage
+
+    # SAFEGUARD 2: confidence cap
+    cap = meta.get("confidence_cap", CONFIDENCE_CAP)
+    adjustment = float(np.clip(shrunk_adjustment, -cap, cap))
 
     return adjustment
 
@@ -444,10 +509,16 @@ def show_predictions():
         print("\n  No unresolved picks to predict adjustments for.\n")
         return
 
+    with open(LSTM_META) as f:
+        meta = json.load(f)
+
     print(f"\n{'='*60}")
-    print(f"  LSTM PROBABILITY ADJUSTMENTS")
+    print(f"  LSTM PROBABILITY ADJUSTMENTS (v2 hardened)")
     print(f"{'='*60}")
-    print(f"  Based on {len(resolved)} resolved picks\n")
+    print(f"  Based on {len(resolved)} resolved picks")
+    print(f"  Shrinkage: {meta.get('shrinkage_factor', SHRINKAGE_FACTOR):.0%} | "
+          f"Cap: ±{meta.get('confidence_cap', CONFIDENCE_CAP)*100:.0f}pp | "
+          f"Mean residual: {meta.get('mean_residual', 0):+.4f}\n")
 
     for pick in unresolved[-20:]:
         adj = predict_adjustment(pick, resolved)
@@ -456,10 +527,10 @@ def show_predictions():
         adjusted_prob = max(1, min(99, adjusted_prob))
 
         match_name = pick.get("match", "Unknown")[:40]
-        direction = "↑" if adj > 0 else "↓" if adj < 0 else "→"
+        direction = "↑" if adj > 0.001 else "↓" if adj < -0.001 else "→"
         adj_pct = adj * 100
 
-        print(f"  {match_name:42s} {model_prob:5.1f}% {direction} {adjusted_prob:5.1f}%  (adj: {adj_pct:+.1f}%)")
+        print(f"  {match_name:42s} {model_prob:5.1f}% {direction} {adjusted_prob:5.1f}%  (adj: {adj_pct:+.2f}pp)")
 
     print()
 
@@ -477,13 +548,15 @@ def backtest():
     test_picks = picks[split_idx:]
 
     print(f"\n{'='*60}")
-    print(f"  LSTM BACKTEST")
+    print(f"  LSTM BACKTEST (v2 hardened)")
     print(f"{'='*60}")
     print(f"  Train: {len(train_picks)} picks")
-    print(f"  Test:  {len(test_picks)} picks\n")
+    print(f"  Test:  {len(test_picks)} picks")
+    print(f"  Safeguards: shrinkage={SHRINKAGE_FACTOR}, cap=±{CONFIDENCE_CAP*100:.0f}pp, "
+          f"layers={HIDDEN_LAYERS}, alpha={L2_ALPHA}\n")
 
-    # Build training data from train split
-    X_train, y_train, feature_names = build_training_data(train_picks)
+    # Build training data from train split (with residual targets)
+    X_train, y_train, feature_names, mean_residual = build_training_data(train_picks)
     if X_train is None:
         print("  Not enough sequential data in train split.\n")
         return
@@ -492,7 +565,7 @@ def backtest():
     X_train_scaled = scaler.fit_transform(X_train)
 
     model = MLPRegressor(
-        hidden_layer_sizes=(64, 32, 16),
+        hidden_layer_sizes=HIDDEN_LAYERS,
         activation="relu",
         solver="adam",
         max_iter=500,
@@ -501,7 +574,7 @@ def backtest():
         n_iter_no_change=20,
         learning_rate="adaptive",
         learning_rate_init=0.001,
-        alpha=0.01,
+        alpha=L2_ALPHA,
         random_state=42,
     )
     model.fit(X_train_scaled, y_train)
@@ -510,6 +583,9 @@ def backtest():
     correct_base = 0
     correct_adjusted = 0
     total = 0
+    pnl_base = 0.0
+    pnl_adjusted = 0.0
+    adj_magnitudes = []
 
     for i, pick in enumerate(test_picks):
         # Build features using train picks + test picks up to current
@@ -521,12 +597,16 @@ def backtest():
 
         X_test = np.array([[features.get(k, 0) for k in feature_names]])
         X_test_scaled = scaler.transform(X_test)
-        adj = model.predict(X_test_scaled)[0]
-        adj = np.clip(adj, -0.15, 0.15)
+        raw_pred = model.predict(X_test_scaled)[0]
+
+        # Apply v2 safeguards
+        raw_adj = raw_pred + mean_residual
+        shrunk_adj = raw_adj * SHRINKAGE_FACTOR
+        adj = float(np.clip(shrunk_adj, -CONFIDENCE_CAP, CONFIDENCE_CAP))
+        adj_magnitudes.append(abs(adj))
 
         model_prob = pick.get("model_prob", pick.get("confidence", 50)) / 100.0
-        adjusted_prob = model_prob + adj
-        adjusted_prob = max(0.01, min(0.99, adjusted_prob))
+        adjusted_prob = max(0.01, min(0.99, model_prob + adj))
         actual = 1.0 if pick["outcome"] == "win" else 0.0
 
         # Did the adjustment improve the prediction?
@@ -543,11 +623,23 @@ def backtest():
         base_acc = correct_base / total * 100
         adj_acc = correct_adjusted / total * 100
         improvement = adj_acc - base_acc
+        avg_adj = np.mean(adj_magnitudes) * 100
 
         print(f"  Base model accuracy:     {base_acc:.1f}%")
         print(f"  LSTM-adjusted accuracy:  {adj_acc:.1f}%")
-        print(f"  Improvement:             {improvement:+.1f}%")
+        print(f"  Improvement:             {improvement:+.1f}pp")
         print(f"  Picks evaluated:         {total}")
+        print(f"  Avg adjustment magnitude: {avg_adj:.2f}pp")
+        print(f"  Mean residual (train):   {mean_residual:+.4f}")
+
+        if improvement < -1.0:
+            print(f"\n  ⚠ LSTM adjustment HURTS accuracy by {abs(improvement):.1f}pp.")
+            print(f"    Consider disabling LSTM or collecting more data.")
+        elif improvement < 1.0:
+            print(f"\n  → LSTM adjustment is roughly neutral ({improvement:+.1f}pp).")
+            print(f"    Safe to keep active with shrinkage applied.")
+        else:
+            print(f"\n  ✓ LSTM adjustment improves accuracy by {improvement:.1f}pp.")
     else:
         print("  Not enough test data for backtest.")
 
@@ -555,7 +647,7 @@ def backtest():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="LSTM Sequential Learner")
+    parser = argparse.ArgumentParser(description="LSTM Sequential Learner (v2 hardened)")
     parser.add_argument("action", choices=["train", "status", "predict", "backtest"],
                        help="Action: train, status, predict, or backtest")
     args = parser.parse_args()
