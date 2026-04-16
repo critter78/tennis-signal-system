@@ -1282,15 +1282,24 @@ function renderSignals() {
                 </div>
                 <div class="sig-nums">
                     <div class="sig-num"><div class="sn-label">Poly Price</div><div class="sn-val" style="color:#6c757d">${polyP.toFixed(1)}c</div></div>
-                    <div class="sig-num"><div class="sn-label">Base Model</div><div class="sn-val" style="color:#e0e0e0">${(s.base_prob||modelP).toFixed(1)}%</div></div>
+                    <div class="sig-num"><div class="sn-label">Base Model</div><div class="sn-val" style="color:#e0e0e0">${(s.base_prob || (modelP - (s.lstm_adj||0))).toFixed(1)}%</div></div>
                     <div class="sig-num"><div class="sn-label">LSTM Model</div><div class="sn-val" style="color:#90caf9">${modelP.toFixed(1)}%</div></div>
                     <div class="sig-num"><div class="sn-label">Kelly</div><div class="sn-val" style="color:#d4740a">${(s.kelly_stake||0).toFixed(1)}%</div></div>
                 </div>
                 <div class="sig-nums" style="margin-top:4px; padding-top:4px; border-top:1px solid #2d3139">
-                    <div class="sig-num"><div class="sn-label" style="color:#888">Base Edge</div><div class="sn-val" style="color:${(s.base_edge||0) >= 3 ? '#d4740a' : '#6c757d'}">${(s.base_edge||0) >= 0 ? '+' : ''}${(s.base_edge||0).toFixed(1)}%</div></div>
-                    <div class="sig-num"><div class="sn-label" style="color:#888">LSTM Edge</div><div class="sn-val" style="color:${(s.edge||0) >= 3 ? '#42a5f5' : '#6c757d'}">${edgeSign}${(s.edge||0).toFixed(1)}%</div></div>
-                    <div class="sig-num"><div class="sn-label" style="color:#888">LSTM Adj</div><div class="sn-val" style="color:${(s.lstm_adj||0) > 0 ? '#4caf50' : (s.lstm_adj||0) < 0 ? '#f44336' : '#6c757d'}">${(s.lstm_adj||0) >= 0 ? '+' : ''}${(s.lstm_adj||0).toFixed(1)}%</div></div>
-                    <div class="sig-num"><div class="sn-label" style="color:#888">Combined</div><div class="sn-val" style="color:${edgeColor}; font-weight:700">${edgeSign}${(s.edge||0).toFixed(1)}%</div></div>
+                    ${(function(){
+                        // Calculate base edge: if not stored, derive from base_prob - poly_price, or fall back to combined edge
+                        const baseEdge = s.base_edge != null && s.base_edge !== 0 ? s.base_edge : (s.base_prob ? s.base_prob - (s.poly_price || 0) : (s.edge || 0));
+                        const lstmAdj = s.lstm_adj || 0;
+                        const lstmEdge = baseEdge + lstmAdj;
+                        const baseEdgeSign = baseEdge >= 0 ? '+' : '';
+                        const lstmEdgeSign = lstmEdge >= 0 ? '+' : '';
+                        const lstmAdjSign = lstmAdj >= 0 ? '+' : '';
+                        return '<div class="sig-num"><div class="sn-label" style="color:#888">Base Edge</div><div class="sn-val" style="color:' + (baseEdge >= 3 ? '#d4740a' : '#6c757d') + '">' + baseEdgeSign + baseEdge.toFixed(1) + '%</div></div>' +
+                            '<div class="sig-num"><div class="sn-label" style="color:#888">LSTM Edge</div><div class="sn-val" style="color:' + (lstmEdge >= 3 ? '#42a5f5' : '#6c757d') + '">' + lstmEdgeSign + lstmEdge.toFixed(1) + '%</div></div>' +
+                            '<div class="sig-num"><div class="sn-label" style="color:#888">LSTM Adj</div><div class="sn-val" style="color:' + (lstmAdj > 0 ? '#4caf50' : lstmAdj < 0 ? '#f44336' : '#6c757d') + '">' + lstmAdjSign + lstmAdj.toFixed(1) + '%</div></div>' +
+                            '<div class="sig-num"><div class="sn-label" style="color:#888">Combined</div><div class="sn-val" style="color:' + edgeColor + '; font-weight:700">' + edgeSign + (s.edge||0).toFixed(1) + '%</div></div>';
+                    })()}
                 </div>
                 <div class="sig-stats">
                     <div>
