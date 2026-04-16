@@ -317,9 +317,19 @@ def serve_dashboard(is_shared=False, share_expires=None):
                     ".shared-hide { display: none !important; }\n        .sig-bet-btn { display: none !important; }\n        .sig-bet-btn-ORIG {"
                 )
 
-                # Don't inject picks data in shared view (no My Bets data exposed)
-                content = content.replace(f"window.PICKS_DATA = {json.dumps(picks_data, indent=2)};", "window.PICKS_DATA = [];")
-                content = content.replace(f"window.PICKS_DATA = {json.dumps(picks_data, indent=2)}", "window.PICKS_DATA = []")
+                # For shared view: only include today's unresolved signals, strip sensitive fields
+                from datetime import date
+                today_str = date.today().isoformat()
+                shared_picks = []
+                for p in picks_data:
+                    logged = p.get("logged_at", "")
+                    if logged.startswith(today_str):
+                        clean = {k: v for k, v in p.items()
+                                 if k not in ("outcome", "pnl", "actual_winner", "resolved_at", "myOutcome", "myStake", "myOdds")}
+                        shared_picks.append(clean)
+                shared_json = json.dumps(shared_picks, indent=2)
+                content = content.replace(f"window.PICKS_DATA = {json.dumps(picks_data, indent=2)};", f"window.PICKS_DATA = {shared_json};")
+                content = content.replace(f"window.PICKS_DATA = {json.dumps(picks_data, indent=2)}", f"window.PICKS_DATA = {shared_json}")
 
             response = make_response(content)
             response.headers["Content-Type"] = "text/html"
