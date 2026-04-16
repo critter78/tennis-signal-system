@@ -1613,15 +1613,15 @@ def api_refresh():
 
     # Step 2: Generate fresh betting card
     try:
-        logger.info("[2/4] Generating betting card...")
+        logger.info("[2/5] Generating betting card...")
         r = subprocess.run(
-            ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "500"],
+            ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300"],
             cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
         )
         if r.returncode != 0:
-            logger.info("  Card gen failed at $500, trying $300...")
+            logger.info("  Card gen failed at $300, trying $100...")
             r = subprocess.run(
-                ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300"],
+                ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100"],
                 cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
             )
         results["card"] = {

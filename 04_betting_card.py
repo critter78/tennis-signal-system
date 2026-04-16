@@ -2840,7 +2840,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--min-edge",   type=float, default=0.05)
-    parser.add_argument("--min-volume", type=float, default=500)
+    parser.add_argument("--min-volume", type=float, default=300)
     parser.add_argument("--open",       action="store_true",
                         help="Auto-open card in browser after generating")
     parser.add_argument("--debug",      action="store_true",
