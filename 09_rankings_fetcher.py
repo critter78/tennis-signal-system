@@ -317,11 +317,43 @@ def fetch_from_flashscore():
 
 # ─── FALLBACK 4: Sackman GitHub CSVs (reliable, updated weekly) ─────────────
 
+def _fetch_sackman_players(tour):
+    """Fetch player ID → name mapping from Sackman's players CSV."""
+    import csv
+    from io import StringIO
+
+    urls = {
+        "ATP": "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_players.csv",
+        "WTA": "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_players.csv",
+    }
+    url = urls.get(tour)
+    if not url:
+        return {}
+
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=15)
+        r.raise_for_status()
+        reader = csv.DictReader(StringIO(r.text))
+        players = {}
+        for row in reader:
+            pid = row.get("player_id", "").strip()
+            first = row.get("name_first", "").strip()
+            last = row.get("name_last", "").strip()
+            if pid and last:
+                full_name = f"{first} {last}".strip()
+                players[pid] = full_name
+        return players
+    except Exception as e:
+        print(f"    [warn] Sackman players {tour}: {e}")
+        return {}
+
+
 def fetch_from_sackman_github():
     """
     Fetch current rankings from Jeff Sackman's GitHub tennis data.
-    These CSVs are updated regularly and are highly reliable.
-    Format: ranking_date,rank,player_id,player,points
+    Rankings CSV format: ranking_date,rank,player_id,points (NO player names)
+    Players CSV format: player_id,name_first,name_last,hand,dob,ioc,height,wikidata_id
+    We join the two to get rank + player name.
     """
     import csv
     from io import StringIO
@@ -334,46 +366,58 @@ def fetch_from_sackman_github():
 
     for tour, url in sources:
         try:
+            # Step 1: Fetch player ID → name mapping
+            players = _fetch_sackman_players(tour)
+            if not players:
+                print(f"    [warn] Sackman GitHub {tour}: Could not load players file")
+                continue
+
+            # Step 2: Fetch rankings CSV
             r = requests.get(url, headers=HEADERS, timeout=15)
             r.raise_for_status()
             text = r.text
 
             reader = csv.reader(StringIO(text))
-            header = None
             found = 0
 
-            for row in reader:
-                if not header:
-                    # Detect header — could be ranking_date,rank,player_id,player,points
-                    # or just rank,player_id,player,points (no header)
-                    if row and any(h in str(row).lower() for h in ['rank', 'player', 'date']):
-                        header = [c.strip().lower() for c in row]
-                        continue
-                    else:
-                        # No header row — assume format: date, rank, player_id, player, points
-                        header = ['ranking_date', 'rank', 'player_id', 'player', 'points']
+            # Get the latest ranking date (last rows in the file are most recent)
+            rows = list(reader)
 
+            # Detect and skip header if present
+            if rows and any(c.isalpha() for c in rows[0][0]):
+                rows = rows[1:]
+
+            # Find the most recent ranking date
+            if not rows:
+                continue
+
+            latest_date = rows[-1][0] if rows else None
+            if not latest_date:
+                continue
+
+            # Only use rows from the most recent date
+            for row in rows:
                 if len(row) < 4:
+                    continue
+                if row[0] != latest_date:
                     continue
 
                 try:
-                    data = dict(zip(header, row))
-                    rank = int(data.get('rank', 0))
-                    name = data.get('player', '').strip()
+                    rank = int(row[1])
+                    player_id = row[2].strip()
+                    name = players.get(player_id, "")
 
-                    # Some CSVs have no 'player' column — just date,rank,player_id,points
-                    # In that case, skip (we'd need a player ID lookup table)
                     if not name or rank < 1 or rank > 500:
                         continue
 
                     for key in _all_name_keys(name):
                         if key not in rankings:
                             rankings[key] = {"rank": rank, "name": name, "tour": tour}
-                            found += 1
-                except (ValueError, KeyError):
+                    found += 1
+                except (ValueError, IndexError):
                     continue
 
-            print(f"    Sackman GitHub {tour}: {found} rankings")
+            print(f"    Sackman GitHub {tour}: {found} rankings (date: {latest_date})")
 
         except Exception as e:
             print(f"    [warn] Sackman GitHub {tour}: {e}")

@@ -47,8 +47,8 @@ MIN_PICKS = 50
 SEQ_LEN = 20  # Look back 20 picks for sequential features
 
 # ── v2 SAFEGUARD CONSTANTS ──────────────────────────────────────────────────
-CONFIDENCE_CAP = 0.05          # Safeguard 2: max ±5 pp adjustment
-SHRINKAGE_FACTOR = 0.30        # Safeguard 3: only apply 30% of raw prediction
+CONFIDENCE_CAP = 0.08          # Safeguard 2: max ±8 pp adjustment
+SHRINKAGE_FACTOR = 0.60        # Safeguard 3: apply 60% of raw prediction
 HIDDEN_LAYERS = (16, 8)        # Safeguard 4: much smaller model
 L2_ALPHA = 0.10                # Safeguard 5: 10× stronger regularisation
 # ────────────────────────────────────────────────────────────────────────────
@@ -484,12 +484,22 @@ def predict_adjustment(pick_data, resolved_history):
     raw_adjustment = raw_pred + mean_residual
 
     # SAFEGUARD 3: Bayesian shrinkage — blend with prior of 0 (no adjustment)
-    shrinkage = meta.get("shrinkage_factor", SHRINKAGE_FACTOR)
+    # Override saved shrinkage with current (more aggressive) value
+    shrinkage = SHRINKAGE_FACTOR  # Use current constant, not saved meta value
     shrunk_adjustment = raw_adjustment * shrinkage
 
     # SAFEGUARD 2: confidence cap
-    cap = meta.get("confidence_cap", CONFIDENCE_CAP)
+    cap = CONFIDENCE_CAP  # Use current constant, not saved meta value
     adjustment = float(np.clip(shrunk_adjustment, -cap, cap))
+
+    # Debug: print for first call so we can see LSTM is working
+    if not hasattr(predict_adjustment, '_logged'):
+        predict_adjustment._logged = True
+        print(f"  [LSTM] raw_pred={raw_pred:.4f}, mean_res={mean_residual:.4f}, "
+              f"raw_adj={raw_adjustment:.4f}, shrunk={shrunk_adjustment:.4f}, "
+              f"final={adjustment:.4f} ({adjustment*100:+.1f}%)")
+        print(f"  [LSTM] shrinkage={shrinkage}, cap=±{cap*100:.0f}pp, "
+              f"resolved={len(resolved_history)}, features={len(feature_names)}")
 
     return adjustment
 

@@ -1,6 +1,6 @@
 {
   "type": "MLPRegressor-Sequential-v2-hardened",
-  "trained_at": "2026-04-16T18:10:25.281325",
+  "trained_at": "2026-04-16T19:09:24.147805",
   "n_picks": 332,
   "n_samples": 312,
   "n_features": 24,
@@ -38,8 +38,8 @@
     8
   ],
   "l2_alpha": 0.1,
-  "confidence_cap": 0.05,
-  "shrinkage_factor": 0.3,
+  "confidence_cap": 0.08,
+  "shrinkage_factor": 0.6,
   "seq_len": 20,
   "naive_baseline_mae": 0.4352
 }
