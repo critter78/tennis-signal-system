@@ -753,13 +753,25 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
                 rank_now = l_rank_now
 
     rank_30d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=30))
+    rank_90d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=90))
     rank_180d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=180))
     rank_365d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=365))
 
     # Ranking movement: positive = improved (lower rank number), negative = dropped
+    rank_move_90d = None
+    if rank_now and rank_90d:
+        rank_move_90d = rank_90d - rank_now
     rank_move_180d = None
     if rank_now and rank_180d:
-        rank_move_180d = rank_180d - rank_now  # positive = improved
+        rank_move_180d = rank_180d - rank_now
+    rank_move_365d = None
+    if rank_now and rank_365d:
+        rank_move_365d = rank_365d - rank_now
+
+    # ── YTD WINS / LOSSES ──
+    ytd_start = cutoff.replace(month=1, day=1)
+    wins_ytd = int(((wins["date"] >= ytd_start) & (wins["date"] < cutoff)).sum()) if len(wins) > 0 else 0
+    losses_ytd = int(((losses["date"] >= ytd_start) & (losses["date"] < cutoff)).sum()) if len(losses) > 0 else 0
 
     # ── ELO RATING ──
     elo = _compute_elo(df, player, cutoff)
@@ -788,13 +800,19 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
         # Ranking history
         "rank_now":         rank_now,
         "rank_30d":         rank_30d,
+        "rank_90d":         rank_90d,
         "rank_180d":        rank_180d,
         "rank_365d":        rank_365d,
+        "rank_move_90d":    rank_move_90d,
         "rank_move_180d":   rank_move_180d,
+        "rank_move_365d":   rank_move_365d,
         # ELO rating
         "elo":              elo,
         # Psychological momentum (composite 0-100)
         "momentum":         momentum,
+        # YTD record
+        "wins_ytd":         wins_ytd,
+        "losses_ytd":       losses_ytd,
     }
 
 
@@ -1204,6 +1222,8 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "sb_form":      sb.get("l10_form", "—"),
             "sa_rest":      sa.get("days_rest"),
             "sb_rest":      sb.get("days_rest"),
+            "sa_matches_52w": sa.get("matches_52w"),
+            "sb_matches_52w": sb.get("matches_52w"),
             "h2h":          h2,
             "has_edge":     edge >= min_edge,  # POSITIVE edge only (not abs)
             "rank":         rank_a,
@@ -1230,10 +1250,18 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "sb_rank_365d":     sb.get("rank_365d"),
             "sa_rank_move":     sa.get("rank_move_180d"),
             "sb_rank_move":     sb.get("rank_move_180d"),
+            "sa_rank_move_90d": sa.get("rank_move_90d"),
+            "sb_rank_move_90d": sb.get("rank_move_90d"),
+            "sa_rank_move_365d":sa.get("rank_move_365d"),
+            "sb_rank_move_365d":sb.get("rank_move_365d"),
             "sa_elo":           sa.get("elo"),
             "sb_elo":           sb.get("elo"),
             "sa_momentum":      sa.get("momentum"),
             "sb_momentum":      sb.get("momentum"),
+            "sa_wins_ytd":      sa.get("wins_ytd"),
+            "sb_wins_ytd":      sb.get("wins_ytd"),
+            "sa_losses_ytd":    sa.get("losses_ytd"),
+            "sb_losses_ytd":    sb.get("losses_ytd"),
         })
 
     # Sort by positive edge first (true signals), then by abs edge for the rest
@@ -1545,10 +1573,18 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
             "sb_rank_365d":    None,
             "sa_rank_move":    sa.get("rank_move_180d"),
             "sb_rank_move":    None,
+            "sa_rank_move_90d": sa.get("rank_move_90d"),
+            "sb_rank_move_90d": None,
+            "sa_rank_move_365d":sa.get("rank_move_365d"),
+            "sb_rank_move_365d":None,
             "sa_elo":          sa.get("elo"),
             "sb_elo":          None,
             "sa_momentum":     sa.get("momentum"),
             "sb_momentum":     None,
+            "sa_wins_ytd":     sa.get("wins_ytd"),
+            "sb_wins_ytd":     None,
+            "sa_losses_ytd":   sa.get("losses_ytd"),
+            "sb_losses_ytd":   None,
         })
 
     print(f"  → {n_matched} players matched, {n_unmatched} unmatched in historical data")
@@ -1674,8 +1710,12 @@ def generate_signals_data_only(markets_df, df_hist=None, debug=False):
             "sa_rank_180d": None, "sb_rank_180d": None,
             "sa_rank_365d": None, "sb_rank_365d": None,
             "sa_rank_move": None, "sb_rank_move": None,
+            "sa_rank_move_90d": None, "sb_rank_move_90d": None,
+            "sa_rank_move_365d": None, "sb_rank_move_365d": None,
             "sa_elo": None, "sb_elo": None,
             "sa_momentum": None, "sb_momentum": None,
+            "sa_wins_ytd": None, "sb_wins_ytd": None,
+            "sa_losses_ytd": None, "sb_losses_ytd": None,
         })
 
     if debug:
@@ -1904,22 +1944,22 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
                             <div class="adv-col">
                                 <div class="adv-header">{pa}</div>
                                 <div class="stat-row"><span class="stat-label">ELO</span><span class="stat-val">{fmt_elo(s.get('sa_elo'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">Momentum</span><span class="stat-val">{fmt_momentum(s.get('sa_momentum'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">vs Top 10</span><span class="stat-val">{fmt_vs(s.get('sa_vs_top10'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">vs Top 20</span><span class="stat-val">{fmt_vs(s.get('sa_vs_top20'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">vs Top 50</span><span class="stat-val">{fmt_vs(s.get('sa_vs_top50'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">Rank Move (6m)</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">Rank History</span><span class="stat-val rank-hist">{fmt_rank_hist(s.get('sa_rank_now'), s.get('sa_rank_30d'), s.get('sa_rank_180d'), s.get('sa_rank_365d'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank Move 12m</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move_365d'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank Move 6m</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank Move 3m</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move_90d'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">YTD Record</span><span class="stat-val">{s.get('sa_wins_ytd', 0)}W-{s.get('sa_losses_ytd', 0)}L</span></div>
                             </div>
                             <div class="adv-col">
                                 <div class="adv-header">{pb}</div>
                                 <div class="stat-row"><span class="stat-label">ELO</span><span class="stat-val">{fmt_elo(s.get('sb_elo'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">Momentum</span><span class="stat-val">{fmt_momentum(s.get('sb_momentum'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">vs Top 10</span><span class="stat-val">{fmt_vs(s.get('sb_vs_top10'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">vs Top 20</span><span class="stat-val">{fmt_vs(s.get('sb_vs_top20'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">vs Top 50</span><span class="stat-val">{fmt_vs(s.get('sb_vs_top50'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">Rank Move (6m)</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">Rank History</span><span class="stat-val rank-hist">{fmt_rank_hist(s.get('sb_rank_now'), s.get('sb_rank_30d'), s.get('sb_rank_180d'), s.get('sb_rank_365d'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank Move 12m</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move_365d'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank Move 6m</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">Rank Move 3m</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move_90d'))}</span></div>
+                                <div class="stat-row"><span class="stat-label">YTD Record</span><span class="stat-val">{s.get('sb_wins_ytd', 0)}W-{s.get('sb_losses_ytd', 0)}L</span></div>
                             </div>
                         </div>
                     </details>
