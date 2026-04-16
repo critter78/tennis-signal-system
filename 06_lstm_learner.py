@@ -451,7 +451,12 @@ def predict_adjustment(pick_data, resolved_history):
       3. Apply Bayesian shrinkage (blend with prior of 0)
       4. Clip to confidence cap (±5 pp)
     """
+    import sys
     if not LSTM_MODEL.exists() or not LSTM_SCALER.exists() or not LSTM_META.exists():
+        if not hasattr(predict_adjustment, '_miss_logged'):
+            predict_adjustment._miss_logged = True
+            print(f"  [LSTM] Model files missing: model={LSTM_MODEL.exists()}, scaler={LSTM_SCALER.exists()}, meta={LSTM_META.exists()}", file=sys.stderr)
+            print(f"  [LSTM] CWD={Path.cwd()}, model_path={LSTM_MODEL.resolve()}", file=sys.stderr)
         return 0.0
 
     with open(LSTM_META) as f:
@@ -459,6 +464,9 @@ def predict_adjustment(pick_data, resolved_history):
 
     feature_names = meta.get("feature_names", [])
     if not feature_names:
+        if not hasattr(predict_adjustment, '_feat_logged'):
+            predict_adjustment._feat_logged = True
+            print(f"  [LSTM] No feature_names in meta. Meta keys: {list(meta.keys())}", file=sys.stderr)
         return 0.0
 
     # Build the sequential context using resolved history + current pick
@@ -467,6 +475,9 @@ def predict_adjustment(pick_data, resolved_history):
 
     features = build_sequential_features(temp_picks, idx)
     if features is None:
+        if not hasattr(predict_adjustment, '_feat_build_logged'):
+            predict_adjustment._feat_build_logged = True
+            print(f"  [LSTM] build_sequential_features returned None. idx={idx}, len(resolved)={len(resolved_history)}", file=sys.stderr)
         return 0.0
 
     X = np.array([[features.get(k, 0) for k in feature_names]])
@@ -492,14 +503,15 @@ def predict_adjustment(pick_data, resolved_history):
     cap = CONFIDENCE_CAP  # Use current constant, not saved meta value
     adjustment = float(np.clip(shrunk_adjustment, -cap, cap))
 
-    # Debug: print for first call so we can see LSTM is working
+    # Debug: print to STDERR so it appears in Render logs (stdout is captured by subprocess)
+    import sys
     if not hasattr(predict_adjustment, '_logged'):
         predict_adjustment._logged = True
         print(f"  [LSTM] raw_pred={raw_pred:.4f}, mean_res={mean_residual:.4f}, "
               f"raw_adj={raw_adjustment:.4f}, shrunk={shrunk_adjustment:.4f}, "
-              f"final={adjustment:.4f} ({adjustment*100:+.1f}%)")
+              f"final={adjustment:.4f} ({adjustment*100:+.1f}%)", file=sys.stderr)
         print(f"  [LSTM] shrinkage={shrinkage}, cap=±{cap*100:.0f}pp, "
-              f"resolved={len(resolved_history)}, features={len(feature_names)}")
+              f"resolved={len(resolved_history)}, features={len(feature_names)}", file=sys.stderr)
 
     return adjustment
 

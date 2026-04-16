@@ -34,36 +34,55 @@ _live_rankings_cache = None
 
 def _get_live_rankings():
     """Load live rankings cache (lazy, once per run)."""
+    import sys
     global _live_rankings_cache
     if _live_rankings_cache is not None:
         return _live_rankings_cache
     try:
         from importlib import import_module
-        # Try importing the rankings fetcher
         fetcher = import_module("09_rankings_fetcher")
         _live_rankings_cache = fetcher.load_cached_rankings()
         count = _live_rankings_cache.get("count", 0)
+        rankings = _live_rankings_cache.get("rankings", {})
         if count > 0:
-            print(f"  [rankings] Loaded {count} live rankings")
+            # Print sample keys so we can debug name format issues
+            sample_keys = list(rankings.keys())[:5]
+            print(f"  [rankings] Loaded {count} live rankings. Sample keys: {sample_keys}", file=sys.stderr)
         else:
-            print(f"  [rankings] Cache empty, falling back to historical data")
+            print(f"  [rankings] Cache empty, falling back to historical data", file=sys.stderr)
             _live_rankings_cache = {}
     except Exception as e:
-        print(f"  [rankings] Live rankings unavailable ({e}), using historical data")
+        print(f"  [rankings] Live rankings unavailable ({e}), using historical data", file=sys.stderr)
         _live_rankings_cache = {}
     return _live_rankings_cache
 
 
+_rank_debug_count = {"miss": 0, "hit": 0}
+
 def get_live_rank(player_name):
     """Get a player's live world ranking. Returns (rank, tour) or (None, None)."""
+    import sys
     cache = _get_live_rankings()
     if not cache or not cache.get("rankings"):
         return None, None
     try:
         from importlib import import_module
         fetcher = import_module("09_rankings_fetcher")
-        return fetcher.lookup_player_rank(player_name, cache)
-    except Exception:
+        rank, tour = fetcher.lookup_player_rank(player_name, cache)
+        if rank:
+            _rank_debug_count["hit"] += 1
+        else:
+            _rank_debug_count["miss"] += 1
+            # Debug: print first 5 misses to stderr so they appear in Render logs
+            if _rank_debug_count["miss"] <= 5:
+                # Show what keys exist that are close
+                rankings = cache.get("rankings", {})
+                last = player_name.strip().split()[-1].lower() if player_name.strip() else ""
+                close_keys = [k for k in rankings if last in k or k in last][:3]
+                print(f"  [rankings] MISS: '{player_name}' → tried keys, no match. Close: {close_keys}", file=sys.stderr)
+        return rank, tour
+    except Exception as e:
+        print(f"  [rankings] ERROR looking up '{player_name}': {e}", file=sys.stderr)
         return None, None
 CARDS_DIR  = Path("cards")
 CARDS_DIR.mkdir(exist_ok=True)
@@ -1142,6 +1161,7 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         base_model_prob = model_prob
 
         # LSTM adjustment (if trained)
+        import sys
         lstm_adj = 0.0
         try:
             from importlib import import_module
@@ -1163,18 +1183,21 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
                     }
                     lstm_adj = lstm.predict_adjustment(pick_stub, resolved)
                     model_prob = max(0.01, min(0.99, model_prob + lstm_adj))
-                    if debug:
-                        print(f"    LSTM adj: {lstm_adj*100:+.1f}% -> prob={model_prob*100:.1f}%")
+                    if _lstm_log_once.get("first_adj") is None:
+                        _lstm_log_once["first_adj"] = True
+                        print(f"  [LSTM] First adjustment: {lstm_adj*100:+.1f}% (resolved={len(resolved)})", file=sys.stderr)
                 elif _lstm_log_once.get("low_resolved") is None:
                     _lstm_log_once["low_resolved"] = True
-                    print(f"  [LSTM] Only {len(resolved)} resolved picks (need 20+). Skipping LSTM adjustment.")
+                    print(f"  [LSTM] Only {len(resolved)} resolved picks (need 20+). Skipping.", file=sys.stderr)
             elif _lstm_log_once.get("no_model") is None:
                 _lstm_log_once["no_model"] = True
-                print(f"  [LSTM] Model not found at {model_path.resolve()}. Skipping LSTM adjustment.")
+                print(f"  [LSTM] Model not found at {model_path.resolve()}. Skipping.", file=sys.stderr)
         except Exception as e:
             if _lstm_log_once.get("error") is None:
                 _lstm_log_once["error"] = True
-                print(f"  [LSTM] ERROR: {type(e).__name__}: {e}")
+                import traceback
+                print(f"  [LSTM] ERROR: {type(e).__name__}: {e}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
 
         # Calculate edges for BOTH base model and LSTM-adjusted model
         base_edge_a = base_model_prob - poly_pa / 100

@@ -568,7 +568,22 @@ def lookup_player_rank(player_name, cache=None):
             r = rankings[norm]
             return r["rank"], r["tour"]
 
-    # Last name match (most reliable for fuzzy matching)
+    # Direct single-word key match: if Tennis Explorer stored "shelton" (after
+    # stripping initial from "Shelton B."), try matching the last word directly
+    parts = _normalize_name(player_name).split()
+    if len(parts) >= 2:
+        # Try just the last word as a key (e.g., "shelton" from "ben shelton")
+        last_word = parts[-1]
+        if last_word in rankings:
+            r = rankings[last_word]
+            return r["rank"], r["tour"]
+        # Also try just the first word (in case name order is reversed)
+        first_word = parts[0]
+        if first_word in rankings:
+            r = rankings[first_word]
+            return r["rank"], r["tour"]
+
+    # Last name match via index (most reliable for fuzzy matching)
     last = _last_name(player_name)
     if last in lastname_index:
         candidates = lastname_index[last]
@@ -578,7 +593,8 @@ def lookup_player_rank(player_name, cache=None):
             # Multiple players with same last name — try first name
             first = player_name.strip().split()[0].lower() if player_name.strip().split() else ""
             for c in candidates:
-                if first and first in c["name"].lower():
+                # Check if first name appears in stored name (handles "B. Shelton" vs "Ben Shelton")
+                if first and (first in c["name"].lower() or first[0] == c["name"].lower()[0]):
                     return c["rank"], c["tour"]
             # If still ambiguous, return the highest-ranked one
             best = min(candidates, key=lambda x: x["rank"])
