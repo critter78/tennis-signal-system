@@ -28,100 +28,109 @@ CACHE_MAX_AGE_HOURS = 12  # Re-fetch if cache is older than this
 
 
 def fetch_atp_rankings(max_rank=500):
-    """Fetch current ATP singles rankings."""
+    """
+    Fetch current ATP singles rankings from multiple sources.
+    Tries in order: ATP API endpoint, Tennis Explorer, Tennis Abstract.
+    """
     rankings = {}
-
-    # ATP Tour provides a JSON API for rankings
-    url = "https://www.atptour.com/en/rankings/singles"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    try:
-        # Try the API endpoint first (faster, more reliable)
-        api_url = "https://www.atptour.com/en/-/ajax/playersearch/PlayerRankingPosition"
-        r = requests.get(url, headers=headers, timeout=15)
-        r.raise_for_status()
-        html = r.text
+    # ── Source 1: ATP Tour Rankings API (JSON) ──
+    # The ATP site's frontend fetches from this endpoint
+    for api_url in [
+        "https://www.atptour.com/en/-/www/rank/singles",
+        "https://www.atptour.com/-/ajax/RankingsController/GetRankings?rankDate=&countryCode=&rankRange=1-200&rankType=rankSingles",
+    ]:
+        try:
+            r = requests.get(api_url, headers={**headers, "Accept": "application/json,text/html"}, timeout=12)
+            if r.status_code == 200:
+                data = r.json() if r.headers.get("content-type", "").startswith("application/json") else None
+                if not data:
+                    # Try parsing as JSON anyway
+                    try:
+                        data = json.loads(r.text)
+                    except json.JSONDecodeError:
+                        continue
 
-        # Parse rankings from HTML using regex
-        # ATP site renders rankings in a structured format
-        # Look for player name + rank patterns
+                # Handle various response shapes
+                items = data if isinstance(data, list) else data.get("rankings", data.get("data", data.get("Rows", [])))
+                if not isinstance(items, list):
+                    continue
 
-        # Pattern: rank number and player name in the rankings table
-        # The ATP site uses various formats, try multiple patterns
-
-        # Method 1: JSON-LD or structured data
-        json_match = re.search(r'rankingsData\s*=\s*(\[.*?\]);', html, re.DOTALL)
-        if json_match:
-            try:
-                data = json.loads(json_match.group(1))
-                for item in data[:max_rank]:
-                    name = item.get("playerName", "").strip()
-                    rank = item.get("ranking", 0)
+                for item in items[:max_rank]:
+                    # Try various key names used by different ATP API versions
+                    name = (item.get("playerName") or item.get("Player") or item.get("name")
+                            or item.get("fullName") or item.get("PlayerName") or "").strip()
+                    rank = (item.get("ranking") or item.get("Rank") or item.get("rank")
+                            or item.get("sglRank") or item.get("Position") or 0)
                     if name and rank:
                         rankings[_normalize_name(name)] = {
                             "rank": int(rank),
                             "name": name,
                             "tour": "ATP",
                         }
-                if rankings:
+                if len(rankings) >= 50:
+                    print(f"    ATP API returned {len(rankings)} rankings")
                     return rankings
-            except (json.JSONDecodeError, KeyError):
-                pass
+        except Exception as e:
+            print(f"    [debug] ATP API {api_url}: {e}")
 
-        # Method 2: Parse HTML table rows
-        # ATP rankings page has rows with rank, player name, points
-        row_pattern = re.compile(
-            r'<td[^>]*class="[^"]*rank[^"]*"[^>]*>\s*(\d+)\s*</td>'
-            r'.*?'
-            r'<a[^>]*href="/en/players/[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
-            re.DOTALL
-        )
+    # ── Source 2: ATP Tour HTML page (multiple parsing strategies) ──
+    try:
+        r = requests.get("https://www.atptour.com/en/rankings/singles", headers=headers, timeout=15)
+        r.raise_for_status()
+        html = r.text
 
-        for match in row_pattern.finditer(html):
-            rank = int(match.group(1))
-            name = match.group(2).strip()
-            if rank <= max_rank and name:
-                rankings[_normalize_name(name)] = {
-                    "rank": rank,
-                    "name": name,
-                    "tour": "ATP",
-                }
+        # Strategy A: JSON embedded in page (rankingsData, __NEXT_DATA__, etc.)
+        for pattern in [
+            r'rankingsData\s*=\s*(\[.*?\]);',
+            r'__NEXT_DATA__.*?"rankings"\s*:\s*(\[.*?\])',
+            r'"rankingsList"\s*:\s*(\[.*?\])',
+        ]:
+            json_match = re.search(pattern, html, re.DOTALL)
+            if json_match:
+                try:
+                    data = json.loads(json_match.group(1))
+                    for item in data[:max_rank]:
+                        name = (item.get("playerName") or item.get("name") or item.get("fullName") or "").strip()
+                        rank = item.get("ranking") or item.get("rank") or item.get("position") or 0
+                        if name and rank:
+                            rankings[_normalize_name(name)] = {"rank": int(rank), "name": name, "tour": "ATP"}
+                    if rankings:
+                        print(f"    ATP HTML/JSON returned {len(rankings)} rankings")
+                        return rankings
+                except (json.JSONDecodeError, KeyError):
+                    pass
 
-        if rankings:
-            return rankings
-
-        # Method 3: Look for any rank-name pairs in common HTML patterns
-        # Some versions use data attributes
-        data_pattern = re.compile(
-            r'data-rank="(\d+)".*?data-name="([^"]+)"',
-            re.DOTALL
-        )
-        for match in data_pattern.finditer(html):
-            rank = int(match.group(1))
-            name = match.group(2).strip()
-            if rank <= max_rank and name:
-                rankings[_normalize_name(name)] = {
-                    "rank": rank,
-                    "name": name,
-                    "tour": "ATP",
-                }
+        # Strategy B: HTML table parsing (multiple row formats)
+        for row_pattern in [
+            re.compile(r'<td[^>]*class="[^"]*rank[^"]*"[^>]*>\s*(\d+)\s*</td>.*?<a[^>]*href="/en/players/[^"]*"[^>]*>\s*([^<]+?)\s*</a>', re.DOTALL),
+            re.compile(r'class="rank-cell"[^>]*>.*?(\d+).*?</.*?class="player-cell"[^>]*>.*?<a[^>]*>\s*([^<]+?)\s*</a>', re.DOTALL),
+            re.compile(r'"rank"\s*:\s*(\d+).*?"(?:player|name)"\s*:\s*"([^"]+)"', re.DOTALL),
+        ]:
+            for match in row_pattern.finditer(html):
+                rank = int(match.group(1))
+                name = match.group(2).strip()
+                if rank <= max_rank and name and len(name) > 3:
+                    rankings[_normalize_name(name)] = {"rank": rank, "name": name, "tour": "ATP"}
+            if len(rankings) >= 50:
+                print(f"    ATP HTML table returned {len(rankings)} rankings")
+                return rankings
 
     except Exception as e:
-        print(f"  [warn] ATP rankings fetch failed: {e}")
+        print(f"  [warn] ATP HTML fetch failed: {e}")
 
     return rankings
 
 
 def fetch_wta_rankings(max_rank=500):
-    """Fetch current WTA singles rankings."""
+    """Fetch current WTA singles rankings from multiple sources."""
     rankings = {}
-
-    url = "https://www.wtatennis.com/rankings/singles"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
@@ -174,57 +183,102 @@ def fetch_wta_rankings(max_rank=500):
 
 def fetch_rankings_from_tennis_explorer():
     """
-    Fallback: fetch rankings from Tennis Explorer which has a simpler HTML structure.
-    Covers both ATP and WTA.
+    Fetch rankings from Tennis Explorer — server-rendered HTML, very reliable.
+    Fetches multiple pages to get top 500 for both ATP and WTA.
     """
     rankings = {}
 
-    for tour, url in [
+    for tour, base_url in [
         ("ATP", "https://www.tennisexplorer.com/ranking/atp-men/"),
         ("WTA", "https://www.tennisexplorer.com/ranking/wta-women/"),
     ]:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            "Accept": "text/html",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml",
         }
+        # Fetch pages to get top ~500 rankings
+        for page_suffix in ["", "?page=2", "?page=3", "?page=4", "?page=5"]:
+            try:
+                url = base_url + page_suffix
+                r = requests.get(url, headers=headers, timeout=15)
+                r.raise_for_status()
+                html = r.text
+
+                found_on_page = 0
+
+                # Tennis Explorer patterns (multiple attempts)
+                patterns = [
+                    # Primary: rank cell + player link
+                    re.compile(
+                        r'<td[^>]*class="[^"]*rank[^"]*"[^>]*>\s*(\d+)\.?\s*</td>'
+                        r'.*?<a[^>]*href="/player/[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
+                        re.DOTALL
+                    ),
+                    # Alt: simpler table structure
+                    re.compile(
+                        r'<td[^>]*>\s*(\d{1,4})\.?\s*</td>\s*<td[^>]*>.*?'
+                        r'<a[^>]*href="/player/[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
+                        re.DOTALL
+                    ),
+                    # Alt: even simpler
+                    re.compile(r'>(\d{1,3})\.\s*</.*?<a[^>]*href="/player/[^"]*"[^>]*>([^<]{3,40})</a>', re.DOTALL),
+                ]
+
+                for pattern in patterns:
+                    for match in pattern.finditer(html):
+                        rank = int(match.group(1))
+                        name = match.group(2).strip()
+                        if name and rank <= 500 and len(name) > 2:
+                            key = _normalize_name(name)
+                            if key not in rankings:
+                                rankings[key] = {"rank": rank, "name": name, "tour": tour}
+                                found_on_page += 1
+                    if found_on_page > 10:
+                        break  # Good pattern found
+
+                if found_on_page == 0 and page_suffix:
+                    break  # No more pages
+
+            except Exception as e:
+                print(f"  [warn] Tennis Explorer {tour} page {page_suffix or '1'}: {e}")
+                break
+
+            time.sleep(0.5)  # Be polite
+
+        tour_count = sum(1 for v in rankings.values() if v["tour"] == tour)
+        print(f"    Tennis Explorer {tour}: {tour_count} rankings")
+
+    return rankings
+
+
+def fetch_rankings_from_livesport():
+    """
+    Fallback 2: fetch from flashscore/livesport which has a clean API.
+    """
+    rankings = {}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html",
+        "x-fsign": "SW9D1eZo",
+    }
+
+    for tour, url in [
+        ("ATP", "https://www.flashscore.com/tennis/atp-singles/rankings/"),
+        ("WTA", "https://www.flashscore.com/tennis/wta-singles/rankings/"),
+    ]:
         try:
-            r = requests.get(url, headers=headers, timeout=15)
-            r.raise_for_status()
-            html = r.text
-
-            # Tennis Explorer uses a simple table with rank and name
-            pattern = re.compile(
-                r'<td class="[^"]*rank[^"]*"[^>]*>\s*(\d+)\.?\s*</td>'
-                r'.*?<a[^>]*href="/player/[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
-                re.DOTALL
-            )
-            for match in pattern.finditer(html):
-                rank = int(match.group(1))
-                name = match.group(2).strip()
-                if name and rank <= 500:
-                    rankings[_normalize_name(name)] = {
-                        "rank": rank,
-                        "name": name,
-                        "tour": tour,
-                    }
-
-            # Also try simpler pattern
-            if not any(v["tour"] == tour for v in rankings.values()):
-                simple_pattern = re.compile(r'>(\d{1,3})\.</.*?<a[^>]*>([^<]{3,30})</a>', re.DOTALL)
-                for match in simple_pattern.finditer(html):
+            r = requests.get(url, headers=headers, timeout=12)
+            if r.status_code == 200:
+                html = r.text
+                # Flashscore embeds data in a specific format
+                pattern = re.compile(r'"rank"\s*:\s*(\d+).*?"name"\s*:\s*"([^"]+)"', re.DOTALL)
+                for match in pattern.finditer(html):
                     rank = int(match.group(1))
                     name = match.group(2).strip()
                     if name and rank <= 500:
-                        rankings[_normalize_name(name)] = {
-                            "rank": rank,
-                            "name": name,
-                            "tour": tour,
-                        }
-
+                        rankings[_normalize_name(name)] = {"rank": rank, "name": name, "tour": tour}
         except Exception as e:
-            print(f"  [warn] Tennis Explorer {tour} fetch failed: {e}")
-
-        time.sleep(1)  # Be polite
+            print(f"  [warn] Livesport {tour}: {e}")
 
     return rankings
 
@@ -254,31 +308,44 @@ def fetch_and_cache_rankings():
     print("  Fetching live rankings...")
     all_rankings = {}
 
-    # Try primary sources first
-    print("  [1/3] Fetching ATP rankings...")
+    # Try primary sources first (ATP/WTA official sites)
+    print("  [1/4] Fetching ATP rankings from official sources...")
     atp = fetch_atp_rankings()
     if atp:
         all_rankings.update(atp)
         print(f"    Got {len(atp)} ATP rankings")
 
-    print("  [2/3] Fetching WTA rankings...")
+    print("  [2/4] Fetching WTA rankings from official sources...")
     wta = fetch_wta_rankings()
     if wta:
         all_rankings.update(wta)
         print(f"    Got {len(wta)} WTA rankings")
 
-    # Fallback if primary sources failed
-    if len(all_rankings) < 50:
-        print("  [3/3] Primary sources insufficient, trying Tennis Explorer fallback...")
+    # Tennis Explorer is very reliable (server-rendered) — always use as primary/supplement
+    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
+    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
+
+    if atp_count < 100 or wta_count < 100:
+        print(f"  [3/4] Official sources: ATP={atp_count}, WTA={wta_count} — supplementing with Tennis Explorer...")
         te = fetch_rankings_from_tennis_explorer()
         if te:
-            # Only add players we don't already have
             for key, val in te.items():
                 if key not in all_rankings:
                     all_rankings[key] = val
-            print(f"    Got {len(te)} rankings from Tennis Explorer")
+            print(f"    Tennis Explorer added {len(te)} total rankings")
     else:
-        print("  [3/3] Sufficient rankings fetched, skipping fallback")
+        print(f"  [3/4] Official sources sufficient (ATP={atp_count}, WTA={wta_count})")
+
+    # Final fallback
+    if len(all_rankings) < 50:
+        print("  [4/4] Still insufficient, trying Livesport fallback...")
+        ls = fetch_rankings_from_livesport()
+        if ls:
+            for key, val in ls.items():
+                if key not in all_rankings:
+                    all_rankings[key] = val
+    else:
+        print(f"  [4/4] Total rankings: {len(all_rankings)}, no further fallback needed")
 
     # Build a last-name index for fuzzy matching
     lastname_index = {}

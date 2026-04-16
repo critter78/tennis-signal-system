@@ -257,7 +257,7 @@ def serve_dashboard(is_shared=False, share_expires=None):
             else:
                 content = content.replace("window.PICKS_DATA = []", f"window.PICKS_DATA = {picks_json}")
 
-            # For shared views: hide bet buttons and admin features, show expiry banner
+            # For shared views: only show Today's Signals, hide everything else
             if is_shared and share_expires:
                 expiry_banner = f"""
                 <div id="shareBanner" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#e65100;color:white;text-align:center;padding:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">
@@ -279,6 +279,31 @@ def serve_dashboard(is_shared=False, share_expires=None):
                     }}
                     update();
                     setInterval(update, 1000);
+
+                    // Hide all tabs except Today's Signals
+                    document.querySelectorAll('.tab').forEach(function(tab) {{
+                        if (!tab.textContent.includes("Today")) tab.style.display = 'none';
+                    }});
+                    // Hide non-signal panels
+                    ['panel-overview','panel-mybets','panel-performance','panel-accuracy'].forEach(function(id) {{
+                        var el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    }});
+                    // Hide admin/logout links
+                    document.querySelectorAll('a[href*="admin"], a[href*="logout"]').forEach(function(a) {{
+                        a.style.display = 'none';
+                    }});
+                    // Hide LSTM progress section if visible
+                    var lstm = document.getElementById('lstmProgress');
+                    if (lstm) lstm.style.display = 'none';
+                    var lstmI = document.getElementById('lstmInsights');
+                    if (lstmI) lstmI.style.display = 'none';
+                    // Disable tab switching to hidden panels
+                    window._origSwitchTab = window.switchTab;
+                    window.switchTab = function(name) {{
+                        if (name !== 'signals') return;
+                        if (window._origSwitchTab) window._origSwitchTab(name);
+                    }};
                 }})();
                 </script>
                 """
@@ -286,11 +311,15 @@ def serve_dashboard(is_shared=False, share_expires=None):
                 content = content.replace("<body>", f"<body>\n{expiry_banner}\n<div style='margin-top:40px'>", 1)
                 content = content.replace("</body>", "</div>\n</body>", 1)
 
-                # Hide Place Bet buttons in shared view
+                # Hide Place Bet buttons and other sensitive elements in shared view
                 content = content.replace(
                     ".sig-bet-btn {",
-                    ".shared-hide { display: none !important; }\n        .sig-bet-btn {"
+                    ".shared-hide { display: none !important; }\n        .sig-bet-btn { display: none !important; }\n        .sig-bet-btn-ORIG {"
                 )
+
+                # Don't inject picks data in shared view (no My Bets data exposed)
+                content = content.replace(f"window.PICKS_DATA = {json.dumps(picks_data, indent=2)};", "window.PICKS_DATA = [];")
+                content = content.replace(f"window.PICKS_DATA = {json.dumps(picks_data, indent=2)}", "window.PICKS_DATA = []")
 
             response = make_response(content)
             response.headers["Content-Type"] = "text/html"
