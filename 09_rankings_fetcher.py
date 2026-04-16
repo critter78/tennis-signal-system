@@ -434,7 +434,7 @@ def fetch_and_cache_rankings():
     print("  Fetching live rankings...")
     all_rankings = {}
 
-    # ── Step 1: PRIMARY — live-tennis.eu (most accurate, server-rendered) ──
+    # ── Step 1: PRIMARY — live-tennis.eu (most accurate, real-time) ──
     print("  [1/5] Primary: live-tennis.eu...")
     lt = fetch_from_live_tennis()
     if lt:
@@ -443,42 +443,29 @@ def fetch_and_cache_rankings():
     atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
     wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
 
-    # ── Step 2: Sackman GitHub CSVs (reliable, updated regularly) ──
+    # ── Step 2: Tennis Explorer (current data, reliable scraping) ──
     if atp_count < 50 or wta_count < 50:
-        print(f"  [2/5] Sackman GitHub (ATP={atp_count}, WTA={wta_count})...")
-        sg = fetch_from_sackman_github()
-        for key, val in sg.items():
-            if key not in all_rankings:
-                all_rankings[key] = val
-    else:
-        print(f"  [2/5] Skipped Sackman GitHub (ATP={atp_count}, WTA={wta_count} sufficient)")
-
-    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
-    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
-
-    # ── Step 3: FALLBACK — Tennis Explorer (if still need more) ──
-    if atp_count < 50 or wta_count < 50:
-        print(f"  [3/5] Fallback: Tennis Explorer (ATP={atp_count}, WTA={wta_count})...")
+        print(f"  [2/5] Tennis Explorer (ATP={atp_count}, WTA={wta_count})...")
         te = fetch_from_tennis_explorer()
         for key, val in te.items():
             if key not in all_rankings:
                 all_rankings[key] = val
     else:
-        print(f"  [3/5] Skipped Tennis Explorer (ATP={atp_count}, WTA={wta_count} sufficient)")
+        print(f"  [2/5] Skipped Tennis Explorer (ATP={atp_count}, WTA={wta_count} sufficient)")
 
     atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
     wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
 
-    # ── Step 4: FALLBACK — ATP/WTA official APIs ──
+    # ── Step 3: ATP/WTA official APIs ──
     if atp_count < 50:
-        print(f"  [4/5] Fallback: ATP official API...")
+        print(f"  [3/5] Fallback: ATP official API...")
         atp_off = fetch_atp_rankings()
         for key, val in atp_off.items():
             if key not in all_rankings:
                 all_rankings[key] = val
 
     if wta_count < 50:
-        print(f"  [4/5] Fallback: WTA official API...")
+        print(f"  [3/5] Fallback: WTA official API...")
         wta_off = fetch_wta_rankings()
         for key, val in wta_off.items():
             if key not in all_rankings:
@@ -487,15 +474,28 @@ def fetch_and_cache_rankings():
     atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
     wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
 
-    # ── Step 5: FALLBACK — Flashscore ──
+    # ── Step 4: FALLBACK — Flashscore ──
     if atp_count < 30 or wta_count < 30:
-        print(f"  [5/5] Fallback: Flashscore...")
+        print(f"  [4/5] Fallback: Flashscore...")
         fs = fetch_from_flashscore()
         for key, val in fs.items():
             if key not in all_rankings:
                 all_rankings[key] = val
     else:
-        print(f"  [5/5] Skipped Flashscore (ATP={atp_count}, WTA={wta_count} sufficient)")
+        print(f"  [4/5] Skipped Flashscore (ATP={atp_count}, WTA={wta_count} sufficient)")
+
+    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
+    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
+
+    # ── Step 5: LAST RESORT — Sackman GitHub (can be stale, use only to fill gaps) ──
+    if atp_count < 30 or wta_count < 30:
+        print(f"  [5/5] Last resort: Sackman GitHub (ATP={atp_count}, WTA={wta_count})...")
+        sg = fetch_from_sackman_github()
+        for key, val in sg.items():
+            if key not in all_rankings:
+                all_rankings[key] = val
+    else:
+        print(f"  [5/5] Skipped Sackman GitHub (ATP={atp_count}, WTA={wta_count} sufficient)")
 
     atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
     wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")

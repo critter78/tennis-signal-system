@@ -395,10 +395,10 @@ def train_lstm():
     MODELS_DIR.mkdir(exist_ok=True)
 
     with open(LSTM_MODEL, "wb") as f:
-        pickle.dump(final_model, f)
+        pickle.dump(final_model, f, protocol=4)  # protocol 4 for Python 3.8+ compat
 
     with open(LSTM_SCALER, "wb") as f:
-        pickle.dump(scaler, f)
+        pickle.dump(scaler, f, protocol=4)  # protocol 4 for Python 3.8+ compat
 
     meta = {
         "type": "MLPRegressor-Sequential-v2-hardened",
