@@ -1120,35 +1120,59 @@ def enrich_bets_with_trades(bets, trades):
             bet["trade_ids"] = [t.get("transactionHash", "")[:12] for t in matching_trades[:5]]
 
             # Calculate trade P&L
-            if sell_shares > 0:
-                # Cost basis of sold shares (proportional)
+            outcome = bet.get("outcome")
+
+            if sell_shares > 0 and shares_held > 0.01 and outcome:
+                # Partially sold AND market is resolved — calculate FULL P&L
+                # Total value = sell proceeds + settlement value of remaining shares
+                if outcome == "win":
+                    settle_value = shares_held * 1.0  # remaining shares worth $1 each
+                elif outcome == "void":
+                    settle_value = buy_usdc / buy_shares * shares_held if buy_shares > 0 else 0  # refund
+                else:
+                    settle_value = 0.0  # loss — remaining shares worth $0
+
+                total_value = sell_usdc + settle_value
+                total_pnl = total_value - buy_usdc
+                trade_return = (total_pnl / buy_usdc) if buy_usdc > 0 else 0
+
+                bet["trade_pnl"] = round(total_pnl, 2)
+                bet["trade_return"] = round(trade_return * 100, 1)
+                if outcome == "void":
+                    bet["trade_result"] = "void"
+                else:
+                    bet["trade_result"] = "win" if trade_return >= TRADE_WIN_THRESHOLD else "loss"
+
+            elif sell_shares > 0 and shares_held <= 0.01:
+                # Fully closed out — all shares sold before settlement
                 cost_of_sold = (buy_usdc / buy_shares * sell_shares) if buy_shares > 0 else 0
                 realized_pnl = sell_usdc - cost_of_sold
                 trade_return = (realized_pnl / cost_of_sold) if cost_of_sold > 0 else 0
 
                 bet["trade_pnl"] = round(realized_pnl, 2)
-                bet["trade_return"] = round(trade_return * 100, 1)  # percentage
+                bet["trade_return"] = round(trade_return * 100, 1)
+                bet["trade_result"] = "win" if trade_return >= TRADE_WIN_THRESHOLD else "loss"
 
-                # If fully closed out (no shares held), determine trade result
-                if shares_held <= 0.01:
-                    bet["trade_result"] = "win" if trade_return >= TRADE_WIN_THRESHOLD else "loss"
-                else:
-                    # Partially sold — still open but show realized so far
-                    bet["trade_result"] = "partial"
+            elif sell_shares > 0 and shares_held > 0.01 and not outcome:
+                # Partially sold, market still open — show realized so far
+                cost_of_sold = (buy_usdc / buy_shares * sell_shares) if buy_shares > 0 else 0
+                realized_pnl = sell_usdc - cost_of_sold
+                trade_return = (realized_pnl / cost_of_sold) if cost_of_sold > 0 else 0
+
+                bet["trade_pnl"] = round(realized_pnl, 2)
+                bet["trade_return"] = round(trade_return * 100, 1)
+                bet["trade_result"] = "partial"
+
             elif shares_held > 0.01:
-                # Still holding, check if market resolved
-                outcome = bet.get("outcome")
+                # Never sold anything — check if market resolved
                 if outcome == "win":
-                    # Shares worth $1 each → total value = shares_held * 1.0
                     settle_value = shares_held * 1.0
-                    cost_basis = buy_usdc
-                    realized_pnl = settle_value - cost_basis
-                    trade_return = (realized_pnl / cost_basis) if cost_basis > 0 else 0
+                    realized_pnl = settle_value - buy_usdc
+                    trade_return = (realized_pnl / buy_usdc) if buy_usdc > 0 else 0
                     bet["trade_pnl"] = round(realized_pnl, 2)
                     bet["trade_return"] = round(trade_return * 100, 1)
                     bet["trade_result"] = "win" if trade_return >= TRADE_WIN_THRESHOLD else "loss"
                 elif outcome == "loss":
-                    # Shares worth $0
                     bet["trade_pnl"] = round(-buy_usdc, 2)
                     bet["trade_return"] = -100.0
                     bet["trade_result"] = "loss"
@@ -1157,7 +1181,6 @@ def enrich_bets_with_trades(bets, trades):
                     bet["trade_return"] = 0.0
                     bet["trade_result"] = "void"
                 else:
-                    # Market still open
                     bet["trade_result"] = "open"
                     bet["trade_pnl"] = None
                     bet["trade_return"] = None
