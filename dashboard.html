@@ -1436,7 +1436,7 @@ function renderSignals() {
                         if (isNaN(a) || isNaN(b)) return '';
                         const diff = higherIsBetter ? (a - b) : (b - a);
                         if (diff <= 0.5) return '';
-                        return '<span style="color:#ffd740; font-size:8px; margin-left:3px">(+' + Math.abs(diff).toFixed(1) + (suffix||'') + ')</span>';
+                        return '<span style="color:#ffd740; font-size:10px; margin-left:3px">(+' + Math.abs(diff).toFixed(1) + (suffix||'') + ')</span>';
                     };
                     const deltaB = (valA, valB, higherIsBetter, suffix) => {
                         if (!bIsBet) return ''; // Only show on bet player
@@ -1445,12 +1445,12 @@ function renderSignals() {
                         if (isNaN(a) || isNaN(b)) return '';
                         const diff = higherIsBetter ? (b - a) : (a - b);
                         if (diff <= 0.5) return '';
-                        return '<span style="color:#ffd740; font-size:8px; margin-left:3px">(+' + Math.abs(diff).toFixed(1) + (suffix||'') + ')</span>';
+                        return '<span style="color:#ffd740; font-size:10px; margin-left:3px">(+' + Math.abs(diff).toFixed(1) + (suffix||'') + ')</span>';
                     };
                     // Rank advantage — only on betOn player
                     const rankA = s.rank_a, rankB = s.rank_b;
-                    const rankDeltaA = (aIsBet && rankA && rankB && rankA < rankB) ? '<span style="color:#ffd740; font-size:8px; margin-left:3px">(' + Math.round((rankB - rankA) / rankB * 100) + '% higher)</span>' : '';
-                    const rankDeltaB = (bIsBet && rankA && rankB && rankB < rankA) ? '<span style="color:#ffd740; font-size:8px; margin-left:3px">(' + Math.round((rankA - rankB) / rankA * 100) + '% higher)</span>' : '';
+                    const rankDeltaA = (aIsBet && rankA && rankB && rankA < rankB) ? '<span style="color:#ffd740; font-size:10px; margin-left:3px">(' + Math.round((rankB - rankA) / rankB * 100) + '% higher)</span>' : '';
+                    const rankDeltaB = (bIsBet && rankA && rankB && rankB < rankA) ? '<span style="color:#ffd740; font-size:10px; margin-left:3px">(' + Math.round((rankA - rankB) / rankA * 100) + '% higher)</span>' : '';
                     // Form as number (e.g. "7/10" -> 7)
                     const formNumA = formA.includes('/') ? parseInt(formA) : null;
                     const formNumB = formB.includes('/') ? parseInt(formB) : null;
@@ -1498,14 +1498,14 @@ function renderSignals() {
                         if (a == null || b == null) return '';
                         const diff = higher ? (a - b) : (b - a);
                         if (diff <= 0.5) return '';
-                        return ' <span style="color:#ffd740; font-size:8px">(+' + Math.round(diff) + ')</span>';
+                        return ' <span style="color:#ffd740; font-size:10px">(+' + Math.round(diff) + ')</span>';
                     };
                     const advDeltaB = (a, b, higher) => {
                         if (!bIsBetAdv) return '';
                         if (a == null || b == null) return '';
                         const diff = higher ? (a - b) : (b - a);
                         if (diff <= 0.5) return '';
-                        return ' <span style="color:#ffd740; font-size:8px">(+' + Math.round(diff) + ')</span>';
+                        return ' <span style="color:#ffd740; font-size:10px">(+' + Math.round(diff) + ')</span>';
                     };
                     const vsRecordDeltaA = (va, vb) => {
                         if (!aIsBetAdv) return '';
@@ -1514,7 +1514,7 @@ function renderSignals() {
                         const pctB = (vb.w + vb.l) > 0 ? vb.w / (vb.w + vb.l) * 100 : 0;
                         const diff = pctA - pctB;
                         if (diff <= 1) return '';
-                        return ' <span style="color:#ffd740; font-size:8px">(+' + Math.round(diff) + '%)</span>';
+                        return ' <span style="color:#ffd740; font-size:10px">(+' + Math.round(diff) + '%)</span>';
                     };
                     const vsRecordDeltaB = (va, vb) => {
                         if (!bIsBetAdv) return '';
@@ -1523,7 +1523,7 @@ function renderSignals() {
                         const pctB = (vb.w + vb.l) > 0 ? vb.w / (vb.w + vb.l) * 100 : 0;
                         const diff = pctA - pctB;
                         if (diff <= 1) return '';
-                        return ' <span style="color:#ffd740; font-size:8px">(+' + Math.round(diff) + '%)</span>';
+                        return ' <span style="color:#ffd740; font-size:10px">(+' + Math.round(diff) + '%)</span>';
                     };
                     const hasData = s.sa_elo || s.sb_elo || s.sa_vs_top10 || s.sb_vs_top10;
                     if (!hasData) return '';
