@@ -1030,8 +1030,14 @@ def fetch_poly_trades(since_ts=None):
 
 
 def match_trade_to_bet(trade, bet):
-    """Check if a Polymarket trade matches a user's bet selection."""
-    # Compare by market title/slug containing player names
+    """Check if a Polymarket trade matches a user's bet selection.
+
+    Matches ALL trades (BUY and SELL) for the player the user bet on.
+    - BUY on our player = opening position
+    - SELL on our player = closing position (taking profit or cutting loss)
+    - BUY on opponent = effectively shorting our player (rare, ignore for now)
+    - SELL on opponent = effectively longing our player (rare, ignore for now)
+    """
     trade_title = (trade.get("title", "") or trade.get("name", "")).lower()
     trade_slug = (trade.get("eventSlug", "") or trade.get("slug", "")).lower()
     trade_outcome = (trade.get("outcome", "") or "").lower()
@@ -1054,19 +1060,10 @@ def match_trade_to_bet(trade, bet):
     if not title_match and not slug_match:
         return False
 
-    # Check if the trade is for the same player we bet on
-    # Polymarket trades have an "outcome" field (player name) and "side" (BUY/SELL)
-    trade_side = trade.get("side", "BUY")
-    if trade_side == "BUY":
-        # Buying YES on this outcome = betting on this player
-        outcome_last = trade_outcome.strip().split()[-1].lower() if trade_outcome else ""
-        if outcome_last == bet_on_last or bet_on_last in trade_outcome:
-            return True
-    elif trade_side == "SELL":
-        # Selling YES on the other player = also effectively betting on our player
-        outcome_last = trade_outcome.strip().split()[-1].lower() if trade_outcome else ""
-        if outcome_last != bet_on_last and (outcome_last == a_last or outcome_last == b_last):
-            return True
+    # Match trades on OUR player (both buys and sells)
+    outcome_last = trade_outcome.strip().split()[-1].lower() if trade_outcome else ""
+    if outcome_last == bet_on_last or bet_on_last in trade_outcome:
+        return True
 
     return False
 
@@ -1074,11 +1071,18 @@ def match_trade_to_bet(trade, bet):
 def enrich_bets_with_trades(bets, trades):
     """Match user bets with actual Polymarket trade data.
 
-    For each bet, find matching trades and aggregate:
-    - actual_buy_price (weighted avg price in cents)
-    - actual_stake (total USDC spent)
-    - actual_shares (total shares bought)
+    Tracks BOTH buys and sells to compute real trade P&L:
+    - actual_buy_price (weighted avg buy price in cents)
+    - actual_sell_price (weighted avg sell price in cents, 0 if no sells)
+    - actual_stake (total USDC spent buying)
+    - actual_sell_total (total USDC received from sells)
+    - actual_shares_bought / actual_shares_sold / shares_held
+    - trade_pnl (realized: sell proceeds - cost basis of sold shares)
+    - trade_return (% return on cost basis)
+    - trade_result: "win" if return >= 10%, "loss" if < 10%, "open" if still holding
     """
+    TRADE_WIN_THRESHOLD = 0.10  # 10% profit = trade win
+
     enriched = []
     for bet in bets:
         matching_trades = []
@@ -1087,22 +1091,81 @@ def enrich_bets_with_trades(bets, trades):
                 matching_trades.append(trade)
 
         if matching_trades:
-            # Aggregate: sum up all matching BUY trades
-            total_usdc = 0
-            total_shares = 0
-            for t in matching_trades:
-                usdc = float(t.get("usdcSize", 0) or t.get("cash", 0) or 0)
-                shares = float(t.get("size", 0) or t.get("tokens", 0) or 0)
-                total_usdc += usdc
-                total_shares += shares
+            # Separate buys and sells
+            buys = [t for t in matching_trades if t.get("side", "BUY") == "BUY"]
+            sells = [t for t in matching_trades if t.get("side") == "SELL"]
 
-            avg_price = (total_usdc / total_shares * 100) if total_shares > 0 else 0
+            # Aggregate buys
+            buy_usdc = sum(float(t.get("usdcSize", 0) or 0) for t in buys)
+            buy_shares = sum(float(t.get("size", 0) or 0) for t in buys)
+            avg_buy = (buy_usdc / buy_shares * 100) if buy_shares > 0 else 0
 
-            bet["actual_buy_price"] = round(avg_price, 1)   # cents
-            bet["actual_stake"] = round(total_usdc, 2)       # USDC
-            bet["actual_shares"] = round(total_shares, 2)
+            # Aggregate sells
+            sell_usdc = sum(float(t.get("usdcSize", 0) or 0) for t in sells)
+            sell_shares = sum(float(t.get("size", 0) or 0) for t in sells)
+            avg_sell = (sell_usdc / sell_shares * 100) if sell_shares > 0 else 0
+
+            shares_held = round(buy_shares - sell_shares, 4)
+
+            bet["actual_buy_price"] = round(avg_buy, 1)
+            bet["actual_sell_price"] = round(avg_sell, 1)
+            bet["actual_stake"] = round(buy_usdc, 2)
+            bet["actual_sell_total"] = round(sell_usdc, 2)
+            bet["actual_shares"] = round(buy_shares, 2)
+            bet["actual_shares_sold"] = round(sell_shares, 2)
+            bet["shares_held"] = round(shares_held, 2)
             bet["trade_count"] = len(matching_trades)
+            bet["buy_count"] = len(buys)
+            bet["sell_count"] = len(sells)
             bet["trade_ids"] = [t.get("transactionHash", "")[:12] for t in matching_trades[:5]]
+
+            # Calculate trade P&L
+            if sell_shares > 0:
+                # Cost basis of sold shares (proportional)
+                cost_of_sold = (buy_usdc / buy_shares * sell_shares) if buy_shares > 0 else 0
+                realized_pnl = sell_usdc - cost_of_sold
+                trade_return = (realized_pnl / cost_of_sold) if cost_of_sold > 0 else 0
+
+                bet["trade_pnl"] = round(realized_pnl, 2)
+                bet["trade_return"] = round(trade_return * 100, 1)  # percentage
+
+                # If fully closed out (no shares held), determine trade result
+                if shares_held <= 0.01:
+                    bet["trade_result"] = "win" if trade_return >= TRADE_WIN_THRESHOLD else "loss"
+                else:
+                    # Partially sold — still open but show realized so far
+                    bet["trade_result"] = "partial"
+            elif shares_held > 0.01:
+                # Still holding, check if market resolved
+                outcome = bet.get("outcome")
+                if outcome == "win":
+                    # Shares worth $1 each → total value = shares_held * 1.0
+                    settle_value = shares_held * 1.0
+                    cost_basis = buy_usdc
+                    realized_pnl = settle_value - cost_basis
+                    trade_return = (realized_pnl / cost_basis) if cost_basis > 0 else 0
+                    bet["trade_pnl"] = round(realized_pnl, 2)
+                    bet["trade_return"] = round(trade_return * 100, 1)
+                    bet["trade_result"] = "win" if trade_return >= TRADE_WIN_THRESHOLD else "loss"
+                elif outcome == "loss":
+                    # Shares worth $0
+                    bet["trade_pnl"] = round(-buy_usdc, 2)
+                    bet["trade_return"] = -100.0
+                    bet["trade_result"] = "loss"
+                elif outcome == "void":
+                    bet["trade_pnl"] = 0.0
+                    bet["trade_return"] = 0.0
+                    bet["trade_result"] = "void"
+                else:
+                    # Market still open
+                    bet["trade_result"] = "open"
+                    bet["trade_pnl"] = None
+                    bet["trade_return"] = None
+            else:
+                bet["trade_result"] = "open"
+                bet["trade_pnl"] = None
+                bet["trade_return"] = None
+
         enriched.append(bet)
 
     return enriched

@@ -1298,58 +1298,92 @@ function renderMyBets() {
         };
     });
 
+    // ── Match outcome stats ──
     const bWins = enriched.filter(b => b.outcome === 'win').length;
     const bLosses = enriched.filter(b => b.outcome === 'loss').length;
     const bVoid = enriched.filter(b => b.outcome === 'void').length;
     const bPending = enriched.filter(b => !b.outcome).length;
 
-    // Calculate PnL — use real amounts when available, fallback to $100 notional
-    const bPnl = enriched.reduce((s, b) => s + (b.pnl || 0), 0);
+    // ── Trade P&L stats (from actual wallet data) ──
     const hasAnyTradeData = enriched.some(b => b._hasTradeData);
     const totalStaked = enriched.reduce((s, b) => s + (b.actual_stake || 0), 0);
+    const withTradeResult = enriched.filter(b => b.trade_result && b.trade_result !== 'open');
+    const tradeWins = withTradeResult.filter(b => b.trade_result === 'win').length;
+    const tradeLosses = withTradeResult.filter(b => b.trade_result === 'loss').length;
+    const tradeVoid = withTradeResult.filter(b => b.trade_result === 'void').length;
+    const tradePartial = enriched.filter(b => b.trade_result === 'partial').length;
+    const tradeOpen = enriched.filter(b => !b.trade_result || b.trade_result === 'open').length;
+    const totalTradePnl = withTradeResult.reduce((s, b) => s + (b.trade_pnl || 0), 0);
 
     let html = `<div style="margin-bottom:12px; font-size:11px; color:#6c757d; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">
-        <div>
-            <strong style="color:#e0e0e0">${enriched.length}</strong> bets |
-            <strong style="color:#4caf50">${bWins}W</strong> -
+        <div>`;
+
+    if (hasAnyTradeData) {
+        html += `<strong style="color:#e0e0e0">${enriched.length}</strong> bets |
+            Trade: <strong style="color:#4caf50">${tradeWins}W</strong> -
+            <strong style="color:#f44336">${tradeLosses}L</strong>${tradeVoid ? ` - <strong style="color:#888">${tradeVoid}V</strong>` : ''}${tradePartial ? ` - <strong style="color:#d4740a">${tradePartial}P</strong>` : ''} -
+            <strong style="color:#6c757d">${tradeOpen} open</strong> |
+            Trade P&L: <strong style="color:${totalTradePnl >= 0 ? '#4caf50' : '#f44336'}">${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)}</strong> |
+            Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>`;
+    } else {
+        const bPnl = enriched.reduce((s, b) => s + (b.pnl || 0), 0);
+        html += `<strong style="color:#e0e0e0">${enriched.length}</strong> bets |
+            Match: <strong style="color:#4caf50">${bWins}W</strong> -
             <strong style="color:#f44336">${bLosses}L</strong>${bVoid ? ` - <strong style="color:#888">${bVoid}V</strong>` : ''} -
             <strong style="color:#6c757d">${bPending} pending</strong> |
-            P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(2)}</strong>
-            ${hasAnyTradeData ? ` | Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>` : ''}
-        </div>
+            P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(2)}</strong>`;
+    }
+
+    html += `</div>
         <button id="syncTradesBtn" onclick="syncPolyTrades()" style="background:#1b5e20; color:white; border:none; padding:5px 12px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.04em;">Sync Polymarket Trades</button>
     </div>`;
 
     html += `<table><thead><tr>
-        <th>Date</th><th>Match</th><th>Tournament</th><th>Pick</th>
-        <th>Buy Price</th><th>Stake</th><th>Model</th><th>Edge</th>
-        <th>Result</th><th>P&L</th>
+        <th>Date</th><th>Match</th><th>Pick</th>
+        <th>Buy</th><th>Sell</th><th>Stake</th>
+        <th>Trade</th><th>Trade P&L</th>
+        <th>Match</th><th>Edge</th>
     </tr></thead><tbody>`;
 
     enriched.forEach(b => {
         const date = (b.timestamp || b.card_date || '').slice(0, 10);
-        const res = b.outcome === 'win' ? '<span class="w">W</span>' : b.outcome === 'loss' ? '<span class="l">L</span>' : b.outcome === 'void' ? '<span style="color:#888">VOID</span>' : '<span class="p">...</span>';
-        const pnl = b.pnl != null ? `<span class="${b.pnl >= 0 ? 'w' : 'l'}">${b.pnl >= 0 ? '+' : ''}$${b.pnl.toFixed(2)}</span>` : '—';
 
-        // Show actual trade data if available, otherwise show signal data
+        // Match outcome column
+        const matchRes = b.outcome === 'win' ? '<span class="w">W</span>' : b.outcome === 'loss' ? '<span class="l">L</span>' : b.outcome === 'void' ? '<span style="color:#888">V</span>' : '<span class="p">...</span>';
+
+        // Trade result column — based on actual P&L from wallet
+        let tradeRes = '<span class="p">—</span>';
+        if (b.trade_result === 'win') tradeRes = `<span class="w">W</span><span style="color:#4caf50;font-size:9px"> +${(b.trade_return||0).toFixed(0)}%</span>`;
+        else if (b.trade_result === 'loss') tradeRes = `<span class="l">L</span><span style="color:#f44336;font-size:9px"> ${(b.trade_return||0).toFixed(0)}%</span>`;
+        else if (b.trade_result === 'partial') tradeRes = `<span style="color:#d4740a">P</span><span style="color:#d4740a;font-size:9px"> +${(b.trade_return||0).toFixed(0)}%</span>`;
+        else if (b.trade_result === 'void') tradeRes = '<span style="color:#888">V</span>';
+        else if (b.trade_result === 'open') tradeRes = '<span style="color:#6c757d">OPEN</span>';
+
+        // Trade P&L
+        const tradePnl = b.trade_pnl != null ? `<span class="${b.trade_pnl >= 0 ? 'w' : 'l'}">${b.trade_pnl >= 0 ? '+' : ''}$${b.trade_pnl.toFixed(2)}</span>` : '—';
+
+        // Buy/Sell prices
         const buyPrice = b._hasTradeData
             ? `<span style="color:#4caf50">${b.actual_buy_price}c</span>`
             : `<span style="color:#6c757d">${b.poly_price}c</span>`;
+        const sellPrice = b.actual_sell_price && b.actual_sell_price > 0
+            ? `<span style="color:#d4740a">${b.actual_sell_price}c</span>`
+            : '<span style="color:#6c757d">—</span>';
         const stake = b._hasTradeData
             ? `<span style="color:#4caf50">$${b.actual_stake.toFixed(2)}</span>`
             : `<span style="color:#6c757d">$100*</span>`;
 
         html += `<tr>
             <td>${date}</td>
-            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${b.match}</td>
-            <td>${(b.tournament || '—').slice(0, 20)}</td>
+            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${b.match} | ${b.tournament||''}">${b.match}</td>
             <td style="font-weight:700">${(b.bet_on || '').split(' ').pop()}</td>
             <td>${buyPrice}</td>
+            <td>${sellPrice}</td>
             <td>${stake}</td>
-            <td>${b.model_prob}%</td>
+            <td>${tradeRes}</td>
+            <td>${tradePnl}</td>
+            <td>${matchRes}</td>
             <td style="color:${Math.abs(b.edge||0) >= 10 ? '#f44336' : '#d4740a'}">${(b.edge||0) > 0 ? '+' : ''}${(b.edge||0).toFixed(1)}%</td>
-            <td>${res}</td>
-            <td>${pnl}</td>
         </tr>`;
     });
 
