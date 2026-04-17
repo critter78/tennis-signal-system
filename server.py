@@ -1241,6 +1241,9 @@ def api_poly_trades():
             # Client will send bets as query param or we read from saved
             pass
 
+        # Resolve outcomes from picks data (needed for P&L calc)
+        _resolve_bet_outcomes(bet_list)
+
         # Enrich bets with trade data
         enriched = enrich_bets_with_trades(bet_list, trades)
 
@@ -1261,6 +1264,62 @@ def api_poly_trades():
         return jsonify({"error": str(e)}), 500
 
 
+def _resolve_bet_outcomes(bets):
+    """Resolve outcome for each bet by cross-referencing with picks data.
+
+    Same logic as the frontend renderMyBets() but done server-side so that
+    enrich_bets_with_trades has outcome info for P&L calculations.
+    """
+    picks = load_picks_jsonl()
+    if not picks:
+        return bets
+
+    for bet in bets:
+        if bet.get("outcome"):
+            continue  # Already has outcome, skip
+
+        bet_match = bet.get("match", "")
+        bet_on = bet.get("bet_on", "")
+
+        # Strategy 1: exact match name + same bet_on
+        match = None
+        for p in picks:
+            if p.get("match") == bet_match and p.get("bet_on") == bet_on and p.get("outcome"):
+                match = p
+                break
+
+        # Strategy 2: same match name, any resolved pick
+        if not match:
+            for p in picks:
+                if p.get("match") == bet_match and p.get("outcome"):
+                    match = p
+                    break
+
+        # Strategy 3: fuzzy match by player last names
+        if not match and bet_match:
+            parts = re.split(r'\s+vs\.?\s+', bet_match.lower())
+            if len(parts) == 2:
+                last_a = parts[0].strip().split()[-1]
+                last_b = parts[1].strip().split()[-1]
+                for p in picks:
+                    pm = (p.get("match") or "").lower()
+                    if last_a in pm and last_b in pm and p.get("outcome"):
+                        match = p
+                        break
+
+        if match and match.get("outcome") and match.get("actual_winner"):
+            if match["outcome"] == "void":
+                bet["outcome"] = "void"
+            else:
+                bet_on_last = bet_on.split()[-1].lower() if bet_on else ""
+                winner_last = match["actual_winner"].split()[-1].lower() if match.get("actual_winner") else ""
+                i_won = (bet_on_last == winner_last) or (bet_on.lower() == match["actual_winner"].lower())
+                bet["outcome"] = "win" if i_won else "loss"
+                bet["actual_winner"] = match.get("actual_winner")
+
+    return bets
+
+
 @app.route("/api/sync-bets", methods=["POST"])
 @enable_cors
 def api_sync_bets():
@@ -1273,10 +1332,13 @@ def api_sync_bets():
         if isinstance(client_bets, dict):
             client_bets = client_bets.get("bets", [])
 
-        # Fetch real trade data from Polymarket
+        # Step 1: Resolve outcomes from picks data (needed for P&L calc)
+        _resolve_bet_outcomes(client_bets)
+
+        # Step 2: Fetch real trade data from Polymarket
         trades = fetch_poly_trades()
 
-        # Enrich each bet
+        # Step 3: Enrich each bet with trade data + P&L
         enriched = enrich_bets_with_trades(client_bets, trades)
 
         # Save to server
