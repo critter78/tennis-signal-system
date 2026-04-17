@@ -262,11 +262,10 @@ def serve_dashboard(is_shared=False, share_expires=None):
                 # CSS-based hiding — works immediately, no DOM timing issues
                 share_css = """
                 <style id="shared-view-styles">
-                    /* Hide all tabs except Today's Signals */
-                    .tab:not(.active) { display: none !important; }
-                    .tabs { pointer-events: none; }
-                    .tab.active { pointer-events: auto; cursor: default; }
-                    /* Hide non-signal panels */
+                    /* Hide all tabs except Today's Signals and Players */
+                    .tab { display: none !important; }
+                    .tab.active, .tab[onclick*="signals"], .tab[onclick*="players"] { display: inline-block !important; cursor: pointer; pointer-events: auto; }
+                    /* Hide non-signal/non-player panels */
                     #panel-overview, #panel-mybets, #panel-performance, #panel-accuracy { display: none !important; }
                     /* Hide admin/logout links */
                     a[href*="admin"], a[href*="logout"] { display: none !important; }
@@ -308,7 +307,7 @@ def serve_dashboard(is_shared=False, share_expires=None):
                         // Disable tab switching to hidden panels
                         window._origSwitchTab = window.switchTab;
                         window.switchTab = function(name) {{
-                            if (name !== 'signals') return;
+                            if (name !== 'signals' && name !== 'players') return;
                             if (window._origSwitchTab) window._origSwitchTab(name);
                         }};
                     }});
