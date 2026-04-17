@@ -1219,31 +1219,29 @@ def generate_card():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/resolve", methods=["POST"])
-@enable_cors
-def resolve_outcomes_route():
-    """Manually trigger outcome resolution — fast last-name matching."""
-    if not check_admin_cookie():
-        return jsonify({"error": "Unauthorized"}), 401
+def _run_inline_resolver():
+    """
+    Core outcome resolution logic — reusable by both /resolve route and cron pipeline.
+    Returns dict with keys: status, message, output.
+    """
+    import requests as req
+    import time
+    t0 = time.time()
+
+    logger.info("Running inline outcome resolution...")
+    output_lines = []
+
+    # Load picks
+    picks = load_picks_jsonl()
+    if not picks:
+        return {"status": "success", "message": "No picks found.", "output": "No picks found."}
 
     try:
-        import requests as req
-        import time
-        t0 = time.time()
-
-        logger.info("Running inline outcome resolution...")
-        output_lines = []
-
-        # Load picks
-        picks = load_picks_jsonl()
-        if not picks:
-            return jsonify({"status": "success", "output": "No picks found."})
-
         unresolved = [p for p in picks if p.get("outcome") is None]
         output_lines.append(f"Total picks: {len(picks)}, Unresolved: {len(unresolved)}")
 
         if not unresolved:
-            return jsonify({"status": "success", "output": "All picks already resolved!"})
+            return {"status": "success", "message": "All picks already resolved!", "output": "All picks already resolved!"}
 
         # Only check picks older than 24 hours
         from datetime import timedelta
@@ -1266,7 +1264,7 @@ def resolve_outcomes_route():
         output_lines.append(f"Eligible (>24h old): {len(eligible_indices)}")
 
         if not eligible_indices:
-            return jsonify({"status": "success", "output": "\n".join(output_lines) + "\nNo eligible picks to resolve."})
+            return {"status": "success", "output": "\n".join(output_lines) + "\nNo eligible picks to resolve."}
 
         # Bulk fetch resolved markets from Polymarket (3 API calls)
         resolved_markets = []
@@ -1638,15 +1636,27 @@ def resolve_outcomes_route():
         except Exception as e:
             output_lines.append(f"[warn] Trade sync: {e}")
 
-        return jsonify({
+        return {
             "status": "success",
             "message": f"Resolved {new_resolutions} picks",
             "output": "\n".join(output_lines)
-        })
+        }
 
     except Exception as e:
         logger.error(f"Resolution error: {e}")
-        return jsonify({"status": "error", "error": str(e)}), 500
+        return {"status": "error", "error": str(e)}
+
+
+@app.route("/resolve", methods=["POST"])
+@enable_cors
+def resolve_outcomes_route():
+    """Manually trigger outcome resolution — fast last-name matching."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    result = _run_inline_resolver()
+    status_code = 200 if result.get("status") == "success" else 500
+    return jsonify(result), status_code
 
 
 @app.route("/admin/dedup", methods=["POST"])
@@ -1862,19 +1872,15 @@ def api_refresh():
         results["dedup"] = {"status": "error", "error": str(e)}
         logger.warning(f"Dedup exception: {e}")
 
-    # Step 3b: Resolve outcomes
+    # Step 3b: Resolve outcomes (inline — uses same logic as /resolve admin button)
     try:
-        logger.info("[3b/5] Resolving outcomes...")
-        r = subprocess.run(
-            ["python3", str(BASE_DIR / "08_outcome_resolver.py")],
-            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=180
-        )
+        logger.info("[3b/5] Resolving outcomes (inline)...")
+        resolve_result = _run_inline_resolver()
         results["resolve"] = {
-            "status": "ok" if r.returncode == 0 else "error",
-            "output": (r.stdout or "")[-300:],
+            "status": "ok" if resolve_result.get("status") == "success" else "error",
+            "output": resolve_result.get("output", "")[-300:],
         }
-        if r.returncode != 0:
-            logger.error(f"Outcome resolution failed: {r.stderr[-300:]}")
+        logger.info(f"  Resolver: {resolve_result.get('message', resolve_result.get('output', '')[:100])}")
     except Exception as e:
         results["resolve"] = {"status": "error", "error": str(e)}
         logger.error(f"Outcome resolution exception: {e}")
