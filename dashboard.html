@@ -1215,22 +1215,35 @@ function renderMyBets() {
         // Determine outcome relative to YOUR bet (not the model's pick)
         let myOutcome = null;
         let myPnl = null;
-        if (match && match.outcome && match.actual_winner) {
-            const betOnLast = (bet.bet_on || '').split(' ').pop().toLowerCase();
-            const winnerLast = (match.actual_winner || '').split(' ').pop().toLowerCase();
-            const iWon = betOnLast === winnerLast || (bet.bet_on || '').toLowerCase() === (match.actual_winner || '').toLowerCase();
-            myOutcome = iWon ? 'win' : 'loss';
+
+        // Priority 1: Use bet-level outcome (from direct bet resolution)
+        if (bet.outcome) {
+            myOutcome = bet.outcome;
+            if (bet.pnl != null) myPnl = bet.pnl;
+        }
+        // Priority 2: Cross-reference with picks
+        else if (match && match.outcome && match.actual_winner) {
+            if (match.outcome === 'void') {
+                myOutcome = 'void';
+            } else {
+                const betOnLast = (bet.bet_on || '').split(' ').pop().toLowerCase();
+                const winnerLast = (match.actual_winner || '').split(' ').pop().toLowerCase();
+                const iWon = betOnLast === winnerLast || (bet.bet_on || '').toLowerCase() === (match.actual_winner || '').toLowerCase();
+                myOutcome = iWon ? 'win' : 'loss';
+            }
         }
 
         // Use actual trade data if available (from Polymarket API enrichment)
         const hasTradeData = bet.actual_stake && bet.actual_stake > 0;
-        if (hasTradeData && myOutcome) {
+        if (myOutcome === 'void') {
+            myPnl = 0;
+        } else if (myPnl == null && hasTradeData && myOutcome) {
             if (myOutcome === 'win') {
                 myPnl = round2((bet.actual_shares || 0) * 1.0 - bet.actual_stake);
             } else {
                 myPnl = round2(-bet.actual_stake);
             }
-        } else if (myOutcome) {
+        } else if (myPnl == null && myOutcome) {
             // Fallback: $100 notional PnL
             const polyDec = (bet.poly_price || 50) / 100;
             myPnl = myOutcome === 'win' ? round2(100 * (1 - polyDec)) : round2(-100 * polyDec);
@@ -1247,6 +1260,7 @@ function renderMyBets() {
 
     const bWins = enriched.filter(b => b.outcome === 'win').length;
     const bLosses = enriched.filter(b => b.outcome === 'loss').length;
+    const bVoid = enriched.filter(b => b.outcome === 'void').length;
     const bPending = enriched.filter(b => !b.outcome).length;
 
     // Calculate PnL — use real amounts when available, fallback to $100 notional
@@ -1258,7 +1272,7 @@ function renderMyBets() {
         <div>
             <strong style="color:#e0e0e0">${enriched.length}</strong> bets |
             <strong style="color:#4caf50">${bWins}W</strong> -
-            <strong style="color:#f44336">${bLosses}L</strong> -
+            <strong style="color:#f44336">${bLosses}L</strong>${bVoid ? ` - <strong style="color:#888">${bVoid}V</strong>` : ''} -
             <strong style="color:#6c757d">${bPending} pending</strong> |
             P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(2)}</strong>
             ${hasAnyTradeData ? ` | Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>` : ''}
@@ -1274,7 +1288,7 @@ function renderMyBets() {
 
     enriched.forEach(b => {
         const date = (b.timestamp || b.card_date || '').slice(0, 10);
-        const res = b.outcome === 'win' ? '<span class="w">W</span>' : b.outcome === 'loss' ? '<span class="l">L</span>' : '<span class="p">...</span>';
+        const res = b.outcome === 'win' ? '<span class="w">W</span>' : b.outcome === 'loss' ? '<span class="l">L</span>' : b.outcome === 'void' ? '<span style="color:#888">VOID</span>' : '<span class="p">...</span>';
         const pnl = b.pnl != null ? `<span class="${b.pnl >= 0 ? 'w' : 'l'}">${b.pnl >= 0 ? '+' : ''}$${b.pnl.toFixed(2)}</span>` : '—';
 
         // Show actual trade data if available, otherwise show signal data

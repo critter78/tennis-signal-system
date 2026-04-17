@@ -176,23 +176,33 @@ def _parse_resolved(m):
 
     # Determine winner from settled prices
     winner = None
+    is_void = False
     if outcomes and prices and len(outcomes) == len(prices):
-        for name, price in zip(outcomes, prices):
+        float_prices = []
+        for price in prices:
             try:
-                p = float(price)
-                # Winner has price ~1.0 (or >0.95), loser has ~0.0
-                if p >= 0.95:
-                    winner = str(name)
-                    break
+                float_prices.append(float(price))
             except (ValueError, TypeError):
-                continue
+                float_prices.append(None)
+
+        for name, p in zip(outcomes, float_prices):
+            if p is not None and p >= 0.95:
+                winner = str(name)
+                break
+
+        # Detect voided/cancelled market: all prices roughly equal (e.g. 0.50/0.50)
+        if not winner and len(float_prices) >= 2 and all(p is not None for p in float_prices):
+            max_p = max(float_prices)
+            min_p = min(float_prices)
+            if max_p - min_p < 0.10:
+                is_void = True
 
     # If no clear winner from prices, check resolution field
-    if not winner and resolved_at:
+    if not winner and not is_void and resolved_at:
         # Some markets have a "resolution" or "resolvedOutcome" field
         winner = m.get("resolution") or m.get("resolvedOutcome")
 
-    if not winner:
+    if not winner and not is_void:
         return None
 
     return {
@@ -200,6 +210,7 @@ def _parse_resolved(m):
         "question": question,
         "slug": slug,
         "winner": winner,
+        "is_void": is_void,
         "resolved_at": resolved_at or datetime.utcnow().isoformat(),
     }
 
@@ -436,9 +447,13 @@ def match_pick_to_resolved(pick, resolved_markets):
 
 def determine_outcome(pick, resolved_market):
     """
-    Determine if a pick was a win or loss based on the resolved market.
-    Returns (outcome, pnl) tuple.
+    Determine if a pick was a win, loss, or void based on the resolved market.
+    Returns (outcome, pnl, winner_name) tuple.
     """
+    # Handle voided/cancelled markets
+    if resolved_market.get("is_void"):
+        return "void", 0.0, "VOID"
+
     winner_raw = resolved_market.get("winner", "")
     bet_on = pick.get("bet_on", "")
     player_a = pick.get("player_a", "")

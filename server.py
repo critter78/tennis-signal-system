@@ -713,7 +713,7 @@ setInterval(loadShares, 30000);
 # ─── POLYMARKET RESOLUTION HELPERS ────────────────────────────────────────────
 
 def _parse_resolved_market(m):
-    """Parse a resolved market to extract the winner."""
+    """Parse a resolved market to extract the winner (or detect void/push)."""
     market_id = m.get("id") or m.get("condition_id") or m.get("conditionId", "")
     question = m.get("question", "")
     slug = m.get("slug", "")
@@ -735,29 +735,46 @@ def _parse_resolved_market(m):
         prices = []
 
     winner = None
+    is_void = False
     if outcomes and prices and len(outcomes) == len(prices):
-        for name, price in zip(outcomes, prices):
+        float_prices = []
+        for price in prices:
             try:
-                if float(price) >= 0.95:
-                    winner = str(name)
-                    break
+                float_prices.append(float(price))
             except (ValueError, TypeError):
-                continue
+                float_prices.append(None)
 
-    if not winner:
-        resolved_at = m.get("resolvedAt") or m.get("resolved_at")
+        for name, p in zip(outcomes, float_prices):
+            if p is not None and p >= 0.95:
+                winner = str(name)
+                break
+
+        # Detect voided/cancelled market: all prices roughly equal (e.g. 0.50/0.50)
+        if not winner and len(float_prices) >= 2 and all(p is not None for p in float_prices):
+            max_p = max(float_prices)
+            min_p = min(float_prices)
+            if max_p - min_p < 0.10:  # All prices within 10% of each other = void
+                is_void = True
+
+    resolved_at = m.get("resolvedAt") or m.get("resolved_at")
+
+    if not winner and not is_void:
         if resolved_at:
             winner = m.get("resolution") or m.get("resolvedOutcome")
 
-    if not winner:
+    # Check if market is actually closed/resolved
+    is_closed = m.get("closed") is True or str(m.get("closed", "")).lower() == "true"
+
+    if not winner and not is_void:
         return None
 
     return {
         "market_id": market_id,
         "question": question,
         "slug": slug,
-        "winner": winner,
-        "resolved_at": m.get("resolvedAt") or m.get("resolved_at") or datetime.utcnow().isoformat(),
+        "winner": winner,  # None if voided
+        "is_void": is_void,
+        "resolved_at": resolved_at or datetime.utcnow().isoformat(),
     }
 
 
@@ -1405,6 +1422,16 @@ def _run_inline_resolver():
                             pslug = pl.split("/event/")[-1].split("?")[0].split("/")[0]
                     if pslug and pslug in slug_resolved_cache:
                         parsed = slug_resolved_cache[pslug]
+
+                        # Handle voided/cancelled markets
+                        if parsed.get("is_void"):
+                            pick["outcome"] = "void"
+                            pick["pnl"] = 0.0
+                            pick["actual_winner"] = "VOID"
+                            pick["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                            new_resolutions += 1
+                            continue
+
                         winner_raw = parsed.get("winner", "")
                         pa = pick.get("player_a", "")
                         pbb = pick.get("player_b", "")
@@ -1444,7 +1471,68 @@ def _run_inline_resolver():
                         pick["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
                         new_resolutions += 1
 
-                output_lines.append(f"Phase 0: Resolved {new_resolutions} picks from tracked bets")
+                # ── Phase 0b: Directly resolve BETS that have no matching pick ──
+                # User may have bet on matches the signal generator didn't pick
+                bet_resolutions = 0
+                for bet in bet_list:
+                    if bet.get("outcome") is not None:
+                        continue
+                    bslug = ""
+                    bpl = bet.get("poly_link", "")
+                    if "/event/" in bpl:
+                        bslug = bpl.split("/event/")[-1].split("?")[0].split("/")[0]
+                    if bslug and bslug in slug_resolved_cache:
+                        parsed = slug_resolved_cache[bslug]
+                        if parsed.get("is_void"):
+                            bet["outcome"] = "void"
+                            bet["pnl"] = 0.0
+                            bet["actual_winner"] = "VOID"
+                            bet["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                            bet_resolutions += 1
+                            continue
+
+                        winner_raw = parsed.get("winner", "")
+                        pa = bet.get("player_a", "")
+                        pbb = bet.get("player_b", "")
+                        a_last = pa.split()[-1].lower() if pa else ""
+                        b_last = pbb.split()[-1].lower() if pbb else ""
+                        winner_lower = winner_raw.lower()
+                        wl = winner_lower.split()[-1] if winner_lower else ""
+
+                        if winner_lower in ["yes", "true", "1"]:
+                            winner_name = pa
+                        elif winner_lower in ["no", "false", "0"]:
+                            winner_name = pbb
+                        elif a_last == wl or a_last in winner_lower:
+                            winner_name = pa
+                        elif b_last == wl or b_last in winner_lower:
+                            winner_name = pbb
+                        else:
+                            continue
+
+                        bet_on = bet.get("bet_on", "")
+                        bl = bet_on.split()[-1].lower() if bet_on else ""
+                        wnl = winner_name.split()[-1].lower() if winner_name else ""
+                        bet_won = (bl == wnl) or (bet_on.lower() == winner_name.lower())
+
+                        poly_price = bet.get("poly_price", 50)
+                        price_dec = poly_price / 100
+                        if bet_won:
+                            bet["outcome"] = "win"
+                            bet["pnl"] = round(100 * (1 - price_dec), 2)
+                        else:
+                            bet["outcome"] = "loss"
+                            bet["pnl"] = round(-100 * price_dec, 2)
+                        bet["actual_winner"] = winner_name
+                        bet["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                        bet_resolutions += 1
+
+                if bet_resolutions > 0:
+                    if isinstance(bets_data, dict):
+                        bets_data["bets"] = bet_list
+                    save_bets(bets_data)
+
+                output_lines.append(f"Phase 0: Resolved {new_resolutions} picks + {bet_resolutions} bets from tracked bet markets")
         except Exception as e:
             output_lines.append(f"  [warn] Phase 0: {e}")
 
@@ -1487,6 +1575,15 @@ def _run_inline_resolver():
                     break
 
             if not rm:
+                continue
+
+            # Handle voided/cancelled markets
+            if rm.get("is_void"):
+                pick["outcome"] = "void"
+                pick["pnl"] = 0.0
+                pick["actual_winner"] = "VOID"
+                pick["resolved_at"] = rm.get("resolved_at", datetime.utcnow().isoformat())
+                new_resolutions += 1
                 continue
 
             # Determine winner using simple last-name matching (no SequenceMatcher)
@@ -1581,6 +1678,15 @@ def _run_inline_resolver():
             for pick_idx in unmatched_slugs.get(slug, []):
                 pick = picks[pick_idx]
                 if pick.get("outcome") is not None:
+                    continue
+
+                # Handle voided/cancelled markets
+                if parsed.get("is_void"):
+                    pick["outcome"] = "void"
+                    pick["pnl"] = 0.0
+                    pick["actual_winner"] = "VOID"
+                    pick["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                    new_resolutions += 1
                     continue
 
                 winner_raw = parsed.get("winner", "")
