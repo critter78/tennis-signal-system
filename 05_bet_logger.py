@@ -43,6 +43,9 @@ def log_picks(signals, run_id=None):
         "sa_rank_move_90d", "sb_rank_move_90d", "sa_rank_move_365d", "sb_rank_move_365d",
         "sa_matches_52w", "sb_matches_52w",
         "sa_wins_ytd", "sb_wins_ytd", "sa_losses_ytd", "sb_losses_ytd",
+        "elo_prob_a", "elo_prob_b", "sa_surf_elo", "sb_surf_elo",
+        "surf_elo_prob_a", "surf_elo_prob_b", "elo_confidence",
+        "rank_elo_alert_a", "rank_elo_alert_b", "surf_mismatch_a", "surf_mismatch_b",
         "base_prob", "lstm_adj", "base_edge", "lstm_edge",
     ]
 
@@ -124,6 +127,13 @@ def log_picks(signals, run_id=None):
             "sa_matches_52w": s.get("sa_matches_52w"), "sb_matches_52w": s.get("sb_matches_52w"),
             "sa_wins_ytd": s.get("sa_wins_ytd"), "sb_wins_ytd": s.get("sb_wins_ytd"),
             "sa_losses_ytd": s.get("sa_losses_ytd"), "sb_losses_ytd": s.get("sb_losses_ytd"),
+            # ELO Intelligence
+            "elo_prob_a": s.get("elo_prob_a"), "elo_prob_b": s.get("elo_prob_b"),
+            "sa_surf_elo": s.get("sa_surf_elo"), "sb_surf_elo": s.get("sb_surf_elo"),
+            "surf_elo_prob_a": s.get("surf_elo_prob_a"), "surf_elo_prob_b": s.get("surf_elo_prob_b"),
+            "elo_confidence": s.get("elo_confidence"),
+            "rank_elo_alert_a": s.get("rank_elo_alert_a"), "rank_elo_alert_b": s.get("rank_elo_alert_b"),
+            "surf_mismatch_a": s.get("surf_mismatch_a"), "surf_mismatch_b": s.get("surf_mismatch_b"),
             # LSTM adjustment tracking
             "base_prob": s.get("base_prob"), "lstm_adj": s.get("lstm_adj"),
             "base_edge": s.get("base_edge"), "lstm_edge": s.get("lstm_edge"),
