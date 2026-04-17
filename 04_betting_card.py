@@ -3196,12 +3196,452 @@ function exportBets() {{
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
+def generate_player_profiles(df_hist, signals):
+    """
+    Generate comprehensive player profile cards for all players in today's signals.
+    Saves to data/player_profiles.json for the /api/players endpoint.
+
+    Reuses the existing ELO tables already computed during signal generation.
+    """
+    import time
+    t0 = time.time()
+
+    if df_hist.empty or not signals:
+        print("  [profiles] No data or signals — skipping player profiles")
+        return
+
+    # Collect unique players from signals
+    players_set = set()
+    for s in signals:
+        pa = s.get("player_a", "")
+        pb = s.get("player_b", "")
+        if pa and pa != "The Field":
+            players_set.add(pa)
+        if pb and pb != "The Field":
+            players_set.add(pb)
+
+    if not players_set:
+        print("  [profiles] No players found in signals")
+        return
+
+    print(f"  [profiles] Building profiles for {len(players_set)} players...")
+
+    cutoff = pd.Timestamp(datetime.now())
+    # Adjust cutoff if data doesn't reach today
+    max_date = df_hist["date"].max()
+    if max_date < cutoff - timedelta(days=30):
+        cutoff = max_date + timedelta(days=1)
+
+    # Build ELO tables (cached — reuses if already computed during signal gen)
+    elo_table = _build_elo_table(df_hist, cutoff)
+    surf_elo_tables = {}
+    for surf in ["Hard", "Clay", "Grass"]:
+        surf_elo_tables[surf] = _build_surface_elo_table(df_hist, cutoff, surf)
+
+    # Compute active ELO percentiles once
+    since_365 = cutoff - timedelta(days=365)
+    active_mask = (df_hist["date"] >= since_365) & (df_hist["date"] < cutoff)
+    active_players = set(df_hist.loc[active_mask, "winner"].unique()) | set(df_hist.loc[active_mask, "loser"].unique())
+    active_elos = [elo_table.get(p, 1500) for p in active_players]
+    active_elos_sorted = sorted(active_elos)
+
+    def elo_percentile(elo_val):
+        if not active_elos_sorted:
+            return None
+        below = sum(1 for e in active_elos_sorted if e < elo_val)
+        return round(below / len(active_elos_sorted) * 100)
+
+    # Surface ELO percentiles
+    surf_active_elos = {}
+    for surf in ["Hard", "Clay", "Grass"]:
+        st = surf_elo_tables[surf]
+        surf_active = [st.get(p, 1500) for p in active_players if p in st]
+        surf_active_elos[surf] = sorted(surf_active)
+
+    def surf_elo_percentile(surf, elo_val):
+        arr = surf_active_elos.get(surf, [])
+        if not arr:
+            return None
+        below = sum(1 for e in arr if e < elo_val)
+        return round(below / len(arr) * 100)
+
+    # Helper: parse score to determine sets won/lost, tiebreaks, etc.
+    def parse_score(score_str):
+        """Parse a tennis score string like '6-4 3-6 7-6(5)' into set results."""
+        if not score_str or not isinstance(score_str, str):
+            return []
+        sets = []
+        for part in score_str.strip().split():
+            part = part.replace('[', '').replace(']', '')
+            # Handle tiebreak scores like 7-6(5)
+            tb = '(' in part
+            clean = part.split('(')[0]
+            try:
+                g = clean.split('-')
+                if len(g) == 2:
+                    sets.append({'w': int(g[0]), 'l': int(g[1]), 'tb': tb})
+            except (ValueError, IndexError):
+                continue
+        return sets
+
+    # Round depth scoring
+    round_depth = {'F': 7, 'SF': 6, 'QF': 5, 'R16': 4, 'R32': 3, 'R64': 2, 'R128': 1, 'RR': 3}
+
+    # Slam tournament mapping
+    slam_map = {
+        'Australian Open': 'AUS', 'Roland Garros': 'RG', 'Wimbledon': 'WIM', 'US Open': 'USO'
+    }
+
+    profiles = []
+
+    for player in players_set:
+        try:
+            # All matches for this player
+            wins = df_hist[(df_hist["winner"] == player) & (df_hist["date"] < cutoff)]
+            losses = df_hist[(df_hist["loser"] == player) & (df_hist["date"] < cutoff)]
+            all_matches = pd.concat([
+                wins.assign(_result='W'),
+                losses.assign(_result='L')
+            ]).sort_values("date")
+
+            total = len(all_matches)
+            if total < 3:
+                continue
+
+            # Basic info from most recent match
+            last_match = all_matches.iloc[-1]
+            if last_match["_result"] == "W":
+                country = last_match.get("winner_ioc", "")
+                hand = last_match.get("winner_hand", "")
+                age = last_match.get("winner_age", None)
+                tour = last_match.get("tour", "atp")
+            else:
+                country = last_match.get("loser_ioc", "")
+                hand = last_match.get("loser_hand", "")
+                age = last_match.get("loser_age", None)
+                tour = last_match.get("tour", "atp")
+
+            # Current rank (most recent)
+            rank = None
+            if "w_rank" in wins.columns and len(wins) > 0:
+                r = wins["w_rank"].dropna()
+                if len(r) > 0:
+                    rank = int(r.iloc[-1])
+            if "l_rank" in losses.columns and len(losses) > 0:
+                r = losses["l_rank"].dropna()
+                if len(r) > 0:
+                    lr = int(r.iloc[-1])
+                    if rank is None or (losses["date"].iloc[-1] > wins["date"].iloc[-1] if len(wins) > 0 else True):
+                        rank = lr
+
+            # Rank 30 days ago
+            rank_30d_ago = None
+            d30 = cutoff - timedelta(days=30)
+            m30 = all_matches[(all_matches["date"] >= d30 - timedelta(days=45)) & (all_matches["date"] <= d30 + timedelta(days=15))]
+            if len(m30) > 0:
+                last_m30 = m30.iloc[-1]
+                if last_m30["_result"] == "W" and "w_rank" in m30.columns:
+                    r = last_m30.get("w_rank")
+                    if pd.notna(r) and r > 0:
+                        rank_30d_ago = int(r)
+                elif last_m30["_result"] == "L" and "l_rank" in m30.columns:
+                    r = last_m30.get("l_rank")
+                    if pd.notna(r) and r > 0:
+                        rank_30d_ago = int(r)
+
+            rank_delta = 0
+            if rank and rank_30d_ago:
+                rank_delta = rank_30d_ago - rank  # positive = improved
+
+            # ELO
+            elo = round(elo_table.get(player, 1500))
+            elo_pct = elo_percentile(elo)
+
+            # Surface ELO
+            surf_elo = {}
+            for surf in ["Hard", "Clay", "Grass"]:
+                general = elo_table.get(player, 1500)
+                surface_raw = surf_elo_tables[surf].get(player)
+                if surface_raw is not None:
+                    blended = round((general + surface_raw) / 2.0)
+                    pct = surf_elo_percentile(surf, blended)
+                    surf_elo[surf] = {"elo": blended, "pct": pct}
+                else:
+                    surf_elo[surf] = {"elo": None, "pct": None}
+
+            # Form (last 10 matches)
+            last_10 = all_matches.tail(10)
+            form = list(last_10["_result"].values)
+            wins_10 = sum(1 for r in form if r == 'W')
+            losses_10 = len(form) - wins_10
+
+            # Streak
+            streak_count = 0
+            streak_type = form[-1] if form else 'W'
+            for r in reversed(form):
+                if r == streak_type:
+                    streak_count += 1
+                else:
+                    break
+            streak = f"{streak_type}{streak_count}"
+
+            # Win rates (90d, 365d)
+            since_90 = cutoff - timedelta(days=90)
+            since_365 = cutoff - timedelta(days=365)
+            m90 = all_matches[all_matches["date"] >= since_90]
+            m365 = all_matches[all_matches["date"] >= since_365]
+
+            w90 = (m90["_result"] == 'W').sum()
+            t90 = len(m90)
+            wr_90d = round(w90 / t90 * 100, 1) if t90 > 0 else 0
+
+            w365 = (m365["_result"] == 'W').sum()
+            t365 = len(m365)
+            wr_365d = round(w365 / t365 * 100, 1) if t365 > 0 else 0
+
+            # WR trend (compare last 90d vs previous 90d)
+            since_180 = cutoff - timedelta(days=180)
+            m_prev_90 = all_matches[(all_matches["date"] >= since_180) & (all_matches["date"] < since_90)]
+            if len(m_prev_90) >= 3:
+                wr_prev = (m_prev_90["_result"] == 'W').sum() / len(m_prev_90) * 100
+                wr_trend = round(wr_90d - wr_prev, 1)
+            else:
+                wr_trend = 0
+
+            # Avg tournament depth
+            recent_tourneys = m365.groupby("tourney_id")
+            depths = []
+            for tid, group in recent_tourneys:
+                best_round = group["round"].map(round_depth).max()
+                if pd.notna(best_round):
+                    depths.append(best_round)
+            avg_depth_map = {1: 'R128', 2: 'R64', 3: 'R32', 4: 'R16', 5: 'QF', 6: 'SF', 7: 'F'}
+            avg_depth_val = round(sum(depths) / len(depths)) if depths else 3
+            avg_depth = avg_depth_map.get(avg_depth_val, 'R32')
+
+            # Surface performance
+            surfaces = {}
+            for surf in ["Hard", "Clay", "Grass"]:
+                sw = len(wins[wins["surface"] == surf])
+                sl = len(losses[losses["surface"] == surf])
+                st = sw + sl
+                surfaces[surf] = {
+                    "wr": round(sw / st * 100, 1) if st > 3 else 0,
+                    "w": sw,
+                    "l": sl
+                }
+
+            # Opponent tier performance
+            tiers = {}
+            tier_defs = [
+                ("Top 10", 1, 10),
+                ("Top 20", 11, 20),
+                ("Top 50", 21, 50),
+                ("Top 100", 51, 100),
+                ("100+", 101, 9999)
+            ]
+            for tier_name, lo, hi in tier_defs:
+                tw = 0
+                tl = 0
+                if "l_rank" in wins.columns:
+                    opp_r = wins["l_rank"].dropna()
+                    tw = int(((opp_r >= lo) & (opp_r <= hi)).sum())
+                if "w_rank" in losses.columns:
+                    opp_r = losses["w_rank"].dropna()
+                    tl = int(((opp_r >= lo) & (opp_r <= hi)).sum())
+                tt = tw + tl
+                tiers[tier_name] = {
+                    "wr": round(tw / tt * 100, 1) if tt > 0 else 0,
+                    "w": tw,
+                    "l": tl
+                }
+
+            # Mental toughness
+            mental = {}
+
+            # Deciding sets (3rd set in bo3, 5th set in bo5)
+            dec_w = 0
+            dec_l = 0
+            for _, row in all_matches.iterrows():
+                sets = parse_score(row.get("score", ""))
+                bo = row.get("best_of", 3)
+                deciding = 3 if bo == 3 else 5
+                if len(sets) == deciding:
+                    if row["_result"] == 'W':
+                        dec_w += 1
+                    else:
+                        dec_l += 1
+            dec_t = dec_w + dec_l
+            mental["deciding"] = {"pct": round(dec_w / dec_t * 100) if dec_t > 0 else 0, "w": dec_w, "l": dec_l}
+
+            # Tiebreaks
+            tb_w = 0
+            tb_l = 0
+            for _, row in all_matches.iterrows():
+                sets = parse_score(row.get("score", ""))
+                for s_info in sets:
+                    if s_info.get('tb'):
+                        if s_info['w'] > s_info['l']:
+                            # Winner won this tiebreak set
+                            if row["_result"] == 'W':
+                                tb_w += 1
+                            else:
+                                tb_l += 1
+                        else:
+                            if row["_result"] == 'W':
+                                tb_l += 1
+                            else:
+                                tb_w += 1
+            tb_t = tb_w + tb_l
+            mental["tiebreak"] = {"pct": round(tb_w / tb_t * 100) if tb_t > 0 else 0, "w": tb_w, "l": tb_l}
+
+            # Comebacks (won after losing first set)
+            cb_w = 0
+            cb_l = 0
+            for _, row in all_matches.iterrows():
+                sets = parse_score(row.get("score", ""))
+                if len(sets) >= 2:
+                    # Did this player lose the first set?
+                    first_set = sets[0]
+                    lost_first = (first_set['w'] < first_set['l'] and row["_result"] == 'W') or \
+                                 (first_set['w'] > first_set['l'] and row["_result"] == 'L')
+                    if lost_first:
+                        if row["_result"] == 'W':
+                            cb_w += 1
+                        else:
+                            cb_l += 1
+            cb_t = cb_w + cb_l
+            mental["comeback"] = {"pct": round(cb_w / cb_t * 100) if cb_t > 0 else 0, "w": cb_w, "l": cb_l}
+
+            # Finals record
+            finals = all_matches[all_matches["round"] == "F"]
+            fin_w = (finals["_result"] == 'W').sum()
+            fin_l = (finals["_result"] == 'L').sum()
+            fin_t = fin_w + fin_l
+            mental["finals"] = {"pct": round(fin_w / fin_t * 100) if fin_t > 0 else 0, "w": int(fin_w), "l": int(fin_l)}
+
+            # Fatigue
+            since_30 = cutoff - timedelta(days=30)
+            m30_all = all_matches[all_matches["date"] >= since_30]
+            matches_30d = len(m30_all)
+
+            avg_dur = None
+            if "minutes" in all_matches.columns:
+                recent_mins = m365["minutes"].dropna()
+                if len(recent_mins) > 0:
+                    avg_dur = f"{int(recent_mins.mean())}m"
+
+            days_since = None
+            if len(all_matches) > 0:
+                last_date = all_matches["date"].max()
+                days_since = (cutoff - last_date).days
+
+            # Load classification
+            if matches_30d >= 8:
+                load = "Heavy"
+            elif matches_30d >= 4:
+                load = "Moderate"
+            else:
+                load = "Light"
+
+            # Freshness
+            if days_since is not None:
+                if days_since <= 3:
+                    freshness = "Back-to-back"
+                elif days_since <= 10:
+                    freshness = "Fresh"
+                else:
+                    freshness = "Rested"
+            else:
+                freshness = "Unknown"
+
+            fatigue = {
+                "matches_30d": matches_30d,
+                "avg_duration": avg_dur,
+                "days_since": days_since,
+                "load": load,
+                "freshness": freshness
+            }
+
+            # Grand Slam profile
+            slams = {}
+            slam_best_map = {7: 'W', 6: 'SF', 5: 'QF', 4: 'R16', 3: 'R32', 2: 'R64', 1: 'R128'}
+            # F is round value 7, but if they won final it's W
+            for slam_name, slam_code in slam_map.items():
+                slam_matches = all_matches[all_matches["tournament"].str.contains(slam_name, case=False, na=False)]
+                sw = (slam_matches["_result"] == 'W').sum()
+                sl = (slam_matches["_result"] == 'L').sum()
+
+                best = None
+                if len(slam_matches) > 0:
+                    # Check if won the final
+                    finals_won = slam_matches[(slam_matches["round"] == "F") & (slam_matches["_result"] == "W")]
+                    if len(finals_won) > 0:
+                        best = "W"
+                    else:
+                        # Best round reached = round they lost in, or final round they won
+                        best_depth = slam_matches["round"].map(round_depth).max()
+                        if pd.notna(best_depth):
+                            best = slam_best_map.get(int(best_depth), None)
+                            # If they reached F but lost, best is F
+                            finals_played = slam_matches[slam_matches["round"] == "F"]
+                            if len(finals_played) > 0:
+                                best = "F"
+
+                slams[slam_code] = {"best": best, "w": int(sw), "l": int(sl)}
+
+            profile = {
+                "name": player,
+                "country": country or "",
+                "age": float(age) if pd.notna(age) else None,
+                "hand": hand or "",
+                "tour": (tour or "atp").upper(),
+                "rank": rank,
+                "rank_delta": rank_delta,
+                "total_matches": total,
+                "elo": elo,
+                "elo_pct": elo_pct,
+                "surf_elo": surf_elo,
+                "form": form,
+                "wins_10": wins_10,
+                "losses_10": losses_10,
+                "streak": streak,
+                "wr_90d": wr_90d,
+                "wr_365d": wr_365d,
+                "wr_trend": wr_trend,
+                "avg_depth": avg_depth,
+                "surfaces": surfaces,
+                "tiers": tiers,
+                "mental": mental,
+                "fatigue": fatigue,
+                "slams": slams
+            }
+
+            profiles.append(profile)
+
+        except Exception as e:
+            print(f"  [profiles] Error building profile for {player}: {e}")
+            continue
+
+    # Sort by ELO descending
+    profiles.sort(key=lambda p: p.get("elo", 0), reverse=True)
+
+    # Save to JSON
+    out_path = DATA_DIR / "player_profiles.json"
+    with open(out_path, "w") as f:
+        json.dump({"players": profiles, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")}, f)
+
+    elapsed = time.time() - t0
+    print(f"  [profiles] Generated {len(profiles)} player profiles in {elapsed:.1f}s → {out_path}")
+
+
 def main():
     # Reset global caches for fresh run
-    global _elo_cache, _live_rankings_cache, _surface_history_cache
+    global _elo_cache, _live_rankings_cache, _surface_history_cache, _elo_surface_cache
     _elo_cache = None
     _live_rankings_cache = None
     _surface_history_cache = None
+    _elo_surface_cache = {}
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--min-edge",   type=float, default=0.03)
@@ -3332,6 +3772,16 @@ def main():
             print(f"  ... and {len(signals)-25} more in the card")
         print(f"{'─'*105}")
         print(f"  * = betting signal (edge ≥ {args.min_edge*100:.0f}%)")
+
+    # ── GENERATE PLAYER PROFILES ──
+    if has_hist and signals:
+        print(f"\n  Generating player profile cards...")
+        try:
+            generate_player_profiles(df_hist, signals)
+        except Exception as e:
+            print(f"  [warn] Player profile generation failed: {e}")
+    else:
+        print(f"\n  Skipping player profiles (no historical data or no signals)")
 
 
 if __name__ == "__main__":
