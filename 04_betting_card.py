@@ -1152,7 +1152,7 @@ def _detect_surface(question):
         "estoril", "munich", "munchen", "bastad", "umag", "kitzbuhel",
         "gstaad", "bucharest", "houston", "sao paulo", "quito", "tiriac",
         "banja luka", "cagliari", "parma", "sardegna", "perugia", "prospera",
-        "tallahassee", "sarasota", "santos",
+        "tallahassee", "sarasota", "santos", "bmw open", "santa cruz",
         "bmw open", "santa cruz",
         # WTA
         "strasbourg", "rabat", "bogota", "palermo", "lausanne", "budapest",
