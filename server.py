@@ -1158,14 +1158,23 @@ def api_status():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+_player_cache = {"data": None, "ts": None}
+
 @app.route("/api/players", methods=["GET"])
 @enable_cors
 def api_players():
     """Compute comprehensive player profiles from match history.
     Returns profiles for all unique players in today's signals.
-    Query param ?all=1 returns top 100 by ELO instead."""
+    Query param ?all=1 returns top 100 by ELO instead.
+    Results are cached for 30 minutes."""
     import pandas as pd, numpy as np
     from datetime import timedelta
+
+    # Return cached result if fresh (< 30 min)
+    if _player_cache["data"] and _player_cache["ts"]:
+        age = (datetime.now() - _player_cache["ts"]).total_seconds()
+        if age < 1800 and not request.args.get("refresh"):
+            return jsonify(_player_cache["data"])
 
     try:
         hist_path = BASE_DIR / "data" / "raw" / "matches_combined.parquet"
@@ -1202,32 +1211,31 @@ def api_players():
         if not target_players:
             return jsonify({"players": []})
 
-        # ── HELPER: ELO computation ──
-        elo = {}
-        for _, row in df.sort_values("date").iterrows():
-            w, l = row["winner"], row["loser"]
-            if w not in elo: elo[w] = 1500
-            if l not in elo: elo[l] = 1500
-            ra, rb = elo[w], elo[l]
-            ea = 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
-            k = 32 * (1.5 if ea < 0.3 else 0.7 if ea > 0.8 else 1.0)
-            elo[w] = ra + k * (1 - ea)
-            elo[l] = rb + k * (ea - 1)
+        # ── HELPER: ELO computation (numpy-optimized) ──
+        def compute_elo_fast(matches_df):
+            """Compute ELO from sorted matches using numpy arrays for speed."""
+            winners = matches_df["winner"].values
+            losers = matches_df["loser"].values
+            ratings = {}
+            for i in range(len(winners)):
+                w, l = winners[i], losers[i]
+                if w not in ratings: ratings[w] = 1500.0
+                if l not in ratings: ratings[l] = 1500.0
+                ra, rb = ratings[w], ratings[l]
+                ea = 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
+                k = 32 * (1.5 if ea < 0.3 else 0.7 if ea > 0.8 else 1.0)
+                ratings[w] = ra + k * (1 - ea)
+                ratings[l] = rb + k * (ea - 1)
+            return ratings
+
+        sorted_df = df.sort_values("date")
+        elo = compute_elo_fast(sorted_df)
 
         # Surface ELOs
         surf_elo = {}
         for surf in ["Hard", "Clay", "Grass"]:
-            surf_elo[surf] = {}
-            sdf = df[df["surface"] == surf].sort_values("date")
-            for _, row in sdf.iterrows():
-                w, l = row["winner"], row["loser"]
-                if w not in surf_elo[surf]: surf_elo[surf][w] = 1500
-                if l not in surf_elo[surf]: surf_elo[surf][l] = 1500
-                ra, rb = surf_elo[surf][w], surf_elo[surf][l]
-                ea = 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
-                k = 32 * (1.5 if ea < 0.3 else 0.7 if ea > 0.8 else 1.0)
-                surf_elo[surf][w] = ra + k * (1 - ea)
-                surf_elo[surf][l] = rb + k * (ea - 1)
+            sdf = sorted_df[sorted_df["surface"] == surf]
+            surf_elo[surf] = compute_elo_fast(sdf)
 
         # ELO percentiles (active players only)
         since = cutoff - timedelta(days=365)
@@ -1359,14 +1367,15 @@ def api_players():
 
             deciding_w = deciding_l = tb_w = tb_l = comeback_w = comeback_l = 0
             final_w = final_l = 0
-            for _, row in pm.iterrows():
-                is_win = row["result"] == "W"
-                p1s, p2s, is_deciding, has_tb = parse_sets(row.get("score"))
+            scores = pm["score"].values if "score" in pm.columns else []
+            results = pm["result"].values
+            rounds = pm["round"].values if "round" in pm.columns else [None] * len(pm)
+            for idx in range(len(results)):
+                is_win = results[idx] == "W"
+                score_val = scores[idx] if idx < len(scores) else None
+                p1s, p2s, is_deciding, has_tb = parse_sets(score_val)
                 if p1s is None:
                     continue
-                # In winner/loser data, winner always = p1
-                player_is_winner_in_source = (row["result"] == "W")
-                won_first_set = (p1s >= 1) if player_is_winner_in_source else (p2s >= 1)
 
                 if is_deciding:
                     if is_win: deciding_w += 1
@@ -1375,12 +1384,13 @@ def api_players():
                     if is_win: tb_w += 1
                     else: tb_l += 1
                 # Comeback: lost first set but won match
-                score_str = str(row.get("score", ""))
+                score_str = str(score_val or "")
                 first_set = score_str.split()[0] if score_str else ""
                 first_parts = first_set.split("(")[0].split("-")
                 if len(first_parts) == 2:
                     try:
                         fs1, fs2 = int(first_parts[0]), int(first_parts[1])
+                        player_is_winner_in_source = is_win
                         lost_first = (fs1 < fs2) if player_is_winner_in_source else (fs1 > fs2)
                         if lost_first and is_win: comeback_w += 1
                         elif lost_first and not is_win: comeback_l += 1
@@ -1388,7 +1398,8 @@ def api_players():
                         pass
 
                 # Finals
-                if row.get("round") == "F":
+                rd = rounds[idx] if idx < len(rounds) else None
+                if rd == "F":
                     if is_win: final_w += 1
                     else: final_l += 1
 
@@ -1500,7 +1511,10 @@ def api_players():
 
         # Sort by ELO descending
         profiles.sort(key=lambda x: x["elo"], reverse=True)
-        return jsonify({"players": profiles})
+        result = {"players": profiles}
+        _player_cache["data"] = result
+        _player_cache["ts"] = datetime.now()
+        return jsonify(result)
 
     except Exception as e:
         logger.error(f"Error in /api/players: {e}", exc_info=True)

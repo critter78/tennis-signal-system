@@ -271,7 +271,7 @@ window.PICKS_DATA = [];
     <div class="tab" onclick="switchTab('mybets')">My Bets</div>
     <div class="tab" onclick="switchTab('performance')">Performance</div>
     <div class="tab" onclick="switchTab('accuracy')">Model Accuracy</div>
-    <div class="tab" onclick="switchTab('players')">Players</div>
+    <div class="tab" onclick="switchTab('players'); loadPlayerCards();">Players</div>
 </div>
 
 <!-- SIGNALS -->
@@ -1783,14 +1783,23 @@ function loadPlayerCards() {
     const grid = document.getElementById('playerCardsGrid');
     grid.innerHTML = '<div style="text-align:center; padding:60px 0; color:#6c757d"><div style="font-size:14px">Loading player profiles...</div><div style="font-size:11px; margin-top:6px">Computing from match history data (this may take a moment)</div></div>';
 
-    fetch('/api/players')
-        .then(r => r.json())
+    fetch('/api/players', {signal: AbortSignal.timeout(120000)})
+        .then(r => {
+            if (!r.ok) throw new Error('Server returned ' + r.status);
+            return r.json();
+        })
         .then(data => {
+            if (data.error) throw new Error(data.error);
             _playerData = data.players || [];
+            if (_playerData.length === 0) {
+                grid.innerHTML = '<div style="text-align:center; padding:60px 0; color:#ffd740"><div style="font-size:14px">No player data available yet</div><div style="font-size:11px; margin-top:6px">Run the pipeline first to generate today\'s signals, then refresh</div></div>';
+                return;
+            }
             renderPlayerCards(_playerData);
         })
         .catch(err => {
-            grid.innerHTML = `<div style="text-align:center; padding:60px 0; color:#f44336">Error loading player data: ${err.message}</div>`;
+            _playersLoaded = false; // allow retry
+            grid.innerHTML = `<div style="text-align:center; padding:60px 0; color:#f44336"><div style="font-size:14px">Error loading player data</div><div style="font-size:11px; margin-top:6px">${err.message}</div><div style="margin-top:12px"><button onclick="loadPlayerCards()" style="background:#e65100; color:white; border:none; padding:8px 16px; border-radius:4px; cursor:pointer">Retry</button></div></div>`;
         });
 }
 
