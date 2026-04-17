@@ -1426,27 +1426,31 @@ function renderSignals() {
                 </div>
                 <div class="sig-stats">
                 ${(function(){
-                    // Helper: show delta badge ONLY on the player with the advantage (green only)
+                    // Helper: show delta badge ONLY on the betOn player (yellow for readability)
+                    const aIsBet = betOn === s.player_a;
+                    const bIsBet = betOn === s.player_b;
                     const delta = (valA, valB, higherIsBetter, suffix) => {
+                        if (!aIsBet) return ''; // Only show on bet player
                         if (valA == null || valB == null) return '';
                         const a = parseFloat(valA), b = parseFloat(valB);
                         if (isNaN(a) || isNaN(b)) return '';
                         const diff = higherIsBetter ? (a - b) : (b - a);
-                        if (diff <= 0.5) return ''; // Only show if player A has the advantage
-                        return '<span style="color:#4caf50; font-size:8px; margin-left:3px">(+' + Math.abs(diff).toFixed(1) + (suffix||'') + ')</span>';
+                        if (diff <= 0.5) return '';
+                        return '<span style="color:#ffd740; font-size:8px; margin-left:3px">(+' + Math.abs(diff).toFixed(1) + (suffix||'') + ')</span>';
                     };
                     const deltaB = (valA, valB, higherIsBetter, suffix) => {
+                        if (!bIsBet) return ''; // Only show on bet player
                         if (valA == null || valB == null) return '';
                         const a = parseFloat(valA), b = parseFloat(valB);
                         if (isNaN(a) || isNaN(b)) return '';
                         const diff = higherIsBetter ? (b - a) : (a - b);
-                        if (diff <= 0.5) return ''; // Only show if player B has the advantage
-                        return '<span style="color:#4caf50; font-size:8px; margin-left:3px">(+' + Math.abs(diff).toFixed(1) + (suffix||'') + ')</span>';
+                        if (diff <= 0.5) return '';
+                        return '<span style="color:#ffd740; font-size:8px; margin-left:3px">(+' + Math.abs(diff).toFixed(1) + (suffix||'') + ')</span>';
                     };
-                    // Rank advantage
+                    // Rank advantage — only on betOn player
                     const rankA = s.rank_a, rankB = s.rank_b;
-                    const rankDeltaA = (rankA && rankB && rankA < rankB) ? '<span style="color:#4caf50; font-size:8px; margin-left:3px">(' + Math.round((rankB - rankA) / rankB * 100) + '% higher)</span>' : '';
-                    const rankDeltaB = (rankA && rankB && rankB < rankA) ? '<span style="color:#4caf50; font-size:8px; margin-left:3px">(' + Math.round((rankA - rankB) / rankA * 100) + '% higher)</span>' : '';
+                    const rankDeltaA = (aIsBet && rankA && rankB && rankA < rankB) ? '<span style="color:#ffd740; font-size:8px; margin-left:3px">(' + Math.round((rankB - rankA) / rankB * 100) + '% higher)</span>' : '';
+                    const rankDeltaB = (bIsBet && rankA && rankB && rankB < rankA) ? '<span style="color:#ffd740; font-size:8px; margin-left:3px">(' + Math.round((rankA - rankB) / rankA * 100) + '% higher)</span>' : '';
                     // Form as number (e.g. "7/10" -> 7)
                     const formNumA = formA.includes('/') ? parseInt(formA) : null;
                     const formNumB = formB.includes('/') ? parseInt(formB) : null;
@@ -1486,20 +1490,40 @@ function renderSignals() {
                     };
                     const fmtMove = (mv) => mv != null ? (mv > 0 ? '<span style="color:#4caf50">▲' + mv + '</span>' : mv < 0 ? '<span style="color:#f44336">▼' + Math.abs(mv) + '</span>' : '→0') : '—';
                     const fmtYTD = (w, l) => (w != null && l != null && (w > 0 || l > 0)) ? w + 'W-' + l + 'L' : '—';
-                    // Deltas for advanced stats — only show green on the player with the advantage
-                    const advDelta = (a, b, higher) => {
+                    // Deltas for advanced stats — only show on betOn player, in yellow
+                    const aIsBetAdv = betOn === s.player_a;
+                    const bIsBetAdv = betOn === s.player_b;
+                    const advDeltaA = (a, b, higher) => {
+                        if (!aIsBetAdv) return '';
                         if (a == null || b == null) return '';
                         const diff = higher ? (a - b) : (b - a);
-                        if (diff <= 0.5) return ''; // Only show if THIS player has advantage
-                        return ' <span style="color:#4caf50; font-size:8px">(+' + Math.round(diff) + ')</span>';
+                        if (diff <= 0.5) return '';
+                        return ' <span style="color:#ffd740; font-size:8px">(+' + Math.round(diff) + ')</span>';
                     };
-                    const vsRecordDelta = (va, vb) => {
+                    const advDeltaB = (a, b, higher) => {
+                        if (!bIsBetAdv) return '';
+                        if (a == null || b == null) return '';
+                        const diff = higher ? (a - b) : (b - a);
+                        if (diff <= 0.5) return '';
+                        return ' <span style="color:#ffd740; font-size:8px">(+' + Math.round(diff) + ')</span>';
+                    };
+                    const vsRecordDeltaA = (va, vb) => {
+                        if (!aIsBetAdv) return '';
                         if (!va || !vb) return '';
                         const pctA = (va.w + va.l) > 0 ? va.w / (va.w + va.l) * 100 : 0;
                         const pctB = (vb.w + vb.l) > 0 ? vb.w / (vb.w + vb.l) * 100 : 0;
                         const diff = pctA - pctB;
-                        if (diff <= 1) return ''; // Only show if THIS player has advantage
-                        return ' <span style="color:#4caf50; font-size:8px">(+' + Math.round(diff) + '%)</span>';
+                        if (diff <= 1) return '';
+                        return ' <span style="color:#ffd740; font-size:8px">(+' + Math.round(diff) + '%)</span>';
+                    };
+                    const vsRecordDeltaB = (va, vb) => {
+                        if (!bIsBetAdv) return '';
+                        if (!va || !vb) return '';
+                        const pctA = (va.w + va.l) > 0 ? va.w / (va.w + va.l) * 100 : 0;
+                        const pctB = (vb.w + vb.l) > 0 ? vb.w / (vb.w + vb.l) * 100 : 0;
+                        const diff = pctA - pctB;
+                        if (diff <= 1) return '';
+                        return ' <span style="color:#ffd740; font-size:8px">(+' + Math.round(diff) + '%)</span>';
                     };
                     const hasData = s.sa_elo || s.sb_elo || s.sa_vs_top10 || s.sb_vs_top10;
                     if (!hasData) return '';
@@ -1508,9 +1532,9 @@ function renderSignals() {
                         '<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px; font-size:11px; color:#ccc">' +
                         '<div>' +
                             '<div style="font-weight:700; margin-bottom:4px; color:#e0e0e0; border-bottom:1px solid #333; padding-bottom:2px">' + (s.player_a||'') + '</div>' +
-                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">ELO</span><span>' + fmtElo(s.sa_elo, s.sa_elo_pct) + advDelta(s.sa_elo, s.sb_elo, true) + '</span></div>' +
-                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 10</span><span>' + fmtVs(s.sa_vs_top10) + vsRecordDelta(s.sa_vs_top10, s.sb_vs_top10) + '</span></div>' +
-                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 20</span><span>' + fmtVs(s.sa_vs_top20) + vsRecordDelta(s.sa_vs_top20, s.sb_vs_top20) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">ELO</span><span>' + fmtElo(s.sa_elo, s.sa_elo_pct) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 10</span><span>' + fmtVs(s.sa_vs_top10) + vsRecordDeltaA(s.sa_vs_top10, s.sb_vs_top10) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 20</span><span>' + fmtVs(s.sa_vs_top20) + vsRecordDeltaA(s.sa_vs_top20, s.sb_vs_top20) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 12m</span><span>' + fmtMove(s.sa_rank_move_365d) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 6m</span><span>' + fmtMove(s.sa_rank_move) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 3m</span><span>' + fmtMove(s.sa_rank_move_90d) + '</span></div>' +
@@ -1518,9 +1542,9 @@ function renderSignals() {
                         '</div>' +
                         '<div style="text-align:right">' +
                             '<div style="font-weight:700; margin-bottom:4px; color:#e0e0e0; border-bottom:1px solid #333; padding-bottom:2px">' + (s.player_b||'') + '</div>' +
-                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">ELO</span><span>' + fmtElo(s.sb_elo, s.sb_elo_pct) + advDelta(s.sb_elo, s.sa_elo, true) + '</span></div>' +
-                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 10</span><span>' + fmtVs(s.sb_vs_top10) + vsRecordDelta(s.sb_vs_top10, s.sa_vs_top10) + '</span></div>' +
-                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 20</span><span>' + fmtVs(s.sb_vs_top20) + vsRecordDelta(s.sb_vs_top20, s.sa_vs_top20) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">ELO</span><span>' + fmtElo(s.sb_elo, s.sb_elo_pct) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 10</span><span>' + fmtVs(s.sb_vs_top10) + vsRecordDeltaB(s.sb_vs_top10, s.sa_vs_top10) + '</span></div>' +
+                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 20</span><span>' + fmtVs(s.sb_vs_top20) + vsRecordDeltaB(s.sb_vs_top20, s.sa_vs_top20) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 12m</span><span>' + fmtMove(s.sb_rank_move_365d) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 6m</span><span>' + fmtMove(s.sb_rank_move) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 3m</span><span>' + fmtMove(s.sb_rank_move_90d) + '</span></div>' +
