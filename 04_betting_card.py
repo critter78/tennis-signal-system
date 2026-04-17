@@ -1153,6 +1153,7 @@ def _detect_surface(question):
         "gstaad", "bucharest", "houston", "sao paulo", "quito", "tiriac",
         "banja luka", "cagliari", "parma", "sardegna", "perugia", "prospera",
         "tallahassee", "sarasota", "santos",
+        "bmw open", "santa cruz",
         # WTA
         "strasbourg", "rabat", "bogota", "palermo", "lausanne", "budapest",
         "prague", "istanbul", "iasi", "makarska", "bol",
