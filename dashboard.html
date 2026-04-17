@@ -182,10 +182,28 @@
         .sig-pick { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
         .sig-pick-label { font-size: 9px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.06em; }
         .sig-pick-name { font-size: 15px; font-weight: 700; color: #4caf50; }
-        .sig-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+        .sig-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+        .sig-nums:last-child { margin-bottom: 0; }
+        .sig-nums-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .sig-nums-box { background: #0f1117; border: 1px solid #333; border-radius: 4px; padding: 8px; margin-bottom: 10px; }
+        .sig-nums-box hr { border: 0; border-top: 1px solid #2d3139; margin: 6px 0; }
         .sig-num { text-align: center; }
         .sig-num .sn-label { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.04em; }
         .sig-num .sn-val { font-size: 16px; font-weight: 700; margin-top: 2px; }
+        .sig-meta { font-size: 11px; color: #6c757d; margin-top: 4px; }
+        .sig-meta .surface { color: #d4740a; font-weight: 600; }
+        .sig-pick-right { display: flex; align-items: center; gap: 6px; }
+        .sig-badge-col { display: flex; flex-direction: column; gap: 3px; }
+        .elo-detail-box { margin-top: 10px; padding: 8px; background: #0f1117; border: 1px solid #333; border-radius: 4px; }
+        .elo-detail-header { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 6px; }
+        .elo-detail-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 11px; }
+        .elo-player .elo-name { font-weight: 700; color: #e0e0e0; margin-bottom: 4px; }
+        .elo-player table { width: 100%; border-collapse: collapse; }
+        .elo-player td { padding: 1px 0; }
+        .elo-player td.elo-lbl { color: #888; width: 50px; }
+        .elo-player td.elo-val { font-weight: 600; color: #e0e0e0; text-align: left; }
+        .elo-center-stats { text-align: center; margin-top: 8px; padding-top: 6px; border-top: 1px solid #2d3139; font-size: 10px; color: #888; }
+        .elo-center-stats .mismatch-val { font-weight: 700; font-size: 12px; margin-left: 4px; }
         .sig-stats { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; font-size: 11px; color: #ccc; }
         .sig-stats .stat-header { font-weight: 700; color: #e0e0e0; margin-bottom: 4px; }
         .sig-h2h { text-align: center; font-weight: 700; color: #e0e0e0; }
@@ -1527,39 +1545,39 @@ function renderSignals() {
         html += `
         <div class="sig-card ${isBet ? 'is-bet' : ''}" id="sig-${s.match.replace(/[^a-zA-Z0-9]/g, '')}">
             <div class="sig-top">
-                <div>
-                    <div class="sig-match">${(function(){
-                        if (s.market_type === 'h2h' && s.match.includes(' vs ')) {
-                            const parts = s.match.split(' vs ');
-                            return '<span class="player-link" data-player="' + (s.player_a||parts[0].trim()) + '" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">' + parts[0].trim() + '</span> vs <span class="player-link" data-player="' + (s.player_b||parts[1].trim()) + '" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">' + parts[1].trim() + '</span>';
-                        }
-                        return s.match;
-                    })()}${activeBadge}</div>
-                    ${tourney ? '<div class="sig-tournament-badge">' + tourney + '</div>' : ''}
-                    <div class="sig-tourney">${[surface, round ? 'Round: ' + round : ''].filter(Boolean).join(' · ') || '—'}</div>
-                </div>
-                <div>${tierBadge}${valBadge}${eloBadge}</div>
+                <div class="sig-match">${(function(){
+                    if (s.market_type === 'h2h' && s.match.includes(' vs ')) {
+                        const parts = s.match.split(' vs ');
+                        return '<span class="player-link" data-player="' + (s.player_a||parts[0].trim()) + '" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">' + parts[0].trim() + '</span> vs <span class="player-link" data-player="' + (s.player_b||parts[1].trim()) + '" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">' + parts[1].trim() + '</span>';
+                    }
+                    return s.match;
+                })()}${activeBadge}</div>
+                <div class="sig-meta">${[s.logged_at ? new Date(s.logged_at).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '', tourney, round ? 'Round ' + round : '', surface ? '<span class="surface">' + surface + '</span>' : ''].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>
             </div>
             <div class="sig-body">
                 <div class="sig-pick">
                     <div style="flex:1">
-                        <div class="sig-pick-label">${s.market_type === 'outright' ? 'PREDICTED WINNER' : 'BET ON'}</div>
+                        <div class="sig-pick-label">${s.market_type === 'outright' ? 'PREDICTED WINNER' : 'PICK'}</div>
                         <div class="sig-pick-name"><span class="player-link" data-player="${betOn}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)" style="color:inherit">${betOn}</span></div>
                     </div>
-                    <div style="background:${(s.confidence||0) >= 65 ? '#1b5e20' : (s.confidence||0) >= 55 ? '#4a2800' : '#2d3139'}; border:1px solid ${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}; padding:6px 12px; text-align:center; min-width:70px">
-                        <div style="font-size:7px; color:${(s.confidence||0) >= 65 ? '#81c784' : (s.confidence||0) >= 55 ? '#ffb74d' : '#aaa'}; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:2px">${(s.confidence||0) >= 65 ? 'HIGH' : (s.confidence||0) >= 55 ? 'MED' : 'LOW'}</div>
-                        <div style="font-size:16px; font-weight:700; color:${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}">${(s.confidence||0).toFixed(1)}%</div>
+                    <div class="sig-pick-right">
+                        <div style="background:${(s.confidence||0) >= 65 ? '#1b5e20' : (s.confidence||0) >= 55 ? '#4a2800' : '#2d3139'}; border:1px solid ${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}; padding:6px 12px; text-align:center; min-width:70px">
+                            <div style="font-size:7px; color:${(s.confidence||0) >= 65 ? '#81c784' : (s.confidence||0) >= 55 ? '#ffb74d' : '#aaa'}; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:2px">CONF</div>
+                            <div style="font-size:16px; font-weight:700; color:${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}">${(s.confidence||0).toFixed(1)}%</div>
+                        </div>
+                        <div class="sig-badge-col">${tierBadge}${valBadge}${eloBadge}</div>
                     </div>
                 </div>
+                <div class="sig-nums-box">
                 <div class="sig-nums">
                     <div class="sig-num"><div class="sn-label">Poly Price</div><div class="sn-val" style="color:#6c757d">${polyP.toFixed(1)}c</div></div>
                     <div class="sig-num"><div class="sn-label">Base Model</div><div class="sn-val" style="color:#e0e0e0">${(s.base_prob || (modelP - (s.lstm_adj||0))).toFixed(1)}%</div></div>
                     <div class="sig-num"><div class="sn-label">LSTM Model</div><div class="sn-val" style="color:#90caf9">${modelP.toFixed(1)}%</div></div>
                     <div class="sig-num"><div class="sn-label">Kelly</div><div class="sn-val" style="color:#d4740a">${(s.kelly_stake||0).toFixed(1)}%</div></div>
                 </div>
-                <div class="sig-nums" style="margin-top:4px; padding-top:4px; border-top:1px solid #2d3139">
+                <hr>
+                <div class="sig-nums">
                     ${(function(){
-                        // Calculate base edge: if not stored, derive from base_prob - poly_price, or fall back to combined edge
                         const baseEdge = s.base_edge != null && s.base_edge !== 0 ? s.base_edge : (s.base_prob ? s.base_prob - (s.poly_price || 0) : (s.edge || 0));
                         const lstmAdj = s.lstm_adj || 0;
                         const lstmEdge = baseEdge + lstmAdj;
@@ -1571,6 +1589,19 @@ function renderSignals() {
                             '<div class="sig-num"><div class="sn-label" style="color:#888">LSTM Adj</div><div class="sn-val" style="color:' + (lstmAdj > 0 ? '#4caf50' : lstmAdj < 0 ? '#f44336' : '#6c757d') + '">' + lstmAdjSign + lstmAdj.toFixed(1) + '%</div></div>' +
                             '<div class="sig-num"><div class="sn-label" style="color:#888">Combined</div><div class="sn-val" style="color:' + edgeColor + '; font-weight:700">' + edgeSign + (s.edge||0).toFixed(1) + '%</div></div>';
                     })()}
+                </div>
+                ${(function(){
+                    const eloProbVal = s.elo_prob;
+                    const surfEloProbVal = s.surf_elo_prob;
+                    const eloEdgeVal = s.elo_edge;
+                    if (eloProbVal == null && surfEloProbVal == null) return '';
+                    const eloEdgeSign = eloEdgeVal != null && eloEdgeVal >= 0 ? '+' : '';
+                    return '<hr><div class="sig-nums-3">' +
+                        '<div class="sig-num"><div class="sn-label" style="color:#888">⚡ ELO Prob</div><div class="sn-val" style="color:#42a5f5">' + (eloProbVal != null ? eloProbVal.toFixed(1) + '%' : '—') + '</div></div>' +
+                        '<div class="sig-num"><div class="sn-label" style="color:#888">Surf ELO</div><div class="sn-val" style="color:#42a5f5">' + (surfEloProbVal != null ? surfEloProbVal.toFixed(1) + '%' : '—') + '</div></div>' +
+                        '<div class="sig-num"><div class="sn-label" style="color:#888">ELO Edge</div><div class="sn-val" style="color:' + (eloEdgeVal != null && eloEdgeVal >= 3 ? '#4caf50' : '#6c757d') + '">' + (eloEdgeVal != null ? eloEdgeSign + eloEdgeVal.toFixed(1) + '%' : '—') + '</div></div>' +
+                        '</div>';
+                })()}
                 </div>
                 <div class="sig-stats">
                 ${(function(){
@@ -1682,49 +1713,46 @@ function renderSignals() {
                     const fmtProb = (p) => p != null ? p.toFixed(1) + '%' : '—';
                     const probColor = (p) => p != null ? (p >= 60 ? '#4caf50' : p >= 50 ? '#ffd740' : '#f44336') : '#888';
 
-                    // ELO Intelligence section
-                    const hasEloIntel = s.elo_prob_a != null || s.surf_elo_prob_a != null;
-                    let eloIntelHtml = '';
-                    if (hasEloIntel) {
-                        const confLabel = s.elo_confidence || '—';
-                        const confColor = confLabel === 'HIGH' ? '#4caf50' : confLabel === 'MED' ? '#ffd740' : confLabel === 'DIVERGE' ? '#f44336' : '#888';
-                        const confNote = confLabel === 'DIVERGE' ? 'Surface ELO dominates' : confLabel === 'HIGH' ? 'Both ELOs agree strongly' : '';
-                        eloIntelHtml = '<div style="margin-top:8px; padding:8px; background:#0f1117; border:1px solid #333; border-radius:4px">' +
-                            '<div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600; margin-bottom:6px">ELO Win Probability</div>' +
-                            '<div style="display:grid; grid-template-columns:1fr auto 1fr; gap:8px; font-size:11px">' +
-                                '<div style="text-align:center">' +
-                                    '<div style="font-size:9px; color:#888">' + (s.player_a||'').split(' ').pop() + '</div>' +
-                                    '<div style="font-weight:700; color:' + probColor(s.elo_prob_a) + '">' + fmtProb(s.elo_prob_a) + '</div>' +
-                                    '<div style="font-size:8px; color:#666">General</div>' +
-                                    (s.surf_elo_prob_a != null ? '<div style="font-weight:700; color:' + probColor(s.surf_elo_prob_a) + '">' + fmtProb(s.surf_elo_prob_a) + '</div><div style="font-size:8px; color:#666">' + surfLabel + '</div>' : '') +
-                                '</div>' +
-                                '<div style="display:flex; align-items:center; font-size:10px; color:#666">vs</div>' +
-                                '<div style="text-align:center">' +
-                                    '<div style="font-size:9px; color:#888">' + (s.player_b||'').split(' ').pop() + '</div>' +
-                                    '<div style="font-weight:700; color:' + probColor(s.elo_prob_b) + '">' + fmtProb(s.elo_prob_b) + '</div>' +
-                                    '<div style="font-size:8px; color:#666">General</div>' +
-                                    (s.surf_elo_prob_b != null ? '<div style="font-weight:700; color:' + probColor(s.surf_elo_prob_b) + '">' + fmtProb(s.surf_elo_prob_b) + '</div><div style="font-size:8px; color:#666">' + surfLabel + '</div>' : '') +
-                                '</div>' +
-                            '</div>' +
-                            '<div style="text-align:center; margin-top:4px; font-size:9px">Confidence: <span style="color:' + confColor + '; font-weight:700">' + confLabel + '</span>' + (confNote ? ' <span style="color:#666">— ' + confNote + '</span>' : '') + '</div>' +
-                        '</div>';
+                    // ELO Details box for Advanced Stats
+                    const eloA = s.sa_elo, eloB = s.sb_elo;
+                    const surfEloA = s.sa_surf_elo, surfEloB = s.sb_surf_elo;
+                    const eloPctA = s.sa_elo_pct, eloPctB = s.sb_elo_pct;
+                    const eloMismatch = (eloA && eloB) ? eloA - eloB : null;
+                    // Surface mismatch: only show for the player with higher surface ELO
+                    let surfMismatchHtml = '';
+                    if (s.surf_mismatch_a != null && s.surf_mismatch_b != null) {
+                        const mmA = s.surf_mismatch_a, mmB = s.surf_mismatch_b;
+                        if (mmA > mmB) surfMismatchHtml = 'Surface Mismatch: <span class="mismatch-val" style="color:#4caf50">↑' + Math.abs(mmA) + ' ' + (s.player_a||'') + '</span>';
+                        else surfMismatchHtml = 'Surface Mismatch: <span class="mismatch-val" style="color:#4caf50">↑' + Math.abs(mmB) + ' ' + (s.player_b||'') + '</span>';
+                    } else if (s.surf_mismatch_a != null && s.surf_mismatch_a > 0) {
+                        surfMismatchHtml = 'Surface Mismatch: <span class="mismatch-val" style="color:#4caf50">↑' + s.surf_mismatch_a + ' ' + (s.player_a||'') + '</span>';
+                    } else if (s.surf_mismatch_b != null && s.surf_mismatch_b > 0) {
+                        surfMismatchHtml = 'Surface Mismatch: <span class="mismatch-val" style="color:#4caf50">↑' + s.surf_mismatch_b + ' ' + (s.player_b||'') + '</span>';
                     }
 
-                    // Surface mismatch notes
-                    const fmtMismatch = (mm, name) => {
-                        if (mm == null) return '';
-                        const dir = mm > 0 ? '↑' : '↓';
-                        const col = mm > 0 ? '#4caf50' : '#f44336';
-                        return '<div style="font-size:9px; color:' + col + '">' + dir + Math.abs(mm) + ' ' + surfLabel + ' vs general (' + name + ')</div>';
-                    };
+                    let eloDetailHtml = '';
+                    if (eloA || eloB) {
+                        eloDetailHtml = '<div class="elo-detail-box">' +
+                            '<div class="elo-detail-header">ELO Details</div>' +
+                            '<div class="elo-detail-cols">' +
+                                '<div class="elo-player"><div class="elo-name">' + (s.player_a||'') + '</div>' +
+                                    '<table><tr><td class="elo-lbl">ELO</td><td class="elo-val">' + (eloA || '—') + (eloPctA != null ? ' <span style="color:#888;font-size:9px">(P' + eloPctA + ')</span>' : '') + '</td></tr>' +
+                                    (surfEloA ? '<tr><td class="elo-lbl">' + surfLabel + '</td><td class="elo-val">' + surfEloA + '</td></tr>' : '') +
+                                '</table></div>' +
+                                '<div class="elo-player"><div class="elo-name">' + (s.player_b||'') + '</div>' +
+                                    '<table><tr><td class="elo-lbl">ELO</td><td class="elo-val">' + (eloB || '—') + (eloPctB != null ? ' <span style="color:#888;font-size:9px">(P' + eloPctB + ')</span>' : '') + '</td></tr>' +
+                                    (surfEloB ? '<tr><td class="elo-lbl">' + surfLabel + '</td><td class="elo-val">' + surfEloB + '</td></tr>' : '') +
+                                '</table></div>' +
+                            '</div>' +
+                            (surfMismatchHtml || eloMismatch != null ? '<div class="elo-center-stats">' + surfMismatchHtml + (surfMismatchHtml && eloMismatch != null ? ' &nbsp;·&nbsp; ' : '') + (eloMismatch != null ? 'ELO Mismatch: <span class="mismatch-val" style="color:' + (eloMismatch > 0 ? '#4caf50' : eloMismatch < 0 ? '#f44336' : '#888') + '">' + (eloMismatch >= 0 ? '+' : '') + eloMismatch + '</span>' : '') + '</div>' : '') +
+                        '</div>';
+                    }
 
                     return '<details class="sig-advanced" style="margin:8px 16px 0; padding:8px 0; border-top:1px solid #333">' +
                         '<summary style="cursor:pointer; font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600">Advanced Stats</summary>' +
                         '<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px; font-size:11px; color:#ccc">' +
                         '<div>' +
                             '<div style="font-weight:700; margin-bottom:4px; color:#e0e0e0; border-bottom:1px solid #333; padding-bottom:2px">' + (s.player_a||'') + '</div>' +
-                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">ELO</span><span>' + fmtElo(s.sa_elo, s.sa_elo_pct) + '</span></div>' +
-                            (s.sa_surf_elo ? '<div style="display:flex; justify-content:space-between"><span style="color:#888">' + surfLabel + '</span><span>' + fmtSurfElo(s.sa_surf_elo) + '</span></div>' : '') +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 10</span><span>' + fmtVs(s.sa_vs_top10) + vsRecordDeltaA(s.sa_vs_top10, s.sb_vs_top10) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 20</span><span>' + fmtVs(s.sa_vs_top20) + vsRecordDeltaA(s.sa_vs_top20, s.sb_vs_top20) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 12m</span><span>' + fmtMove(s.sa_rank_move_365d) + '</span></div>' +
@@ -1732,10 +1760,8 @@ function renderSignals() {
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 3m</span><span>' + fmtMove(s.sa_rank_move_90d) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">YTD Record</span><span>' + fmtYTD(s.sa_wins_ytd, s.sa_losses_ytd) + '</span></div>' +
                         '</div>' +
-                        '<div style="text-align:right">' +
+                        '<div>' +
                             '<div style="font-weight:700; margin-bottom:4px; color:#e0e0e0; border-bottom:1px solid #333; padding-bottom:2px">' + (s.player_b||'') + '</div>' +
-                            '<div style="display:flex; justify-content:space-between"><span style="color:#888">ELO</span><span>' + fmtElo(s.sb_elo, s.sb_elo_pct) + '</span></div>' +
-                            (s.sb_surf_elo ? '<div style="display:flex; justify-content:space-between"><span style="color:#888">' + surfLabel + '</span><span>' + fmtSurfElo(s.sb_surf_elo) + '</span></div>' : '') +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 10</span><span>' + fmtVs(s.sb_vs_top10) + vsRecordDeltaB(s.sb_vs_top10, s.sa_vs_top10) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">vs Top 20</span><span>' + fmtVs(s.sb_vs_top20) + vsRecordDeltaB(s.sb_vs_top20, s.sa_vs_top20) + '</span></div>' +
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">Rank Move 12m</span><span>' + fmtMove(s.sb_rank_move_365d) + '</span></div>' +
@@ -1744,9 +1770,7 @@ function renderSignals() {
                             '<div style="display:flex; justify-content:space-between"><span style="color:#888">YTD Record</span><span>' + fmtYTD(s.sb_wins_ytd, s.sb_losses_ytd) + '</span></div>' +
                         '</div>' +
                     '</div>' +
-                    eloIntelHtml +
-                    fmtMismatch(s.surf_mismatch_a, (s.player_a||'').split(' ').pop()) +
-                    fmtMismatch(s.surf_mismatch_b, (s.player_b||'').split(' ').pop()) +
+                    eloDetailHtml +
                     '</details>';
                 })()}
             </div>
