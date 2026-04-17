@@ -9,6 +9,7 @@ Works with gunicorn for production deployment on Render.
 import os
 import json
 import glob
+import re
 import secrets
 import hashlib
 from datetime import datetime, timedelta
