@@ -1473,59 +1473,120 @@ def _run_inline_resolver():
 
                 # ── Phase 0b: Directly resolve BETS that have no matching pick ──
                 # User may have bet on matches the signal generator didn't pick
+                # Strategy 1: Match bets by slug from slug_resolved_cache
+                # Strategy 2: Match bets against bulk-fetched resolved markets by player names
+                # Strategy 3: For bets with poly_link but no cache hit, do individual slug lookups
                 bet_resolutions = 0
+
+                def _resolve_bet(bet, parsed):
+                    """Apply resolution to a bet. Returns True if resolved."""
+                    if parsed.get("is_void"):
+                        bet["outcome"] = "void"
+                        bet["pnl"] = 0.0
+                        bet["actual_winner"] = "VOID"
+                        bet["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                        return True
+
+                    winner_raw = parsed.get("winner", "")
+                    # Parse player names from bet match string
+                    match_str = bet.get("match", "")
+                    parts = re.split(r'\s+vs\.?\s+', match_str)
+                    if len(parts) == 2:
+                        pa = parts[0].strip()
+                        pbb = parts[1].strip()
+                    else:
+                        pa = bet.get("player_a", "")
+                        pbb = bet.get("player_b", "")
+
+                    a_last = pa.split()[-1].lower() if pa else ""
+                    b_last = pbb.split()[-1].lower() if pbb else ""
+                    winner_lower = winner_raw.lower()
+                    wl = winner_lower.split()[-1] if winner_lower else ""
+
+                    if winner_lower in ["yes", "true", "1"]:
+                        winner_name = pa
+                    elif winner_lower in ["no", "false", "0"]:
+                        winner_name = pbb
+                    elif a_last == wl or a_last in winner_lower:
+                        winner_name = pa
+                    elif b_last == wl or b_last in winner_lower:
+                        winner_name = pbb
+                    else:
+                        return False
+
+                    bet_on = bet.get("bet_on", "")
+                    bl = bet_on.split()[-1].lower() if bet_on else ""
+                    wnl = winner_name.split()[-1].lower() if winner_name else ""
+                    bet_won = (bl == wnl) or (bet_on.lower() == winner_name.lower())
+
+                    poly_price = bet.get("poly_price", 50)
+                    price_dec = poly_price / 100
+                    if bet_won:
+                        bet["outcome"] = "win"
+                        bet["pnl"] = round(100 * (1 - price_dec), 2)
+                    else:
+                        bet["outcome"] = "loss"
+                        bet["pnl"] = round(-100 * price_dec, 2)
+                    bet["actual_winner"] = winner_name
+                    bet["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                    return True
+
+                unresolved_bet_slugs = []  # For Strategy 3
                 for bet in bet_list:
                     if bet.get("outcome") is not None:
                         continue
+
+                    # Strategy 1: slug from poly_link
                     bslug = ""
                     bpl = bet.get("poly_link", "")
                     if "/event/" in bpl:
                         bslug = bpl.split("/event/")[-1].split("?")[0].split("/")[0]
                     if bslug and bslug in slug_resolved_cache:
-                        parsed = slug_resolved_cache[bslug]
-                        if parsed.get("is_void"):
-                            bet["outcome"] = "void"
-                            bet["pnl"] = 0.0
-                            bet["actual_winner"] = "VOID"
-                            bet["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
+                        if _resolve_bet(bet, slug_resolved_cache[bslug]):
                             bet_resolutions += 1
                             continue
 
-                        winner_raw = parsed.get("winner", "")
-                        pa = bet.get("player_a", "")
-                        pbb = bet.get("player_b", "")
-                        a_last = pa.split()[-1].lower() if pa else ""
-                        b_last = pbb.split()[-1].lower() if pbb else ""
-                        winner_lower = winner_raw.lower()
-                        wl = winner_lower.split()[-1] if winner_lower else ""
+                    # Strategy 2: Match against bulk-fetched resolved markets by player names
+                    match_str = bet.get("match", "")
+                    parts = re.split(r'\s+vs\.?\s+', match_str)
+                    if len(parts) == 2:
+                        a_last = parts[0].strip().split()[-1].lower()
+                        b_last = parts[1].strip().split()[-1].lower()
+                        if len(a_last) > 2 and len(b_last) > 2:
+                            for rm in unique_resolved:
+                                rm_words = rm.get("_words", set())
+                                if a_last in rm_words and b_last in rm_words:
+                                    if _resolve_bet(bet, rm):
+                                        bet_resolutions += 1
+                                        break
 
-                        if winner_lower in ["yes", "true", "1"]:
-                            winner_name = pa
-                        elif winner_lower in ["no", "false", "0"]:
-                            winner_name = pbb
-                        elif a_last == wl or a_last in winner_lower:
-                            winner_name = pa
-                        elif b_last == wl or b_last in winner_lower:
-                            winner_name = pbb
-                        else:
+                    if bet.get("outcome") is not None:
+                        continue
+
+                    # Collect slug for Strategy 3 (individual lookups)
+                    if bslug and bslug not in slug_resolved_cache:
+                        unresolved_bet_slugs.append((bet, bslug))
+
+                # Strategy 3: Individual slug lookups for remaining bets
+                for bet, bslug in unresolved_bet_slugs[:20]:
+                    if bet.get("outcome") is not None:
+                        continue
+                    try:
+                        r = req.get(f"https://gamma-api.polymarket.com/events?slug={bslug}", timeout=8)
+                        r.raise_for_status()
+                        events = r.json()
+                        if not events:
                             continue
-
-                        bet_on = bet.get("bet_on", "")
-                        bl = bet_on.split()[-1].lower() if bet_on else ""
-                        wnl = winner_name.split()[-1].lower() if winner_name else ""
-                        bet_won = (bl == wnl) or (bet_on.lower() == winner_name.lower())
-
-                        poly_price = bet.get("poly_price", 50)
-                        price_dec = poly_price / 100
-                        if bet_won:
-                            bet["outcome"] = "win"
-                            bet["pnl"] = round(100 * (1 - price_dec), 2)
-                        else:
-                            bet["outcome"] = "loss"
-                            bet["pnl"] = round(-100 * price_dec, 2)
-                        bet["actual_winner"] = winner_name
-                        bet["resolved_at"] = parsed.get("resolved_at", datetime.utcnow().isoformat())
-                        bet_resolutions += 1
+                        ev = events[0] if isinstance(events, list) else events
+                        markets = ev.get("markets", [])
+                        for m in (markets if markets else [ev]):
+                            parsed = _parse_resolved_market(m)
+                            if parsed:
+                                if _resolve_bet(bet, parsed):
+                                    bet_resolutions += 1
+                                break
+                    except Exception:
+                        pass
 
                 if bet_resolutions > 0:
                     if isinstance(bets_data, dict):

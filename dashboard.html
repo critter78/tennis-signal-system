@@ -446,14 +446,25 @@ let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
                     myBets.push(sb);
                     added++;
                 } else {
-                    // Update existing local bet with server trade data (if server has it)
-                    if (sb.actual_stake) {
-                        const idx = myBets.findIndex(b => b.match + '|' + b.bet_on === key);
-                        if (idx >= 0) {
+                    // Update existing local bet with server data (trade data + outcome + poly_link)
+                    const idx = myBets.findIndex(b => b.match + '|' + b.bet_on === key);
+                    if (idx >= 0) {
+                        if (sb.actual_stake) {
                             myBets[idx].actual_buy_price = sb.actual_buy_price;
                             myBets[idx].actual_stake = sb.actual_stake;
                             myBets[idx].actual_shares = sb.actual_shares;
                             myBets[idx].trade_count = sb.trade_count;
+                        }
+                        // Merge outcome from server (direct bet resolution)
+                        if (sb.outcome && !myBets[idx].outcome) {
+                            myBets[idx].outcome = sb.outcome;
+                            myBets[idx].pnl = sb.pnl;
+                            myBets[idx].actual_winner = sb.actual_winner;
+                            myBets[idx].resolved_at = sb.resolved_at;
+                        }
+                        // Merge poly_link from server if missing locally
+                        if (sb.poly_link && !myBets[idx].poly_link) {
+                            myBets[idx].poly_link = sb.poly_link;
                         }
                     }
                 }
@@ -463,6 +474,35 @@ let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
 
         // Always push local bets to server (so other devices can see them)
         if (myBets.length > 0) {
+            fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bets: myBets}) });
+        }
+
+        // Backfill missing poly_links from picks data
+        let enriched = 0;
+        myBets.forEach(bet => {
+            if (bet.poly_link) return;
+            // Find matching pick with poly_link
+            const pick = picks.find(p => p.match === bet.match && p.poly_link);
+            if (!pick) {
+                // Fuzzy match by player last names
+                const parts = (bet.match || '').toLowerCase().split(/\s+vs\.?\s+/);
+                if (parts.length === 2) {
+                    const lastA = parts[0].trim().split(' ').pop();
+                    const lastB = parts[1].trim().split(' ').pop();
+                    const fuzzy = picks.find(p => {
+                        const pm = (p.match || '').toLowerCase();
+                        return pm.includes(lastA) && pm.includes(lastB) && p.poly_link;
+                    });
+                    if (fuzzy) { bet.poly_link = fuzzy.poly_link; enriched++; }
+                }
+            } else {
+                bet.poly_link = pick.poly_link;
+                enriched++;
+            }
+        });
+        if (enriched > 0) {
+            localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
+            // Push enriched bets to server so resolver can use poly_links
             fetch('/api/bets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bets: myBets}) });
         }
 
@@ -1789,7 +1829,7 @@ function renderSignals() {
                 })()}
             </div>
             <div class="sig-footer">
-                <button class="sig-bet-btn ${isBet ? 'active' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}')">${isBet ? '✓ Active Bet' : 'Place Bet'}</button>
+                <button class="sig-bet-btn ${isBet ? 'active' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}', '${(polyLink||'').replace(/'/g,"\\'")}')">${isBet ? '✓ Active Bet' : 'Place Bet'}</button>
                 <a href="${polyLink}" target="_blank" class="sig-poly-link">Open on Polymarket →</a>
             </div>
         </div>`;
@@ -1799,10 +1839,11 @@ function renderSignals() {
     grid.innerHTML = html;
 }
 
-function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, marketType, tournament, surface) {
+function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, marketType, tournament, surface, polyLink) {
     const data = {
         match, bet_on: betOn, poly_price: polyPrice, model_prob: modelProb,
         edge, kelly, market_type: marketType, tournament, surface,
+        poly_link: polyLink || '',
         timestamp: new Date().toISOString(),
         card_date: new Date().toISOString().slice(0, 10),
     };
