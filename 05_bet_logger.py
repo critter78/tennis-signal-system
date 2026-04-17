@@ -17,15 +17,21 @@ def log_picks(signals, run_id=None):
 
     # Build index of existing picks for dedup and updates
     existing_by_mid = {}    # market_id -> index in existing list
-    existing_by_key = {}    # (sorted players, market_type) -> index
+    existing_by_slug = {}   # slug -> index
+    existing_by_key = {}    # (sorted players, market_type, tournament_or_slug) -> index
     for idx, p in enumerate(existing):
         mid = p.get("market_id", "")
         if mid:
             existing_by_mid[mid] = idx
+        slug = p.get("slug", "")
+        if slug:
+            existing_by_slug[slug] = idx
         pa = p.get("player_a", "").lower().strip()
         pb = p.get("player_b", "").lower().strip()
         mt = p.get("market_type", "")
-        key = (tuple(sorted([pa, pb])), mt)
+        # Include slug or tournament to distinguish same-player outrights across events
+        discriminator = slug or p.get("tournament", "").lower().strip()
+        key = (tuple(sorted([pa, pb])), mt, discriminator)
         existing_by_key[key] = idx
 
     # Fields to refresh on existing unresolved picks (keep outcomes intact)
@@ -61,12 +67,18 @@ def log_picks(signals, run_id=None):
         if mid and mid in existing_by_mid:
             existing_idx = existing_by_mid[mid]
         else:
-            pa = s.get("player_a", "").lower().strip()
-            pb = s.get("player_b", "").lower().strip()
-            mt = s.get("market_type", "")
-            key = (tuple(sorted([pa, pb])), mt)
-            if key in existing_by_key:
-                existing_idx = existing_by_key[key]
+            # Try slug match first (most reliable after market_id)
+            slug = s.get("slug", "")
+            if slug and slug in existing_by_slug:
+                existing_idx = existing_by_slug[slug]
+            else:
+                pa = s.get("player_a", "").lower().strip()
+                pb = s.get("player_b", "").lower().strip()
+                mt = s.get("market_type", "")
+                discriminator = slug or s.get("tournament", "").lower().strip()
+                key = (tuple(sorted([pa, pb])), mt, discriminator)
+                if key in existing_by_key:
+                    existing_idx = existing_by_key[key]
 
         if existing_idx is not None:
             # Existing pick found — update stats if not yet resolved
@@ -82,13 +94,18 @@ def log_picks(signals, run_id=None):
             continue
 
         # New pick — add dedup keys and collect
+        new_idx = len(existing) + len(new_picks)
         if mid:
-            existing_by_mid[mid] = len(existing) + len(new_picks)
+            existing_by_mid[mid] = new_idx
+        slug = s.get("slug", "")
+        if slug:
+            existing_by_slug[slug] = new_idx
         pa = s.get("player_a", "").lower().strip()
         pb = s.get("player_b", "").lower().strip()
         mt = s.get("market_type", "")
-        key = (tuple(sorted([pa, pb])), mt)
-        existing_by_key[key] = len(existing) + len(new_picks)
+        discriminator = slug or s.get("tournament", "").lower().strip()
+        key = (tuple(sorted([pa, pb])), mt, discriminator)
+        existing_by_key[key] = new_idx
 
         entry = {"run_id": run_id, "logged_at": datetime.now().isoformat(),
             "market_id": s.get("market_id",""), "slug": s.get("slug",""),
@@ -251,7 +268,8 @@ def export_lstm_data():
 
 def dedup_picks():
     """Remove duplicate picks, keeping the first occurrence of each match.
-    For resolved duplicates, keeps the one with an outcome (if any)."""
+    For resolved duplicates, keeps the one with an outcome (if any).
+    Uses slug/tournament to distinguish same-player outrights across events."""
     picks = load_picks_log()
     if not picks:
         print("  No picks to deduplicate.")
@@ -259,6 +277,7 @@ def dedup_picks():
 
     seen_keys = set()
     seen_market_ids = set()
+    seen_slugs = set()
     unique = []
     dupes = 0
 
@@ -270,13 +289,19 @@ def dedup_picks():
 
     for p in picks_sorted:
         mid = p.get("market_id", "")
+        slug = p.get("slug", "")
         pa = p.get("player_a", "").lower().strip()
         pb = p.get("player_b", "").lower().strip()
         mt = p.get("market_type", "")
-        key = (tuple(sorted([pa, pb])), mt)
+        # Include slug or tournament so outrights for different events stay distinct
+        discriminator = slug or p.get("tournament", "").lower().strip()
+        key = (tuple(sorted([pa, pb])), mt, discriminator)
 
-        # Skip if we've seen this market_id or player pair already
+        # Skip if we've seen this market_id, slug, or player pair already
         if mid and mid in seen_market_ids:
+            dupes += 1
+            continue
+        if slug and slug in seen_slugs:
             dupes += 1
             continue
         if key in seen_keys:
@@ -286,6 +311,8 @@ def dedup_picks():
         seen_keys.add(key)
         if mid:
             seen_market_ids.add(mid)
+        if slug:
+            seen_slugs.add(slug)
         unique.append(p)
 
     # Re-sort by logged_at for clean output
