@@ -486,7 +486,8 @@ def get_player_ranking(df, player, as_of=None):
 
 # ── ELO COMPUTATION ──
 # Global cache for ELO ratings (computed once per run across all players)
-_elo_cache = None
+_elo_cache = None          # general ELO
+_elo_surface_cache = {}    # surface-specific ELO: {"Hard": {...}, "Clay": {...}, "Grass": {...}}
 _lstm_log_once = {}  # prevents spamming LSTM logs for every pick
 
 def _build_elo_table(df, cutoff, k_base=32, initial=1500):
@@ -558,6 +559,214 @@ def _compute_elo_percentile(df, player, cutoff):
     active_elos = [elo_table.get(p, 1500) for p in active_players]
     below = sum(1 for e in active_elos if e < player_elo)
     return round(below / len(active_elos) * 100)
+
+
+# ── SURFACE-SPECIFIC ELO ──
+
+def _build_surface_elo_table(df, cutoff, surface, k_base=32, initial=1500):
+    """
+    Compute ELO ratings using ONLY matches played on a specific surface.
+    The resulting rating reflects a player's strength on that surface.
+    Uses a 50/50 blend of surface-only ELO and general ELO (same as Tennis Abstract's
+    hElo/cElo/gElo methodology) for stability when surface sample sizes are small.
+    """
+    global _elo_surface_cache
+    if surface in _elo_surface_cache:
+        return _elo_surface_cache[surface]
+
+    import time
+    t0 = time.time()
+
+    # Filter to surface-specific matches only
+    matches = df[(df["date"] < cutoff) & (df["surface"] == surface)].sort_values("date")
+    winners = matches["winner"].values
+    losers = matches["loser"].values
+
+    surf_elo = {}
+    for i in range(len(winners)):
+        w, l = winners[i], losers[i]
+        if w not in surf_elo: surf_elo[w] = initial
+        if l not in surf_elo: surf_elo[l] = initial
+
+        ra, rb = surf_elo[w], surf_elo[l]
+        ea = 1.0 / (1.0 + 10 ** ((rb - ra) / 400))
+
+        if ea < 0.3:
+            k = k_base * 1.5
+        elif ea > 0.8:
+            k = k_base * 0.7
+        else:
+            k = k_base
+
+        surf_elo[w] = ra + k * (1 - ea)
+        surf_elo[l] = rb + k * (ea - 1)
+
+    elapsed = time.time() - t0
+    print(f"  [elo] Computed {len(surf_elo)} {surface} surface ratings in {elapsed:.1f}s", file=sys.stderr)
+
+    _elo_surface_cache[surface] = surf_elo
+    return surf_elo
+
+
+def _compute_surface_elo(df, player, cutoff, surface):
+    """
+    Get blended surface ELO (50/50 mix of surface-only ELO and general ELO).
+    This matches Tennis Abstract's hElo/cElo/gElo methodology.
+    Returns None if player has insufficient surface-specific data.
+    """
+    general_elo_table = _build_elo_table(df, cutoff)
+    surface_elo_table = _build_surface_elo_table(df, cutoff, surface)
+
+    general = general_elo_table.get(player, 1500)
+    surface_raw = surface_elo_table.get(player)
+
+    if surface_raw is None:
+        return None  # Player has no matches on this surface
+
+    # 50/50 blend: stabilizes ratings for players with few surface matches
+    blended = (general + surface_raw) / 2.0
+    return round(blended)
+
+
+def _elo_win_probability(elo_a, elo_b, best_of=3):
+    """
+    Calculate win probability from ELO differential.
+    Uses standard ELO formula calibrated for tennis:
+      100pt diff → ~64% (bo3), 200pt → ~76%, 300pt → ~85%, 400pt → ~91%, 500pt → ~95%
+    For best-of-5, converts to set-win probability and compounds over 5 sets.
+    """
+    if elo_a is None or elo_b is None:
+        return None
+
+    # Standard ELO win probability
+    p_bo3 = 1.0 / (1.0 + 10 ** ((elo_b - elo_a) / 400.0))
+
+    if best_of == 3:
+        return round(p_bo3 * 100, 1)
+
+    # Best-of-5 adjustment: favorite is more likely to win over more sets
+    # Convert match-win prob to approximate set-win prob, then compute bo5
+    # Using the relationship: if p is set-win prob, bo3 = p^2*(3-2p), bo5 = p^3*(10-15p+6p^2)
+    # We solve for p from bo3, then compute bo5
+    # Approximation: bo5_prob ≈ bo3_prob * (1 + 0.15 * (bo3_prob - 0.5)) for favorites
+    if p_bo3 >= 0.5:
+        adjustment = 0.15 * (p_bo3 - 0.5)
+        p_bo5 = min(p_bo3 + adjustment, 0.99)
+    else:
+        adjustment = 0.15 * (0.5 - p_bo3)
+        p_bo5 = max(p_bo3 - adjustment, 0.01)
+
+    return round(p_bo5 * 100, 1)
+
+
+def _detect_elo_rank_mismatch(elo, elo_pct, rank, threshold=30):
+    """
+    Detect Low Rank / High ELO mismatch — a key betting opportunity.
+    Returns True if player's ELO-implied rank is 30+ spots better than official rank.
+    ELO percentile is used to estimate implied rank.
+    """
+    if elo_pct is None or rank is None:
+        return False
+
+    # Map ELO percentile to approximate implied rank
+    # P95 → ~top 25, P90 → ~top 50, P80 → ~top 100, P70 → ~top 150
+    if elo_pct >= 95:
+        implied_rank = 25
+    elif elo_pct >= 90:
+        implied_rank = 50
+    elif elo_pct >= 85:
+        implied_rank = 75
+    elif elo_pct >= 80:
+        implied_rank = 100
+    elif elo_pct >= 70:
+        implied_rank = 150
+    else:
+        return False  # Not high enough ELO to flag
+
+    return rank - implied_rank >= threshold
+
+
+def _compute_elo_intelligence(df, player_a, player_b, sa, sb, surface, cutoff, best_of=3):
+    """
+    Compute comprehensive ELO intelligence for a match:
+    - General ELO win probabilities
+    - Surface-specific ELO win probabilities
+    - Confidence level (agreement between general and surface ELO)
+    - Low Rank / High ELO alerts
+    - Surface ELO mismatch detection
+    """
+    elo_a = sa.get("elo", 1500)
+    elo_b = sb.get("elo", 1500)
+    rank_a = sa.get("rank_now")
+    rank_b = sb.get("rank_now")
+    elo_pct_a = sa.get("elo_pct")
+    elo_pct_b = sb.get("elo_pct")
+
+    # General ELO win probability
+    gen_prob_a = _elo_win_probability(elo_a, elo_b, best_of)
+    gen_prob_b = _elo_win_probability(elo_b, elo_a, best_of) if gen_prob_a else None
+
+    # Surface-specific ELO
+    surf_elo_a = _compute_surface_elo(df, player_a, cutoff, surface)
+    surf_elo_b = _compute_surface_elo(df, player_b, cutoff, surface)
+
+    # Surface ELO win probability
+    surf_prob_a = _elo_win_probability(surf_elo_a, surf_elo_b, best_of)
+    surf_prob_b = _elo_win_probability(surf_elo_b, surf_elo_a, best_of) if surf_prob_a else None
+
+    # Confidence: do general and surface ELO agree on the favorite?
+    # When they agree AND both show a strong edge, confidence is high
+    elo_confidence = None
+    if gen_prob_a is not None and surf_prob_a is not None:
+        both_favor_a = gen_prob_a > 50 and surf_prob_a > 50
+        both_favor_b = gen_prob_a < 50 and surf_prob_a < 50
+        if both_favor_a or both_favor_b:
+            # Agreement — confidence based on avg strength of signal
+            avg_edge = (abs(gen_prob_a - 50) + abs(surf_prob_a - 50)) / 2
+            if avg_edge >= 15:
+                elo_confidence = "HIGH"
+            elif avg_edge >= 8:
+                elo_confidence = "MED"
+            else:
+                elo_confidence = "LOW"
+        else:
+            elo_confidence = "DIVERGE"  # They disagree — surface ELO should dominate
+
+    # Low Rank / High ELO alerts
+    rank_elo_alert_a = _detect_elo_rank_mismatch(elo_a, elo_pct_a, rank_a)
+    rank_elo_alert_b = _detect_elo_rank_mismatch(elo_b, elo_pct_b, rank_b)
+
+    # Surface ELO mismatch: player's surface ELO is significantly different from general ELO
+    # This indicates a surface specialist (or weakness)
+    surf_mismatch_a = None
+    surf_mismatch_b = None
+    if surf_elo_a is not None and elo_a:
+        diff_a = surf_elo_a - elo_a
+        if abs(diff_a) >= 50:  # Meaningful divergence
+            surf_mismatch_a = round(diff_a)
+    if surf_elo_b is not None and elo_b:
+        diff_b = surf_elo_b - elo_b
+        if abs(diff_b) >= 50:
+            surf_mismatch_b = round(diff_b)
+
+    return {
+        # General ELO probabilities
+        "elo_prob_a":           gen_prob_a,
+        "elo_prob_b":           gen_prob_b,
+        # Surface ELO ratings and probabilities
+        "surf_elo_a":           surf_elo_a,
+        "surf_elo_b":           surf_elo_b,
+        "surf_elo_prob_a":      surf_prob_a,
+        "surf_elo_prob_b":      surf_prob_b,
+        # Confidence & agreement
+        "elo_confidence":       elo_confidence,
+        # Low Rank / High ELO alerts
+        "rank_elo_alert_a":     rank_elo_alert_a,
+        "rank_elo_alert_b":     rank_elo_alert_b,
+        # Surface ELO mismatch (+ means stronger on this surface, - means weaker)
+        "surf_mismatch_a":      surf_mismatch_a,
+        "surf_mismatch_b":      surf_mismatch_b,
+    }
 
 
 def _compute_momentum(df, player, cutoff, recent_matches):
@@ -1254,6 +1463,19 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         slug = mkt.get("slug", "")
         poly_link = f"https://polymarket.com/event/{slug}" if slug else "https://polymarket.com/sports/tennis/games"
 
+        # ── ELO INTELLIGENCE ──
+        # Determine best-of format (Grand Slams are best-of-5 for men)
+        is_grand_slam = any(gs in (tournament or "").lower() for gs in
+                           ["australian open", "roland garros", "french open", "wimbledon", "us open"])
+        # Assume best-of-3 for all women, best-of-5 only for men at Grand Slams
+        best_of = 5 if is_grand_slam else 3  # TODO: detect men vs women
+        try:
+            elo_intel = _compute_elo_intelligence(
+                df_hist, pa_hist or pa, pb_hist or pb, sa, sb, surface, today, best_of)
+        except Exception as e:
+            print(f"  [ELO] Intelligence failed for {pa} vs {pb}: {e}", file=sys.stderr)
+            elo_intel = {}
+
         signals.append({
             "market_id":    mkt.get("market_id", ""),
             "slug":         slug,
@@ -1331,6 +1553,18 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "sb_wins_ytd":      sb.get("wins_ytd"),
             "sa_losses_ytd":    sa.get("losses_ytd"),
             "sb_losses_ytd":    sb.get("losses_ytd"),
+            # ── ELO INTELLIGENCE ──
+            "elo_prob_a":           elo_intel.get("elo_prob_a"),
+            "elo_prob_b":           elo_intel.get("elo_prob_b"),
+            "sa_surf_elo":          elo_intel.get("surf_elo_a"),
+            "sb_surf_elo":          elo_intel.get("surf_elo_b"),
+            "surf_elo_prob_a":      elo_intel.get("surf_elo_prob_a"),
+            "surf_elo_prob_b":      elo_intel.get("surf_elo_prob_b"),
+            "elo_confidence":       elo_intel.get("elo_confidence"),
+            "rank_elo_alert_a":     elo_intel.get("rank_elo_alert_a"),
+            "rank_elo_alert_b":     elo_intel.get("rank_elo_alert_b"),
+            "surf_mismatch_a":      elo_intel.get("surf_mismatch_a"),
+            "surf_mismatch_b":      elo_intel.get("surf_mismatch_b"),
         })
 
     # Sort by positive edge first (true signals), then by abs edge for the rest
