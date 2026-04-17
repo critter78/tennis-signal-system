@@ -148,6 +148,23 @@
         .sig-card { background: #1a1d27; border: 1px solid #2d3139; padding: 0; overflow: hidden; transition: border-color 0.2s; }
         .sig-card:hover { border-color: #d4740a; }
         .sig-card.is-bet { border-color: #e65100; border-width: 2px; }
+        /* Player hover overlay */
+        .player-link { cursor: pointer; text-decoration: underline; text-decoration-color: #444; text-underline-offset: 2px; transition: color 0.15s; position: relative; }
+        .player-link:hover { color: #d4740a; text-decoration-color: #d4740a; }
+        .player-overlay { display: none; position: fixed; z-index: 10000; width: 340px; background: #1a1d27; border: 1px solid #d4740a; box-shadow: 0 8px 32px rgba(0,0,0,0.6); padding: 14px; font-family: 'IBM Plex Mono', monospace; pointer-events: none; }
+        .po-name { font-size: 14px; font-weight: 700; color: #e0e0e0; margin-bottom: 2px; }
+        .po-meta { font-size: 9px; color: #6c757d; margin-bottom: 10px; }
+        .po-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 10px; }
+        .po-label { color: #888; }
+        .po-val { color: #e0e0e0; font-weight: 600; }
+        .po-section { border-top: 1px solid #2d3139; padding-top: 6px; margin-top: 6px; }
+        .po-section-title { font-size: 8px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .po-form-dot { display: inline-block; width: 14px; height: 14px; line-height: 14px; text-align: center; font-size: 8px; font-weight: 700; margin-right: 2px; }
+        .po-form-w { background: #1b5e20; color: #4caf50; }
+        .po-form-l { background: #4a0000; color: #f44336; }
+        .po-surf-bar { height: 6px; background: #0f1117; flex: 1; margin: 0 6px; }
+        .po-surf-fill { height: 100%; }
+        .po-click-hint { font-size: 8px; color: #d4740a; text-align: center; margin-top: 8px; border-top: 1px solid #2d3139; padding-top: 6px; }
         .sig-top { padding: 12px 14px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #2d3139; }
         .sig-match { font-size: 13px; font-weight: 700; color: #e0e0e0; }
         .sig-tourney { font-size: 11px; color: #d4740a; margin-top: 3px; font-weight: 600; }
@@ -490,24 +507,38 @@ Chart.defaults.font.size = 10;
     const el = document.getElementById('lstmProgress');
     if (!el) return;
 
-    const lstmMin = 50;
     const resolvedCount = resolved.length;
-    const progress = Math.min(resolvedCount, lstmMin);
-    const pct = Math.round((progress / lstmMin) * 100);
-    const isReady = resolvedCount >= lstmMin;
-
-    const statusColor = isReady ? '#4caf50' : '#d4740a';
-    const statusText = isReady ? 'LSTM ACTIVE — Learning from outcomes' : `${lstmMin - resolvedCount} more resolved bets needed`;
-    const barColor = isReady ? '#4caf50' : '#d4740a';
-
-    // Milestones — real LSTM learning curve
     const barMax = 1000;
+
+    // Phases of LSTM accuracy
+    const phases = [
+        { min: 0,    max: 50,   label: 'Collecting Data',    color: '#f44336', desc: 'LSTM inactive — gathering initial outcomes' },
+        { min: 50,   max: 150,  label: 'Early Learning',     color: '#e65100', desc: 'LSTM active but unreliable — adjustments are noisy' },
+        { min: 150,  max: 300,  label: 'Pattern Detection',  color: '#d4740a', desc: 'Starting to detect surface/player patterns — use with caution' },
+        { min: 300,  max: 500,  label: 'Noise Filtering',    color: '#ffd740', desc: 'Filtering noise from signal — adjustments becoming meaningful' },
+        { min: 500,  max: 750,  label: 'Reliable',           color: '#81c784', desc: 'LSTM adjustments are statistically significant — trust the edges' },
+        { min: 750,  max: 1000, label: 'Deep Calibration',   color: '#4caf50', desc: 'Full calibration — LSTM is maximizing edge detection accuracy' },
+    ];
+
+    const currentPhase = phases.find(p => resolvedCount >= p.min && resolvedCount < p.max) || phases[phases.length - 1];
+    const nextPhase = phases[phases.indexOf(currentPhase) + 1];
+    const phaseProgress = nextPhase
+        ? Math.round(((resolvedCount - currentPhase.min) / (currentPhase.max - currentPhase.min)) * 100)
+        : 100;
+
+    // Overall accuracy readiness (0-100%)
+    const accuracyTarget = 500; // When LSTM becomes "reliable"
+    const accuracyPct = Math.min(Math.round((resolvedCount / accuracyTarget) * 100), 100);
+    const accuracyColor = accuracyPct >= 100 ? '#4caf50' : accuracyPct >= 60 ? '#ffd740' : accuracyPct >= 30 ? '#d4740a' : '#f44336';
+
+    // Milestones on the bar
     const milestones = [
-        { at: 50, label: 'LSTM activates' },
-        { at: 100, label: 'Basic patterns' },
-        { at: 250, label: 'Noise filtering' },
-        { at: 500, label: 'Deep learning' },
-        { at: 1000, label: 'Full calibration' },
+        { at: 50,   label: 'Activates' },
+        { at: 150,  label: 'Patterns' },
+        { at: 300,  label: 'Filtering' },
+        { at: 500,  label: 'Reliable' },
+        { at: 750,  label: 'Deep Cal.' },
+        { at: 1000, label: 'Full Cal.' },
     ];
 
     let milestonesHtml = milestones.map(m => {
@@ -522,25 +553,47 @@ Chart.defaults.font.size = 10;
 
     const barPct = Math.min((resolvedCount / barMax) * 100, 100);
 
+    // Phase dots
+    const phaseDotsHtml = phases.map((p, i) => {
+        const active = p === currentPhase;
+        const done = resolvedCount >= p.max;
+        const dotColor = done ? '#4caf50' : active ? p.color : '#2d3139';
+        const borderColor = active ? p.color : 'transparent';
+        return `<div style="display:flex; align-items:center; gap:6px; padding:4px 0">
+            <div style="width:10px; height:10px; border-radius:50%; background:${dotColor}; border:2px solid ${borderColor}; flex-shrink:0"></div>
+            <span style="font-size:9px; color:${active ? '#e0e0e0' : done ? '#81c784' : '#6c757d'}; font-weight:${active ? '700' : '400'}">${p.label}</span>
+            ${active ? '<span style="font-size:9px; color:' + p.color + '; margin-left:auto; font-weight:600">' + phaseProgress + '% through</span>' : ''}
+            ${done ? '<span style="font-size:9px; color:#4caf50; margin-left:auto">✓</span>' : ''}
+        </div>`;
+    }).join('');
+
     el.innerHTML = `
         <h3>LSTM SEQUENTIAL LEARNER — TRAINING PROGRESS</h3>
-        <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px">
-            <div style="flex:1">
+        <div style="display:grid; grid-template-columns:1fr 160px; gap:20px; margin-bottom:12px">
+            <div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:6px">
-                    <span style="font-size:11px; color:#e0e0e0; font-weight:700">${resolvedCount} resolved outcomes</span>
-                    <span style="font-size:11px; color:${statusColor}; font-weight:600">${isReady ? 'ACTIVE' : pct + '% to activation'}</span>
+                    <span style="font-size:11px; color:#e0e0e0; font-weight:700">${resolvedCount} / ${accuracyTarget} resolved outcomes</span>
+                    <span style="font-size:11px; color:${currentPhase.color}; font-weight:600">${currentPhase.label}</span>
                 </div>
                 <div style="height:24px; background:#0f1117; border:1px solid #2d3139; position:relative; overflow:hidden">
-                    <div style="height:100%; width:${barPct}%; background:linear-gradient(90deg, #d4740a, ${isReady ? '#4caf50' : '#e65100'}); transition:width 0.5s"></div>
-                    ${resolvedCount >= 50 ? '<div style="position:absolute; left:' + Math.min((50/barMax)*100, 100) + '%; top:0; bottom:0; width:2px; background:#4caf50"></div>' : ''}
+                    <div style="height:100%; width:${barPct}%; background:linear-gradient(90deg, ${currentPhase.color}80, ${currentPhase.color}); transition:width 0.5s"></div>
                 </div>
                 <div style="position:relative; height:36px; margin-top:4px">
                     ${milestonesHtml}
                 </div>
+                <div style="font-size:10px; color:#6c757d; margin-top:4px">${currentPhase.desc}</div>
+            </div>
+            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px; text-align:center">
+                <div style="font-size:8px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px">Accuracy Readiness</div>
+                <div style="font-size:28px; font-weight:800; color:${accuracyColor}">${accuracyPct}%</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">${accuracyPct >= 100 ? 'LSTM adjustments reliable' : (accuracyTarget - resolvedCount) + ' more picks needed'}</div>
             </div>
         </div>
-        <div style="font-size:10px; color:#6c757d">${statusText}</div>
-        ${resolvedCount > 0 ? '<div style="font-size:10px; color:#aaa; margin-top:6px">Win rate: <strong style="color:' + (wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336') + '">' + (wins.length/resolved.length*100).toFixed(1) + '%</strong> (' + wins.length + 'W-' + losses.length + 'L) | PnL: <strong style="color:' + (totalPnl >= 0 ? '#4caf50' : '#f44336') + '">$' + totalPnl.toFixed(0) + '</strong></div>' : ''}
+        <div style="border-top:1px solid #2d3139; padding-top:10px">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px">Learning Phases</div>
+            ${phaseDotsHtml}
+        </div>
+        ${resolvedCount > 0 ? '<div style="border-top:1px solid #2d3139; padding-top:8px; margin-top:8px; font-size:10px; color:#aaa">Win rate: <strong style="color:' + (wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336') + '">' + (wins.length/resolved.length*100).toFixed(1) + '%</strong> (' + wins.length + 'W-' + losses.length + 'L) | PnL: <strong style="color:' + (totalPnl >= 0 ? '#4caf50' : '#f44336') + '">$' + totalPnl.toFixed(0) + '</strong></div>' : ''}
     `;
 })();
 
@@ -1475,7 +1528,13 @@ function renderSignals() {
         <div class="sig-card ${isBet ? 'is-bet' : ''}" id="sig-${s.match.replace(/[^a-zA-Z0-9]/g, '')}">
             <div class="sig-top">
                 <div>
-                    <div class="sig-match">${s.match}${activeBadge}</div>
+                    <div class="sig-match">${(function(){
+                        if (s.market_type === 'h2h' && s.match.includes(' vs ')) {
+                            const parts = s.match.split(' vs ');
+                            return '<span class="player-link" data-player="' + (s.player_a||parts[0].trim()) + '" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">' + parts[0].trim() + '</span> vs <span class="player-link" data-player="' + (s.player_b||parts[1].trim()) + '" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">' + parts[1].trim() + '</span>';
+                        }
+                        return s.match;
+                    })()}${activeBadge}</div>
                     ${tourney ? '<div class="sig-tournament-badge">' + tourney + '</div>' : ''}
                     <div class="sig-tourney">${[surface, round ? 'Round: ' + round : ''].filter(Boolean).join(' · ') || '—'}</div>
                 </div>
@@ -1485,7 +1544,7 @@ function renderSignals() {
                 <div class="sig-pick">
                     <div style="flex:1">
                         <div class="sig-pick-label">${s.market_type === 'outright' ? 'PREDICTED WINNER' : 'BET ON'}</div>
-                        <div class="sig-pick-name">${betOn}</div>
+                        <div class="sig-pick-name"><span class="player-link" data-player="${betOn}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)" style="color:inherit">${betOn}</span></div>
                     </div>
                     <div style="background:${(s.confidence||0) >= 65 ? '#1b5e20' : (s.confidence||0) >= 55 ? '#4a2800' : '#2d3139'}; border:1px solid ${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}; padding:6px 12px; text-align:center; min-width:70px">
                         <div style="font-size:7px; color:${(s.confidence||0) >= 65 ? '#81c784' : (s.confidence||0) >= 55 ? '#ffb74d' : '#aaa'}; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:2px">${(s.confidence||0) >= 65 ? 'HIGH' : (s.confidence||0) >= 55 ? 'MED' : 'LOW'}</div>
@@ -2002,6 +2061,160 @@ switchTab = function(name) {
     origSwitchTab(name);
     if (name === 'players') loadPlayerCards();
 };
+
+// ─── PLAYER HOVER OVERLAY ───
+(function() {
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.className = 'player-overlay';
+    overlay.id = 'playerOverlay';
+    document.body.appendChild(overlay);
+})();
+
+let _overlayTimeout = null;
+
+function showPlayerOverlay(event, el) {
+    clearTimeout(_overlayTimeout);
+    const name = el.dataset.player;
+    if (!name) return;
+
+    const overlay = document.getElementById('playerOverlay');
+    if (!overlay) return;
+
+    // Try to find player data
+    const p = (_playerData || []).find(d => d.name === name);
+    if (!p) {
+        // No player data loaded yet — show minimal overlay
+        overlay.innerHTML = `<div class="po-name">${name}</div><div class="po-meta">Player data not loaded — click Players tab first</div>`;
+    } else {
+        const flagMap = {"USA":"\ud83c\uddfa\ud83c\uddf8","ESP":"\ud83c\uddea\ud83c\uddf8","ITA":"\ud83c\uddee\ud83c\uddf9","SRB":"\ud83c\uddf7\ud83c\uddf8","GER":"\ud83c\udde9\ud83c\uddea","RUS":"\ud83c\uddf7\ud83c\uddfa","GBR":"\ud83c\uddec\ud83c\udde7","FRA":"\ud83c\uddeb\ud83c\uddf7","AUS":"\ud83c\udde6\ud83c\uddfa","CAN":"\ud83c\udde8\ud83c\udde6","GRE":"\ud83c\uddec\ud83c\uddf7","NOR":"\ud83c\uddf3\ud83c\uddf4","POL":"\ud83c\uddf5\ud83c\uddf1","ARG":"\ud83c\udde6\ud83c\uddf7","BRA":"\ud83c\udde7\ud83c\uddf7","JPN":"\ud83c\uddef\ud83c\uddf5","CHN":"\ud83c\udde8\ud83c\uddf3","CZE":"\ud83c\udde8\ud83c\uddff","BEL":"\ud83c\udde7\ud83c\uddea","NED":"\ud83c\uddf3\ud83c\uddf1","SUI":"\ud83c\udde8\ud83c\udded","CRO":"\ud83c\udded\ud83c\uddf7","BUL":"\ud83c\udde7\ud83c\uddec","ROU":"\ud83c\uddf7\ud83c\uddf4","HUN":"\ud83c\udded\ud83c\uddfa","RSA":"\ud83c\uddff\ud83c\udde6","COL":"\ud83c\udde8\ud83c\uddf4","TUN":"\ud83c\uddf9\ud83c\uddf3","IND":"\ud83c\uddee\ud83c\uddf3","KOR":"\ud83c\uddf0\ud83c\uddf7","BLR":"\ud83c\udde7\ud83c\uddfe","UKR":"\ud83c\uddfa\ud83c\udde6","GEO":"\ud83c\uddec\ud83c\uddea","SLO":"\ud83c\uddf8\ud83c\uddee","AUT":"\ud83c\udde6\ud83c\uddf9","POR":"\ud83c\uddf5\ud83c\uddf9","DEN":"\ud83c\udde9\ud83c\uddf0","SWE":"\ud83c\uddf8\ud83c\uddea","CHI":"\ud83c\udde8\ud83c\uddf1","KAZ":"\ud83c\uddf0\ud83c\uddff","SVK":"\ud83c\uddf8\ud83c\uddf0"};
+        const flag = flagMap[p.country] || '';
+        const handStr = p.hand === 'R' ? 'Right' : p.hand === 'L' ? 'Left' : p.hand || '';
+        const ageStr = p.age ? Math.floor(p.age) : '';
+
+        // Form strip
+        const formHtml = (p.form || []).map(r => '<span class="po-form-dot ' + (r === 'W' ? 'po-form-w' : 'po-form-l') + '">' + r + '</span>').join('');
+
+        // Surface bars
+        const surfHtml = ['Hard', 'Clay', 'Grass'].map(s => {
+            const sd = (p.surfaces || {})[s] || {};
+            const se = (p.surf_elo || {})[s] || {};
+            const barColor = s === 'Hard' ? '#42a5f5' : s === 'Clay' ? '#ff7043' : '#66bb6a';
+            return '<div style="display:flex; align-items:center; gap:4px; font-size:9px; padding:1px 0">' +
+                '<span class="po-label" style="width:35px">' + s + '</span>' +
+                '<div class="po-surf-bar"><div class="po-surf-fill" style="width:' + (sd.wr||0) + '%; background:' + barColor + '"></div></div>' +
+                '<span class="po-val" style="width:38px; text-align:right; color:' + barColor + '">' + (sd.wr||0).toFixed(0) + '%</span>' +
+                '<span style="color:#6c757d; width:32px; text-align:right">' + (se.elo||'—') + '</span></div>';
+        }).join('');
+
+        // Mental toughness compact
+        const m = p.mental || {};
+        const mentalHtml = [
+            {key:'deciding', label:'Deciding'},
+            {key:'tiebreak', label:'Tiebreak'},
+            {key:'comeback', label:'Comeback'},
+            {key:'finals', label:'Finals'}
+        ].map(item => {
+            const d = m[item.key] || {};
+            const pct = d.pct || 0;
+            const color = pct >= 60 ? '#4caf50' : pct >= 45 ? '#ffd740' : '#f44336';
+            return '<div style="text-align:center"><div style="font-size:11px; font-weight:700; color:' + color + '">' + pct + '%</div><div style="font-size:7px; color:#888">' + item.label + '</div></div>';
+        }).join('');
+
+        // Fatigue
+        const f = p.fatigue || {};
+        const loadColor = f.load === 'Heavy' ? '#f44336' : f.load === 'Moderate' ? '#ffd740' : '#4caf50';
+
+        overlay.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:flex-start">
+                <div>
+                    <div class="po-name">${flag} ${p.name}</div>
+                    <div class="po-meta">${p.country || ''} · Age ${ageStr} · ${handStr} · ${p.total_matches} matches</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:16px; font-weight:800; color:#e0e0e0">#${p.rank || '—'}</div>
+                    <div style="font-size:9px; color:#888">${p.tour || 'ATP'}</div>
+                </div>
+            </div>
+            <div class="po-section">
+                <div class="po-row"><span class="po-label">ELO</span><span class="po-val">${p.elo} <span style="color:#6c757d; font-weight:400">(P${p.elo_pct})</span></span></div>
+                <div class="po-row"><span class="po-label">90-Day WR</span><span class="po-val" style="color:${p.wr_90d >= 70 ? '#4caf50' : '#e0e0e0'}">${p.wr_90d}%</span></div>
+                <div class="po-row"><span class="po-label">Streak</span><span class="po-val" style="color:${p.streak.startsWith('W') ? '#4caf50' : '#f44336'}">${p.streak}</span></div>
+            </div>
+            <div class="po-section">
+                <div class="po-section-title">Form (Last 10)</div>
+                <div style="display:flex; gap:1px">${formHtml}</div>
+            </div>
+            <div class="po-section">
+                <div class="po-section-title">Surface Performance</div>
+                ${surfHtml}
+            </div>
+            <div class="po-section">
+                <div class="po-section-title">Mental Toughness</div>
+                <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-top:2px">${mentalHtml}</div>
+            </div>
+            <div class="po-section">
+                <div class="po-row"><span class="po-label">Load (30d)</span><span class="po-val">${f.matches_30d != null ? f.matches_30d + ' matches' : '—'} <span style="color:${loadColor}; font-size:9px">${f.load || ''}</span></span></div>
+                <div class="po-row"><span class="po-label">Freshness</span><span class="po-val">${f.days_since != null ? f.days_since + 'd since last' : '—'} <span style="color:#6c757d; font-size:9px">${f.freshness || ''}</span></span></div>
+            </div>
+            <div class="po-click-hint">Click name to view full player card</div>
+        `;
+    }
+
+    // Position overlay near the hovered element
+    const rect = el.getBoundingClientRect();
+    let top = rect.bottom + 8;
+    let left = rect.left;
+
+    // Keep within viewport
+    if (left + 340 > window.innerWidth) left = window.innerWidth - 350;
+    if (left < 10) left = 10;
+    if (top + overlay.offsetHeight > window.innerHeight - 20) {
+        top = rect.top - overlay.offsetHeight - 8;
+    }
+
+    overlay.style.top = top + 'px';
+    overlay.style.left = left + 'px';
+    overlay.style.display = 'block';
+}
+
+function hidePlayerOverlay() {
+    _overlayTimeout = setTimeout(() => {
+        const overlay = document.getElementById('playerOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }, 150);
+}
+
+function goToPlayerCard(name) {
+    // Load player data if not already loaded
+    if (!_playersLoaded) {
+        loadPlayerCards();
+    }
+    // Switch to Players tab
+    switchTab('players');
+    // Wait a tick for render, then scroll to the player
+    setTimeout(() => {
+        const cards = document.querySelectorAll('.pc-name');
+        for (const card of cards) {
+            if (card.textContent.trim() === name) {
+                const pcEl = card.closest('.pc');
+                if (pcEl) {
+                    pcEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    pcEl.style.outline = '2px solid #d4740a';
+                    pcEl.style.outlineOffset = '4px';
+                    setTimeout(() => {
+                        pcEl.style.outline = '';
+                        pcEl.style.outlineOffset = '';
+                    }, 2500);
+                }
+                break;
+            }
+        }
+        // Also populate search
+        const search = document.getElementById('playerSearch');
+        if (search) search.value = name;
+    }, 300);
+}
 </script>
 
 </body>
