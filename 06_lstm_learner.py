@@ -182,6 +182,54 @@ def build_sequential_features(picks, idx, seq_len=SEQ_LEN):
     else:
         features["trend"] = 0
 
+    # ── 12. ELO PARALLEL STREAM ──
+    # ELO probability and edge for the bet-on player (independent of base model)
+    elo_prob = current.get("elo_prob")
+    elo_edge = current.get("elo_edge")
+    surf_elo_prob = current.get("surf_elo_prob")
+    surf_elo_edge = current.get("surf_elo_edge")
+    features["elo_prob"] = elo_prob / 100.0 if elo_prob is not None else 0.5
+    features["elo_edge"] = elo_edge / 100.0 if elo_edge is not None else 0.0
+    features["surf_elo_prob"] = surf_elo_prob / 100.0 if surf_elo_prob is not None else 0.5
+    features["surf_elo_edge"] = surf_elo_edge / 100.0 if surf_elo_edge is not None else 0.0
+
+    # ELO agreement with base model — when they agree, signal is stronger
+    base_prob = current.get("model_prob", current.get("confidence", 50)) / 100.0
+    features["elo_model_agreement"] = 1.0 - abs(features["elo_prob"] - base_prob)
+
+    # ELO vs Polymarket divergence (bigger = more ELO edge)
+    features["elo_poly_divergence"] = abs(features["elo_prob"] - current.get("poly_price", 50) / 100.0)
+
+    # ELO accuracy in recent window — how well did ELO predict recent outcomes?
+    elo_calibration = []
+    for p in window:
+        ep = p.get("elo_prob")
+        if ep is not None:
+            actual = 1 if p["outcome"] == "win" else 0
+            elo_calibration.append(ep / 100.0 - actual)
+    features["elo_calibration_error"] = np.mean(elo_calibration) if elo_calibration else 0.0
+
+    # ── 13. TRADE OUTCOME STREAM ──
+    # Learn from trading opportunities, not just match outcomes
+    trade_outcomes = [p.get("trade_outcome") for p in window if p.get("trade_outcome") is not None]
+    if trade_outcomes:
+        features["trade_wr"] = np.mean([1 if t == "win" else 0 for t in trade_outcomes])
+    else:
+        features["trade_wr"] = 0.5
+
+    # Peak multiple history — how much price movement are our picks generating?
+    peak_multiples = [p.get("peak_multiple", 1.0) for p in window if p.get("peak_multiple") is not None]
+    features["avg_peak_multiple"] = np.mean(peak_multiples) if peak_multiples else 1.0
+
+    # Trade PnL trend
+    trade_pnls = [p.get("trade_pnl", 0) for p in window if p.get("trade_pnl") is not None]
+    features["avg_trade_pnl"] = np.mean(trade_pnls) if trade_pnls else 0.0
+
+    # Cross-signal: picks where trade won but match lost (hidden edge indicator)
+    hidden_edge = [p for p in window
+                   if p.get("trade_outcome") == "win" and p.get("outcome") == "loss"]
+    features["hidden_edge_rate"] = len(hidden_edge) / max(len(window), 1)
+
     return features
 
 

@@ -53,6 +53,8 @@ def log_picks(signals, run_id=None):
         "surf_elo_prob_a", "surf_elo_prob_b", "elo_confidence",
         "rank_elo_alert_a", "rank_elo_alert_b", "surf_mismatch_a", "surf_mismatch_b",
         "base_prob", "lstm_adj", "base_edge", "lstm_edge",
+        # ELO parallel edge
+        "elo_prob", "elo_edge", "surf_elo_prob", "surf_elo_edge",
     ]
 
     logged = 0
@@ -154,7 +156,13 @@ def log_picks(signals, run_id=None):
             # LSTM adjustment tracking
             "base_prob": s.get("base_prob"), "lstm_adj": s.get("lstm_adj"),
             "base_edge": s.get("base_edge"), "lstm_edge": s.get("lstm_edge"),
-            "outcome": None, "actual_winner": None, "resolved_at": None, "pnl": None}
+            # ELO parallel edge (independent probability stream)
+            "elo_prob": s.get("elo_prob"), "elo_edge": s.get("elo_edge"),
+            "surf_elo_prob": s.get("surf_elo_prob"), "surf_elo_edge": s.get("surf_elo_edge"),
+            # Outcomes
+            "outcome": None, "actual_winner": None, "resolved_at": None, "pnl": None,
+            # Trade tracking (populated by 10_peak_tracker.py)
+            "peak_price": None, "trade_outcome": None, "trade_pnl": None}
         new_picks.append(entry); logged += 1
 
     # Write everything atomically — updated existing + new picks

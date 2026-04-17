@@ -1246,6 +1246,51 @@ def _detect_surface_from_history(question_lower):
     return "Hard"
 
 
+# ── ELO Parallel Edge Helpers ──────────────────────────────────────────────────
+# These compute an independent ELO-based probability and edge for the bet-on
+# player, giving the LSTM a second signal stream alongside the base model.
+
+def _elo_prob_for_bet(elo_intel, bet_player, player_a):
+    """Get ELO win probability for the bet-on player."""
+    if not elo_intel:
+        return None
+    prob_a = elo_intel.get("elo_prob_a")
+    if prob_a is None:
+        return None
+    # If bet is on player_a, use prob_a directly; otherwise use prob_b
+    if bet_player == player_a:
+        return round(prob_a, 1)
+    return round(elo_intel.get("elo_prob_b", 100 - prob_a), 1)
+
+
+def _elo_edge_for_bet(elo_intel, bet_player, player_a, poly_price):
+    """Compute ELO edge: ELO probability minus Polymarket price."""
+    prob = _elo_prob_for_bet(elo_intel, bet_player, player_a)
+    if prob is None or poly_price is None:
+        return None
+    return round(prob - poly_price, 1)
+
+
+def _surf_elo_prob_for_bet(elo_intel, bet_player, player_a):
+    """Get surface-specific ELO win probability for the bet-on player."""
+    if not elo_intel:
+        return None
+    prob_a = elo_intel.get("surf_elo_prob_a")
+    if prob_a is None:
+        return None
+    if bet_player == player_a:
+        return round(prob_a, 1)
+    return round(elo_intel.get("surf_elo_prob_b", 100 - prob_a), 1)
+
+
+def _surf_elo_edge_for_bet(elo_intel, bet_player, player_a, poly_price):
+    """Compute surface ELO edge: surface ELO probability minus Polymarket price."""
+    prob = _surf_elo_prob_for_bet(elo_intel, bet_player, player_a)
+    if prob is None or poly_price is None:
+        return None
+    return round(prob - poly_price, 1)
+
+
 def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, debug=False):
     today   = pd.Timestamp.now()
     signals = []
@@ -1565,6 +1610,11 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "rank_elo_alert_b":     elo_intel.get("rank_elo_alert_b"),
             "surf_mismatch_a":      elo_intel.get("surf_mismatch_a"),
             "surf_mismatch_b":      elo_intel.get("surf_mismatch_b"),
+            # ── ELO PARALLEL EDGE (independent probability stream) ──
+            "elo_prob":             _elo_prob_for_bet(elo_intel, bet_player, pa),
+            "elo_edge":             _elo_edge_for_bet(elo_intel, bet_player, pa, poly_price),
+            "surf_elo_prob":        _surf_elo_prob_for_bet(elo_intel, bet_player, pa),
+            "surf_elo_edge":        _surf_elo_edge_for_bet(elo_intel, bet_player, pa, poly_price),
         })
 
     # Sort by positive edge first (true signals), then by abs edge for the rest

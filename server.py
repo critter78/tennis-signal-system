@@ -471,6 +471,7 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
         <button class="gen-btn" style="width:auto; padding:12px 24px" onclick="resolveNow()">RESOLVE OUTCOMES NOW</button>
         <button class="gen-btn" style="width:auto; padding:12px 24px; background:#1b5e20" onclick="generateNow()">GENERATE FRESH CARD</button>
         <button class="gen-btn" style="width:auto; padding:12px 24px; background:#1565c0" onclick="dedupNow()">CLEAN DUPLICATES</button>
+        <button class="gen-btn" style="width:auto; padding:12px 24px; background:#00695c" onclick="trackPeaks()">TRACK PEAK PRICES</button>
         <button class="gen-btn" style="width:auto; padding:12px 24px; background:#6a1b9a" onclick="fullRefresh()">RUN FULL PIPELINE</button>
     </div>
     <div id="actionResult" style="display:none; margin-top:12px; background:#0f1117; border:1px solid #2d3139; padding:12px; font-size:11px; white-space:pre-wrap; max-height:200px; overflow-y:auto"></div>
@@ -608,6 +609,27 @@ async function resolveNow() {
         } else {
             box.style.borderColor = '#f44336';
             box.textContent = 'Error: ' + (data.error || data.message || 'Unknown') + '\\n\\n' + (data.output || '');
+        }
+    } catch(e) {
+        box.style.borderColor = '#f44336';
+        box.textContent = 'Request failed: ' + e.message;
+    }
+}
+
+async function trackPeaks() {
+    const box = document.getElementById('actionResult');
+    box.style.display = 'block';
+    box.style.borderColor = '#00695c';
+    box.textContent = 'Tracking peak prices from Polymarket...';
+    try {
+        const res = await fetch('/api/track-peaks', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            box.style.borderColor = '#1b5e20';
+            box.textContent = 'Done!\\n\\n' + (data.output || 'No output');
+        } else {
+            box.style.borderColor = '#f44336';
+            box.textContent = 'Error: ' + (data.error || 'Unknown') + '\\n\\n' + (data.output || '');
         }
     } catch(e) {
         box.style.borderColor = '#f44336';
@@ -1659,6 +1681,28 @@ def resolve_outcomes_route():
     return jsonify(result), status_code
 
 
+@app.route("/api/track-peaks", methods=["POST"])
+@enable_cors
+def api_track_peaks():
+    """Trigger peak price tracking from Polymarket price history."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        logger.info("Admin triggered peak price tracking...")
+        r = subprocess.run(
+            ["python3", str(BASE_DIR / "10_peak_tracker.py")],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
+        )
+        output = (r.stdout or "") + (r.stderr or "")
+        if r.returncode == 0:
+            return jsonify({"status": "success", "output": output})
+        else:
+            return jsonify({"status": "error", "output": output}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 @app.route("/admin/dedup", methods=["POST"])
 @enable_cors
 def admin_dedup():
@@ -1885,9 +1929,26 @@ def api_refresh():
         results["resolve"] = {"status": "error", "error": str(e)}
         logger.error(f"Outcome resolution exception: {e}")
 
+    # Step 3c: Track peak prices (Polymarket price history for trade outcomes)
+    try:
+        logger.info("[3c/6] Tracking peak prices...")
+        r = subprocess.run(
+            ["python3", str(BASE_DIR / "10_peak_tracker.py")],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
+        )
+        results["peak_tracker"] = {
+            "status": "ok" if r.returncode == 0 else "error",
+            "output": (r.stdout or "")[-300:],
+        }
+        if r.returncode != 0:
+            logger.warning(f"Peak tracker failed: {r.stderr[-200:]}")
+    except Exception as e:
+        results["peak_tracker"] = {"status": "error", "error": str(e)}
+        logger.warning(f"Peak tracker exception: {e}")
+
     # Step 4: Rebuild dashboard
     try:
-        logger.info("[4/4] Rebuilding dashboard...")
+        logger.info("[4/6] Rebuilding dashboard...")
         dash_script = BASE_DIR / "07_dashboard.py"
         if dash_script.exists():
             r = subprocess.run(
