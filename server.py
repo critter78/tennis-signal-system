@@ -1332,16 +1332,28 @@ def api_sync_bets():
         if isinstance(client_bets, dict):
             client_bets = client_bets.get("bets", [])
 
-        # Step 1: Resolve outcomes from picks data (needed for P&L calc)
-        _resolve_bet_outcomes(client_bets)
+        # Step 0: Save client bets first, then run full inline resolver
+        # (resolves picks via Polymarket API + direct bet resolution for bets without picks)
+        save_bets({"bets": client_bets, "last_synced": datetime.utcnow().isoformat()})
+        try:
+            _run_inline_resolver()
+        except Exception as re:
+            logger.warning(f"Inline resolver during sync: {re}")
+
+        # Step 1: Re-load bets (now with outcomes from inline resolver)
+        resolved_bets = load_bets()
+        resolved_list = resolved_bets.get("bets", []) if isinstance(resolved_bets, dict) else resolved_bets
+
+        # Step 1b: Also resolve via picks cross-reference (catches anything resolver missed)
+        _resolve_bet_outcomes(resolved_list)
 
         # Step 2: Fetch real trade data from Polymarket
         trades = fetch_poly_trades()
 
         # Step 3: Enrich each bet with trade data + P&L
-        enriched = enrich_bets_with_trades(client_bets, trades)
+        enriched = enrich_bets_with_trades(resolved_list, trades)
 
-        # Save to server
+        # Save final enriched bets
         save_bets({"bets": enriched, "last_synced": datetime.utcnow().isoformat()})
 
         matched = sum(1 for b in enriched if b.get("actual_stake"))
