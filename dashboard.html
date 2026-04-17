@@ -1324,14 +1324,15 @@ function renderMyBets() {
             <strong style="color:#f44336">${tradeLosses}L</strong>${tradeVoid ? ` - <strong style="color:#888">${tradeVoid}V</strong>` : ''}${tradePartial ? ` - <strong style="color:#d4740a">${tradePartial}P</strong>` : ''} -
             <strong style="color:#6c757d">${tradeOpen} open</strong> |
             Trade P&L: <strong style="color:${totalTradePnl >= 0 ? '#4caf50' : '#f44336'}">${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)}</strong> |
-            Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>`;
+            Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>${(tradeWins + tradeLosses) > 0 ? ` | Win Rate: <strong style="color:${tradeWins/(tradeWins+tradeLosses) >= 0.5 ? '#4caf50' : '#f44336'}">${(tradeWins/(tradeWins+tradeLosses)*100).toFixed(0)}%</strong>` : ''}`;
     } else {
         const bPnl = enriched.reduce((s, b) => s + (b.pnl || 0), 0);
         html += `<strong style="color:#e0e0e0">${enriched.length}</strong> bets |
             Match: <strong style="color:#4caf50">${bWins}W</strong> -
             <strong style="color:#f44336">${bLosses}L</strong>${bVoid ? ` - <strong style="color:#888">${bVoid}V</strong>` : ''} -
             <strong style="color:#6c757d">${bPending} pending</strong> |
-            P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(2)}</strong>`;
+            P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(2)}</strong> |
+            Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>${(bWins + bLosses) > 0 ? ` | Win Rate: <strong style="color:${bWins/(bWins+bLosses) >= 0.5 ? '#4caf50' : '#f44336'}">${(bWins/(bWins+bLosses)*100).toFixed(0)}%</strong>` : ''}`;
     }
 
     html += `</div>
