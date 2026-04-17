@@ -422,18 +422,19 @@ Chart.defaults.font.size = 10;
     const statusText = isReady ? 'LSTM ACTIVE — Learning from outcomes' : `${lstmMin - resolvedCount} more resolved bets needed`;
     const barColor = isReady ? '#4caf50' : '#d4740a';
 
-    // Milestones
+    // Milestones — real LSTM learning curve
+    const barMax = 1000;
     const milestones = [
-        { at: 10, label: 'Basic stats' },
-        { at: 25, label: 'Pattern detection' },
         { at: 50, label: 'LSTM activates' },
-        { at: 100, label: 'High confidence' },
-        { at: 200, label: 'Full calibration' },
+        { at: 100, label: 'Basic patterns' },
+        { at: 250, label: 'Noise filtering' },
+        { at: 500, label: 'Deep learning' },
+        { at: 1000, label: 'Full calibration' },
     ];
 
     let milestonesHtml = milestones.map(m => {
         const reached = resolvedCount >= m.at;
-        const pos = Math.min((m.at / 200) * 100, 100);
+        const pos = Math.min((m.at / barMax) * 100, 100);
         return `<div style="position:absolute; left:${pos}%; transform:translateX(-50%); text-align:center; top:-2px">
             <div style="width:2px; height:10px; background:${reached ? '#4caf50' : '#2d3139'}; margin:0 auto"></div>
             <div style="font-size:8px; color:${reached ? '#4caf50' : '#6c757d'}; margin-top:2px; white-space:nowrap">${m.at}</div>
@@ -441,7 +442,7 @@ Chart.defaults.font.size = 10;
         </div>`;
     }).join('');
 
-    const barPct = Math.min((resolvedCount / 200) * 100, 100);
+    const barPct = Math.min((resolvedCount / barMax) * 100, 100);
 
     el.innerHTML = `
         <h3>LSTM SEQUENTIAL LEARNER — TRAINING PROGRESS</h3>
@@ -453,7 +454,7 @@ Chart.defaults.font.size = 10;
                 </div>
                 <div style="height:24px; background:#0f1117; border:1px solid #2d3139; position:relative; overflow:hidden">
                     <div style="height:100%; width:${barPct}%; background:linear-gradient(90deg, #d4740a, ${isReady ? '#4caf50' : '#e65100'}); transition:width 0.5s"></div>
-                    ${resolvedCount >= 50 ? '<div style="position:absolute; left:' + Math.min((50/200)*100, 100) + '%; top:0; bottom:0; width:2px; background:#4caf50"></div>' : ''}
+                    ${resolvedCount >= 50 ? '<div style="position:absolute; left:' + Math.min((50/barMax)*100, 100) + '%; top:0; bottom:0; width:2px; background:#4caf50"></div>' : ''}
                 </div>
                 <div style="position:relative; height:36px; margin-top:4px">
                     ${milestonesHtml}
