@@ -185,6 +185,61 @@
         .bar-bg { flex: 1; height: 20px; background: #2d3139; position: relative; }
         .bar-fill { height: 100%; position: absolute; left: 0; top: 0; }
         .bar-val { font-size: 11px; font-weight: 700; width: 50px; }
+
+        /* ── PLAYER CARDS ── */
+        .pc { background:#161b22; border:1px solid #30363d; border-radius:12px; width:540px; overflow:hidden; }
+        .pc-hdr { padding:18px 20px; display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #30363d; }
+        .pc-name { font-size:20px; font-weight:700; color:#fff; }
+        .pc-meta { font-size:10px; color:#8b949e; margin-top:3px; }
+        .pc-meta span { margin-right:10px; }
+        .pc-rk { text-align:right; }
+        .pc-rk-num { font-size:26px; font-weight:800; color:#58a6ff; }
+        .pc-rk-lbl { font-size:8px; color:#8b949e; text-transform:uppercase; letter-spacing:0.08em; }
+        .pc-rk-trend { font-size:10px; margin-top:2px; }
+        .pc-elo-row { display:flex; gap:1px; background:#30363d; border-bottom:1px solid #30363d; }
+        .pc-elo-cell { flex:1; background:#0d1117; padding:10px 6px; text-align:center; }
+        .pc-elo-lbl { font-size:8px; color:#8b949e; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:3px; }
+        .pc-elo-val { font-size:16px; font-weight:700; color:#e0e0e0; }
+        .pc-elo-pct { font-size:9px; color:#ffd740; margin-top:2px; }
+        .pc-sec { padding:14px 20px; border-bottom:1px solid #21262d; }
+        .pc-sec:last-child { border-bottom:none; }
+        .pc-sec-title { font-size:9px; color:#58a6ff; text-transform:uppercase; letter-spacing:0.1em; font-weight:600; margin-bottom:10px; }
+        .pc-form-strip { display:flex; gap:3px; margin-bottom:8px; }
+        .pc-form-dot { width:20px; height:20px; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#fff; }
+        .pc-fw { background:#1b5e20; } .pc-fl { background:#b71c1c; }
+        .pc-form-stats { display:flex; gap:16px; flex-wrap:wrap; }
+        .pc-fs-lbl { font-size:8px; color:#8b949e; text-transform:uppercase; letter-spacing:0.05em; }
+        .pc-fs-val { font-size:13px; font-weight:600; color:#e0e0e0; margin-top:1px; }
+        .pc-surf-row { display:flex; align-items:center; margin-bottom:6px; }
+        .pc-surf-lbl { width:44px; font-size:10px; color:#8b949e; }
+        .pc-surf-bar { flex:1; height:18px; background:#21262d; border-radius:3px; overflow:hidden; }
+        .pc-surf-fill { height:100%; border-radius:3px; }
+        .pc-surf-val { width:55px; text-align:right; font-size:11px; font-weight:600; color:#e0e0e0; }
+        .pc-surf-elo { width:50px; text-align:right; font-size:9px; color:#ffd740; }
+        .pc-tier-row { display:flex; align-items:center; margin-bottom:5px; }
+        .pc-tier-lbl { width:60px; font-size:9px; color:#8b949e; }
+        .pc-tier-bar { flex:1; height:14px; background:#21262d; border-radius:3px; overflow:hidden; }
+        .pc-tier-fill { height:100%; border-radius:3px; }
+        .pc-tier-val { width:95px; text-align:right; font-size:10px; color:#e0e0e0; }
+        .pc-tier-rec { font-size:8px; color:#8b949e; }
+        .pc-mental-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .pc-mental-item { background:#0d1117; border:1px solid #21262d; border-radius:6px; padding:10px; text-align:center; }
+        .pc-mental-val { font-size:18px; font-weight:700; }
+        .pc-mental-lbl { font-size:8px; color:#8b949e; text-transform:uppercase; letter-spacing:0.05em; margin-top:3px; }
+        .pc-mental-rec { font-size:9px; color:#6c757d; margin-top:2px; }
+        .pc-fatigue-row { display:flex; gap:10px; }
+        .pc-fatigue-item { flex:1; background:#0d1117; border:1px solid #21262d; border-radius:6px; padding:10px; text-align:center; }
+        .pc-fatigue-val { font-size:16px; font-weight:700; color:#e0e0e0; }
+        .pc-fatigue-lbl { font-size:8px; color:#8b949e; text-transform:uppercase; letter-spacing:0.05em; margin-top:3px; }
+        .pc-fatigue-note { font-size:8px; margin-top:3px; }
+        .pc-slam-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; }
+        .pc-slam-item { background:#0d1117; border:1px solid #21262d; border-radius:6px; padding:8px 4px; text-align:center; }
+        .pc-slam-name { font-size:8px; color:#8b949e; text-transform:uppercase; letter-spacing:0.05em; }
+        .pc-slam-best { font-size:12px; font-weight:700; margin-top:3px; }
+        .pc-slam-rec { font-size:8px; color:#6c757d; margin-top:2px; }
+        .c-good { color:#4caf50; } .c-avg { color:#ffd740; } .c-poor { color:#f44336; }
+        .c-fresh { color:#4caf50; } .c-mod { color:#ffd740; } .c-heavy { color:#ff7043; }
+        .c-slam-w { color:#ffd740; } .c-slam-f { color:#ce93d8; } .c-slam-sf { color:#90caf9; } .c-slam-qf { color:#a5d6a7; }
     </style>
 </head>
 <body>
@@ -216,6 +271,7 @@ window.PICKS_DATA = [];
     <div class="tab" onclick="switchTab('mybets')">My Bets</div>
     <div class="tab" onclick="switchTab('performance')">Performance</div>
     <div class="tab" onclick="switchTab('accuracy')">Model Accuracy</div>
+    <div class="tab" onclick="switchTab('players')">Players</div>
 </div>
 
 <!-- SIGNALS -->
@@ -295,6 +351,27 @@ window.PICKS_DATA = [];
     <div class="grid-2">
         <div class="chart-card"><h3>ACCURACY BY RANKING TIER</h3><canvas id="chartRankTier"></canvas></div>
         <div class="chart-card"><h3>EDGE ACCURACY — DID HIGH-EDGE PICKS WIN MORE?</h3><canvas id="chartEdgeAcc"></canvas></div>
+    </div>
+</div>
+
+<div class="panel" id="panel-players">
+    <h2 style="margin-bottom:4px">Player Cards</h2>
+    <p style="color:#8b949e; font-size:12px; margin-bottom:16px">Comprehensive player profiles from match history — ELO, form, surface, mental toughness, fatigue</p>
+    <div style="display:flex; gap:12px; margin-bottom:20px; align-items:center; flex-wrap:wrap">
+        <input type="text" id="playerSearch" placeholder="Search player name..." style="background:#0d1117; border:1px solid #30363d; color:#e0e0e0; padding:8px 14px; border-radius:6px; font-size:13px; width:280px" oninput="filterPlayers()">
+        <select id="playerSurface" onchange="filterPlayers()" style="background:#0d1117; border:1px solid #30363d; color:#e0e0e0; padding:8px 12px; border-radius:6px; font-size:13px">
+            <option value="all">All Surfaces</option>
+            <option value="Hard">Hard</option>
+            <option value="Clay">Clay</option>
+            <option value="Grass">Grass</option>
+        </select>
+        <span id="playerCount" style="color:#6c757d; font-size:11px"></span>
+    </div>
+    <div id="playerCardsGrid" style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center">
+        <div style="text-align:center; padding:60px 0; color:#6c757d">
+            <div style="font-size:14px; margin-bottom:8px">Loading player profiles...</div>
+            <div style="font-size:11px">Computing from match history data</div>
+        </div>
     </div>
 </div>
 
@@ -1695,6 +1772,227 @@ setInterval(updateClock, 30000);
     const timeStr = latestDate.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:true });
     el.innerHTML = `<span style="color:${color}">&#9679; ${label}</span> <span style="color:#6c757d">Data: ${timeStr}</span>`;
 })();
+
+// ─── PLAYER CARDS ───
+let _playerData = [];
+let _playersLoaded = false;
+
+function loadPlayerCards() {
+    if (_playersLoaded) return;
+    _playersLoaded = true;
+    const grid = document.getElementById('playerCardsGrid');
+    grid.innerHTML = '<div style="text-align:center; padding:60px 0; color:#6c757d"><div style="font-size:14px">Loading player profiles...</div><div style="font-size:11px; margin-top:6px">Computing from match history data (this may take a moment)</div></div>';
+
+    fetch('/api/players')
+        .then(r => r.json())
+        .then(data => {
+            _playerData = data.players || [];
+            renderPlayerCards(_playerData);
+        })
+        .catch(err => {
+            grid.innerHTML = `<div style="text-align:center; padding:60px 0; color:#f44336">Error loading player data: ${err.message}</div>`;
+        });
+}
+
+function filterPlayers() {
+    const q = (document.getElementById('playerSearch').value || '').toLowerCase();
+    const surf = document.getElementById('playerSurface').value;
+    let filtered = _playerData;
+    if (q) filtered = filtered.filter(p => p.name.toLowerCase().includes(q));
+    renderPlayerCards(filtered, surf);
+}
+
+function renderPlayerCards(players, surfHighlight) {
+    const grid = document.getElementById('playerCardsGrid');
+    const countEl = document.getElementById('playerCount');
+    if (!players.length) {
+        grid.innerHTML = '<div style="text-align:center; padding:60px 0; color:#6c757d">No players found</div>';
+        countEl.textContent = '';
+        return;
+    }
+    countEl.textContent = `${players.length} players`;
+
+    const flagMap = {"USA":"🇺🇸","ESP":"🇪🇸","ITA":"🇮🇹","SRB":"🇷🇸","GER":"🇩🇪","RUS":"🇷🇺","GBR":"🇬🇧","FRA":"🇫🇷","AUS":"🇦🇺","CAN":"🇨🇦","GRE":"🇬🇷","NOR":"🇳🇴","POL":"🇵🇱","DEN":"🇩🇰","CHI":"🇨🇱","ARG":"🇦🇷","BRA":"🇧🇷","JPN":"🇯🇵","CHN":"🇨🇳","KAZ":"🇰🇿","CZE":"🇨🇿","BEL":"🇧🇪","NED":"🇳🇱","SUI":"🇨🇭","CRO":"🇭🇷","BUL":"🇧🇬","ROU":"🇷🇴","HUN":"🇭🇺","RSA":"🇿🇦","COL":"🇨🇴","PER":"🇵🇪","TUN":"🇹🇳","IND":"🇮🇳","KOR":"🇰🇷","TPE":"🇹🇼","BLR":"🇧🇾","UKR":"🇺🇦","GEO":"🇬🇪","SLO":"🇸🇮","AUT":"🇦🇹","POR":"🇵🇹","FIN":"🇫🇮","SWE":"🇸🇪","URU":"🇺🇾","BOL":"🇧🇴","SVK":"🇸🇰","LTU":"🇱🇹","LAT":"🇱🇻","EST":"🇪🇪"};
+    function flag(ioc) { return flagMap[ioc] || '🏳️'; }
+
+    function mentalColor(pct) { return pct >= 60 ? 'c-good' : pct >= 45 ? 'c-avg' : 'c-poor'; }
+    function slamColor(best) {
+        if (best === 'W') return 'c-slam-w';
+        if (best === 'F') return 'c-slam-f';
+        if (best === 'SF') return 'c-slam-sf';
+        if (best === 'QF') return 'c-slam-qf';
+        return '';
+    }
+    function slamLabel(best) { return best === 'W' ? '🏆 W' : best || '—'; }
+
+    let html = '';
+    players.forEach(p => {
+        const handStr = p.hand === 'R' ? 'Right' : p.hand === 'L' ? 'Left' : p.hand || '—';
+        const ageStr = p.age ? Math.floor(p.age) : '—';
+        const rankDelta = p.rank_delta || 0;
+        const trendClass = rankDelta > 0 ? 'trend-up' : rankDelta < 0 ? 'trend-down' : '';
+        const trendIcon = rankDelta > 0 ? '▲' : rankDelta < 0 ? '▼' : '—';
+        const trendText = rankDelta !== 0 ? `${trendIcon} ${Math.abs(rankDelta)} (30d)` : `${trendIcon} 0 (30d)`;
+
+        // Form strip
+        const formHtml = (p.form || []).map(r => `<div class="pc-form-dot ${r === 'W' ? 'pc-fw' : 'pc-fl'}">${r}</div>`).join('');
+        const wrTrendSign = p.wr_trend >= 0 ? '+' : '';
+        const wrTrendColor = p.wr_trend >= 3 ? '#4caf50' : p.wr_trend <= -3 ? '#f44336' : '#ffd740';
+
+        // Surface bars
+        const surfBars = ['Hard', 'Clay', 'Grass'].map(s => {
+            const sd = p.surfaces[s] || {};
+            const se = p.surf_elo[s] || {};
+            const barColor = s === 'Hard' ? 'linear-gradient(90deg,#1565c0,#42a5f5)' : s === 'Clay' ? 'linear-gradient(90deg,#bf360c,#ff7043)' : 'linear-gradient(90deg,#2e7d32,#66bb6a)';
+            const bestSurf = ['Hard','Clay','Grass'].reduce((a, b) => ((p.surfaces[a]||{}).wr||0) > ((p.surfaces[b]||{}).wr||0) ? a : b);
+            const valColor = s === bestSurf ? (s === 'Hard' ? '#42a5f5' : s === 'Clay' ? '#ff7043' : '#66bb6a') : '#e0e0e0';
+            return `<div class="pc-surf-row">
+                <div class="pc-surf-lbl">${s}</div>
+                <div class="pc-surf-bar"><div class="pc-surf-fill" style="width:${sd.wr||0}%; background:${barColor}"></div></div>
+                <div class="pc-surf-val" style="color:${valColor}">${(sd.wr||0).toFixed(1)}%</div>
+                <div class="pc-surf-elo">${se.elo || '—'}</div>
+            </div>`;
+        }).join('');
+
+        // Tier bars
+        const tierColors = {'Top 10':'linear-gradient(90deg,#e65100,#ff9800)','Top 20':'linear-gradient(90deg,#f57f17,#ffeb3b)','Top 50':'linear-gradient(90deg,#1b5e20,#4caf50)','Top 100':'linear-gradient(90deg,#1565c0,#42a5f5)','100+':'linear-gradient(90deg,#4a148c,#ce93d8)'};
+        const tierBars = ['Top 10','Top 20','Top 50','Top 100','100+'].map(t => {
+            const td = p.tiers[t] || {};
+            return `<div class="pc-tier-row">
+                <div class="pc-tier-lbl">${t}</div>
+                <div class="pc-tier-bar"><div class="pc-tier-fill" style="width:${td.wr||0}%; background:${tierColors[t]}"></div></div>
+                <div class="pc-tier-val">${(td.wr||0).toFixed(1)}% <span class="pc-tier-rec">(${td.w||0}-${td.l||0})</span></div>
+            </div>`;
+        }).join('');
+
+        // Mental
+        const m = p.mental || {};
+        const mentalHtml = [
+            {key:'deciding', label:'Deciding Sets'},
+            {key:'tiebreak', label:'Tiebreaks'},
+            {key:'comeback', label:'Comebacks'},
+            {key:'finals', label:'Finals Record'}
+        ].map(item => {
+            const d = m[item.key] || {};
+            return `<div class="pc-mental-item">
+                <div class="pc-mental-val ${mentalColor(d.pct||0)}">${d.pct||0}%</div>
+                <div class="pc-mental-lbl">${item.label}</div>
+                <div class="pc-mental-rec">${d.w||0}-${d.l||0}</div>
+            </div>`;
+        }).join('');
+
+        // Fatigue
+        const f = p.fatigue || {};
+        const loadColor = f.load === 'Heavy' ? 'c-heavy' : f.load === 'Moderate' ? 'c-mod' : 'c-fresh';
+        const freshColor = f.freshness === 'Fresh' ? 'c-fresh' : f.freshness === 'Back-to-back' ? 'c-heavy' : 'c-mod';
+
+        // Slams
+        const slamKeys = [['AUS','AUS Open'], ['RG','Roland Garros'], ['WIM','Wimbledon'], ['USO','US Open']];
+        const slamHtml = slamKeys.map(([k, label]) => {
+            const s = (p.slams||{})[k] || {};
+            return `<div class="pc-slam-item">
+                <div class="pc-slam-name">${label}</div>
+                <div class="pc-slam-best ${slamColor(s.best)}">${slamLabel(s.best)}</div>
+                <div class="pc-slam-rec">${s.w||0}-${s.l||0}</div>
+            </div>`;
+        }).join('');
+
+        // Surface ELO cells
+        const eloLabels = {Hard:'hElo', Clay:'cElo', Grass:'gElo'};
+        const surfEloCells = ['Hard','Clay','Grass'].map(s => {
+            const se = p.surf_elo[s] || {};
+            return `<div class="pc-elo-cell">
+                <div class="pc-elo-lbl">${eloLabels[s]}</div>
+                <div class="pc-elo-val">${se.elo || '—'}</div>
+                <div class="pc-elo-pct">${se.pct ? 'P' + se.pct : ''}</div>
+            </div>`;
+        }).join('');
+
+        html += `
+        <div class="pc">
+            <div class="pc-hdr">
+                <div>
+                    <div class="pc-name">${p.name}</div>
+                    <div class="pc-meta">
+                        <span>${flag(p.country)} ${p.country}</span>
+                        <span>Age: ${ageStr}</span>
+                        <span>Plays: ${handStr}</span>
+                        <span style="color:#6c757d">${p.total_matches} matches</span>
+                    </div>
+                </div>
+                <div class="pc-rk">
+                    <div class="pc-rk-lbl">${p.tour || 'ATP'} Rank</div>
+                    <div class="pc-rk-num">${p.rank ? '#' + p.rank : '—'}</div>
+                    <div class="pc-rk-trend ${trendClass}">${trendText}</div>
+                </div>
+            </div>
+            <div class="pc-elo-row">
+                <div class="pc-elo-cell">
+                    <div class="pc-elo-lbl">General ELO</div>
+                    <div class="pc-elo-val">${p.elo}</div>
+                    <div class="pc-elo-pct">P${p.elo_pct}</div>
+                </div>
+                ${surfEloCells}
+            </div>
+            <div class="pc-sec">
+                <div class="pc-sec-title">Form & Momentum</div>
+                <div class="pc-form-strip">${formHtml}</div>
+                <div class="pc-form-stats">
+                    <div><div class="pc-fs-lbl">Last 10</div><div class="pc-fs-val" style="color:${p.wins_10 >= 7 ? '#4caf50' : p.wins_10 >= 5 ? '#ffd740' : '#f44336'}">${p.wins_10}-${p.losses_10}</div></div>
+                    <div><div class="pc-fs-lbl">Streak</div><div class="pc-fs-val" style="color:${p.streak.startsWith('W') ? '#4caf50' : '#f44336'}">${p.streak}</div></div>
+                    <div><div class="pc-fs-lbl">90-Day WR</div><div class="pc-fs-val" style="color:${p.wr_90d >= 70 ? '#4caf50' : '#e0e0e0'}">${p.wr_90d}%</div></div>
+                    <div><div class="pc-fs-lbl">365-Day WR</div><div class="pc-fs-val">${p.wr_365d}%</div></div>
+                    <div><div class="pc-fs-lbl">Trend</div><div class="pc-fs-val" style="color:${wrTrendColor}">${wrTrendSign}${p.wr_trend}%</div></div>
+                    <div><div class="pc-fs-lbl">Avg Depth</div><div class="pc-fs-val">${p.avg_depth}</div></div>
+                </div>
+            </div>
+            <div class="pc-sec">
+                <div class="pc-sec-title">Surface Performance</div>
+                ${surfBars}
+            </div>
+            <div class="pc-sec">
+                <div class="pc-sec-title">Performance by Opponent Rank</div>
+                ${tierBars}
+            </div>
+            <div class="pc-sec">
+                <div class="pc-sec-title">Mental Toughness</div>
+                <div class="pc-mental-grid">${mentalHtml}</div>
+            </div>
+            <div class="pc-sec">
+                <div class="pc-sec-title">Physical Load</div>
+                <div class="pc-fatigue-row">
+                    <div class="pc-fatigue-item">
+                        <div class="pc-fatigue-val">${f.matches_30d != null ? f.matches_30d : '—'}</div>
+                        <div class="pc-fatigue-lbl">Matches (30d)</div>
+                        <div class="pc-fatigue-note ${loadColor}">${f.load || '—'}</div>
+                    </div>
+                    <div class="pc-fatigue-item">
+                        <div class="pc-fatigue-val">${f.avg_duration || '—'}</div>
+                        <div class="pc-fatigue-lbl">Avg Duration</div>
+                    </div>
+                    <div class="pc-fatigue-item">
+                        <div class="pc-fatigue-val">${f.days_since != null ? f.days_since + 'd' : '—'}</div>
+                        <div class="pc-fatigue-lbl">Since Last Match</div>
+                        <div class="pc-fatigue-note ${freshColor}">${f.freshness || '—'}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="pc-sec">
+                <div class="pc-sec-title">Grand Slam Profile</div>
+                <div class="pc-slam-grid">${slamHtml}</div>
+            </div>
+        </div>`;
+    });
+
+    grid.innerHTML = html;
+}
+
+// Load players when tab is first clicked
+const origSwitchTab = switchTab;
+switchTab = function(name) {
+    origSwitchTab(name);
+    if (name === 'players') loadPlayerCards();
+};
 </script>
 
 </body>
