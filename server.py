@@ -377,7 +377,7 @@ button:hover { background: #e65100; }
 .powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 18px; }
 .footer-inner { display: inline-flex; align-items: center; gap: 8px; }
-.footer-inner svg { width: 18px; height: 18px; opacity: 0.4; }
+.footer-inner img { height: 40px; border-radius: 4px; }
 .footer-text { font-size: 9px; color: #2d3139; letter-spacing: 0.03em; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -394,7 +394,7 @@ footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padd
 </div>
 <footer>
     <div class="footer-inner">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><path d="M12 18L8 6l10 8 8-4 6 2 6-2 8 4 10-8-4 12 2 10-2 8-4 6-4 2-2 10-6 2-8 0-6-2-2-10-4-2-4-6-2-8 2-10Z" fill="#1a1d27" stroke="#2d3139" stroke-width="1.5"/><circle cx="24" cy="26" r="2.5" fill="#2d3139"/><circle cx="40" cy="26" r="2.5" fill="#2d3139"/><ellipse cx="32" cy="36" rx="3.5" ry="2.5" fill="#0f1117" stroke="#2d3139" stroke-width="0.5"/><path d="M28 40Q32 43 36 40" stroke="#2d3139" stroke-width="1" fill="none"/></svg>
+        <img src="/static/critterlabs_logo.png" alt="CritterLabs">
         <span class="footer-text">CritterLabs.io &mdash; All Rights Reserved</span>
     </div>
 </footer>
@@ -819,6 +819,15 @@ def logout():
     response = make_response(redirect("/"))
     response.delete_cookie("tennis_admin")
     return response
+
+
+# ─── STATIC ASSETS ────────────────────────────────────────────────────────────
+
+@app.route("/static/<path:filename>", methods=["GET"])
+def serve_static(filename):
+    """Serve static assets (logo, images, etc.)."""
+    static_dir = Path(__file__).parent / "static"
+    return send_file(static_dir / filename)
 
 
 # ─── SHARE ROUTES ─────────────────────────────────────────────────────────────
