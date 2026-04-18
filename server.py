@@ -377,7 +377,7 @@ button:hover { background: #e65100; }
 .powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
 .login-logo { margin-top: 14px; text-align: center; }
 .login-logo .dog-img { height: 80px; display: block; margin: 0 auto 4px; mix-blend-mode: lighten; }
-.login-logo .text-img { height: 28px; display: block; margin: 0 auto; mix-blend-mode: lighten; }
+.login-logo .text-img { height: 36px; display: block; margin: 0 auto; mix-blend-mode: lighten; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 12px; }
 .footer-text { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; }
 </style>
