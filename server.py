@@ -365,7 +365,7 @@ LOGIN_PAGE = """
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23c8e645' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M8 32c0-6 8-12 24-12s24 6 24 12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Cpath d='M8 32c0 6 8 12 24 12s24-6 24-12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3C/svg%3E">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Mono', monospace; }
-body { background: #0f1117; color: #e0e0e0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+body { background: #0f1117; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .login-box { background: #1a1d27; border: 1px solid #2d3139; padding: 40px; max-width: 400px; width: 90%; text-align: center; }
 h1 { font-size: 16px; color: #d4740a; margin-bottom: 8px; letter-spacing: 0.06em; }
 .sub { font-size: 11px; color: #6c757d; margin-bottom: 24px; }
@@ -374,18 +374,30 @@ input:focus { outline: none; border-color: #d4740a; }
 button { width: 100%; background: #d4740a; color: white; border: none; padding: 12px; font-size: 13px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; cursor: pointer; letter-spacing: 0.04em; }
 button:hover { background: #e65100; }
 .error { color: #f44336; font-size: 11px; margin-bottom: 12px; }
+.powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 18px; }
+.footer-inner { display: inline-flex; align-items: center; gap: 8px; }
+.footer-inner svg { width: 18px; height: 18px; opacity: 0.4; }
+.footer-text { font-size: 9px; color: #2d3139; letter-spacing: 0.03em; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head><body>
 <div class="login-box">
-    <h1>TENNIS BETTING SIGNAL SYSTEM</h1>
-    <div class="sub">Enter password to access the dashboard</div>
+    <h1>ATP/WTA TENNIS BETTING SIGNAL SYSTEM</h1>
+    <div class="sub">Enter password to access!</div>
     {{ERROR}}
     <form method="POST" action="/login">
         <input type="password" name="password" placeholder="Password" autofocus>
         <button type="submit">ACCESS DASHBOARD</button>
     </form>
+    <div class="powered-by">POWERED BY AMORA EDGE FROM CRITTERLABS.IO</div>
 </div>
+<footer>
+    <div class="footer-inner">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><path d="M12 18L8 6l10 8 8-4 6 2 6-2 8 4 10-8-4 12 2 10-2 8-4 6-4 2-2 10-6 2-8 0-6-2-2-10-4-2-4-6-2-8 2-10Z" fill="#1a1d27" stroke="#2d3139" stroke-width="1.5"/><circle cx="24" cy="26" r="2.5" fill="#2d3139"/><circle cx="40" cy="26" r="2.5" fill="#2d3139"/><ellipse cx="32" cy="36" rx="3.5" ry="2.5" fill="#0f1117" stroke="#2d3139" stroke-width="0.5"/><path d="M28 40Q32 43 36 40" stroke="#2d3139" stroke-width="1" fill="none"/></svg>
+        <span class="footer-text">CritterLabs.io &mdash; All Rights Reserved</span>
+    </div>
+</footer>
 </body></html>
 """
 
