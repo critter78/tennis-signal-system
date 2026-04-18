@@ -9,11 +9,17 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Mono', monospace; }
-        body { background: #0f1117; color: #e0e0e0; min-height: 100vh; padding: 20px; }
+        body { background: #0f1117; color: #e0e0e0; min-height: 100vh; padding: 20px; padding-bottom: 50px; }
 
         .header { border-bottom: 1px solid #2d3139; padding-bottom: 16px; margin-bottom: 20px; }
         .header h1 { font-size: 18px; font-weight: 700; color: #d4740a; letter-spacing: 0.06em; }
         .header .sub { font-size: 11px; color: #6c757d; margin-top: 4px; }
+        .header-logo { height: 32px; margin-right: 12px; flex-shrink: 0; }
+
+        .site-footer { position: fixed; bottom: 0; left: 0; right: 0; background: #13151d; border-top: 1px solid #2d3139; padding: 8px 20px; display: flex; align-items: center; justify-content: center; gap: 0; z-index: 100; }
+        .site-footer .brand-critter { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; background: linear-gradient(180deg, #e2b968 0%, #d4a04a 30%, #c4873a 60%, #b87333 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)); }
+        .site-footer .brand-labs { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; -webkit-text-fill-color: transparent; -webkit-text-stroke: 0.8px #c4873a; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)); margin-left: 1px; }
+        .site-footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-left: 6px; }
 
         .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
         .stat-card { background: #1a1d27; border: 1px solid #2d3139; padding: 12px 16px; flex: 1; min-width: 130px; }
@@ -285,9 +291,12 @@ window.PICKS_DATA = [];
 </script>
 
 <div class="header" style="display:flex; justify-content:space-between; align-items:flex-start">
-    <div>
-        <h1>TENNIS BETTING SIGNAL SYSTEM — ALL-IN-ONE DASHBOARD</h1>
-        <div class="sub" id="headerSub">Loading data...</div>
+    <div style="display:flex; align-items:center">
+        <img class="header-logo" src="/static/critterlabs_dog.png" alt="CL">
+        <div>
+            <h1>TENNIS BETTING SIGNAL SYSTEM</h1>
+            <div class="sub" id="headerSub">Loading data...</div>
+        </div>
     </div>
     <div style="text-align:right; flex-shrink:0">
         <div id="dataFreshness" style="font-size:10px; color:#4caf50; margin-bottom:6px"></div>
@@ -2335,6 +2344,11 @@ function goToPlayerCard(name) {
     }, 300);
 }
 </script>
+
+<div class="site-footer">
+    <span class="brand-critter">CRITTER</span><span class="brand-labs">LABS</span>
+    <span class="rights">&mdash; All Rights Reserved, 2026</span>
+</div>
 
 </body>
 </html>

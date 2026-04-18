@@ -378,8 +378,10 @@ button:hover { background: #e65100; }
 .login-logo { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .login-logo .dog-img { height: 68px; display: block; }
 .login-logo .text-img { height: 40px; display: block; }
-footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 12px; }
-.footer-text { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; }
+footer { position: fixed; bottom: 0; left: 0; right: 0; background: #13151d; border-top: 1px solid #2d3139; padding: 8px 20px; display: flex; align-items: center; justify-content: center; gap: 0; }
+footer .brand-critter { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; background: linear-gradient(180deg, #e2b968 0%, #d4a04a 30%, #c4873a 60%, #b87333 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)); }
+footer .brand-labs { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; -webkit-text-fill-color: transparent; -webkit-text-stroke: 0.8px #c4873a; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)); margin-left: 1px; }
+footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-left: 6px; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head><body>
@@ -398,7 +400,8 @@ footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padd
     </div>
 </div>
 <footer>
-    <span class="footer-text">CRITTERLABS.IO &mdash; All Rights Reserved, 2026</span>
+    <span class="brand-critter">CRITTER</span><span class="brand-labs">LABS</span>
+    <span class="rights">&mdash; All Rights Reserved, 2026</span>
 </footer>
 </body></html>
 """
