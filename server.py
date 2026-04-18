@@ -376,7 +376,7 @@ button:hover { background: #e65100; }
 .error { color: #f44336; font-size: 11px; margin-bottom: 12px; }
 .powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
 .login-logo { margin-top: 14px; }
-.login-logo img { height: 60px; border-radius: 8px; }
+.login-logo img { height: 90px; mix-blend-mode: lighten; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 12px; }
 .footer-text { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; }
 </style>
