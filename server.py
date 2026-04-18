@@ -365,7 +365,7 @@ LOGIN_PAGE = """
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23c8e645' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M8 32c0-6 8-12 24-12s24 6 24 12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Cpath d='M8 32c0 6 8 12 24 12s24-6 24-12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3C/svg%3E">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Mono', monospace; }
-body { background: #0f1117; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+body { background: #0f1117; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
 .login-box { background: #1a1d27; border: 1px solid #2d3139; padding: 40px; max-width: 400px; width: 90%; text-align: center; }
 h1 { font-size: 16px; color: #d4740a; margin-bottom: 8px; letter-spacing: 0.06em; }
 .sub { font-size: 11px; color: #6c757d; margin-bottom: 24px; }
@@ -377,7 +377,7 @@ button:hover { background: #e65100; }
 .powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 18px; }
 .footer-inner { display: inline-flex; align-items: center; gap: 8px; }
-.footer-inner img { height: 50px; border-radius: 6px; background: #0f1117; padding: 2px; mix-blend-mode: lighten; }
+.footer-inner img { height: 50px; border-radius: 6px; }
 .footer-text { font-size: 10px; color: #3a3e47; letter-spacing: 0.03em; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
