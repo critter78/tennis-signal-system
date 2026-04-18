@@ -374,9 +374,9 @@ input:focus { outline: none; border-color: #d4740a; }
 button { width: 100%; background: #d4740a; color: white; border: none; padding: 12px; font-size: 13px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; cursor: pointer; letter-spacing: 0.04em; }
 button:hover { background: #e65100; }
 .error { color: #f44336; font-size: 11px; margin-bottom: 12px; }
-.powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
+.powered-by { font-size: 9px; color: #c4a44e; margin-top: 16px; letter-spacing: 0.04em; }
 .login-logo { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.login-logo .dog-img { height: 82px; display: block; }
+.login-logo .dog-img { height: 68px; display: block; }
 .login-logo .text-img { height: 40px; display: block; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 12px; }
 .footer-text { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; }
@@ -391,14 +391,14 @@ footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padd
         <input type="password" name="password" placeholder="Password" autofocus>
         <button type="submit">ACCESS DASHBOARD</button>
     </form>
-    <div class="powered-by">POWERED BY AMORA EDGE FROM CRITTERLABS.IO</div>
+    <div class="powered-by">POWERED BY AMORA EDGE</div>
     <div class="login-logo">
         <img class="dog-img" src="/static/critterlabs_dog.png" alt="CritterLabs Dog">
         <img class="text-img" src="/static/critterlabs_text.png" alt="Critter Labs">
     </div>
 </div>
 <footer>
-    <span class="footer-text">CritterLabs.io &mdash; All Rights Reserved, 2026</span>
+    <span class="footer-text">CRITTERLABS.IO &mdash; All Rights Reserved, 2026</span>
 </footer>
 </body></html>
 """
