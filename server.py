@@ -378,7 +378,7 @@ button:hover { background: #e65100; }
 .login-logo { margin-top: 14px; }
 .login-logo img { height: 60px; border-radius: 8px; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 12px; }
-.footer-text { font-size: 9px; color: #4a4e57; letter-spacing: 0.03em; }
+.footer-text { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head><body>
