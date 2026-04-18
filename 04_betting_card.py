@@ -1157,6 +1157,9 @@ def _detect_surface(question):
         # WTA
         "strasbourg", "rabat", "bogota", "palermo", "lausanne", "budapest",
         "prague", "istanbul", "iasi", "makarska", "bol",
+        "porsche tennis grand prix", "porsche grand prix",
+        # ATP 250 / Challenger
+        "oeiras",
         # Challenger / ITF clay events
         "aix-en-provence", "braunschweig", "heilbronn", "poznan", "meerbusch",
         "troisdorf", "santa margherita", "francavilla", "todi",
