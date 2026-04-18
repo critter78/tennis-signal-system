@@ -377,8 +377,8 @@ button:hover { background: #e65100; }
 .powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 18px; }
 .footer-inner { display: inline-flex; align-items: center; gap: 8px; }
-.footer-inner img { height: 40px; border-radius: 4px; }
-.footer-text { font-size: 9px; color: #2d3139; letter-spacing: 0.03em; }
+.footer-inner img { height: 50px; border-radius: 6px; background: #0f1117; padding: 2px; mix-blend-mode: lighten; }
+.footer-text { font-size: 10px; color: #3a3e47; letter-spacing: 0.03em; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head><body>
