@@ -1461,13 +1461,12 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         edge_a = model_prob - poly_pa / 100
         edge_b = (1 - model_prob) - poly_pb / 100
 
-        # Data quality gate: if NEITHER player has meaningful historical data
-        # (win_rate is None = fewer than 5 matches), the model is just guessing ~50%.
-        # Skip this market entirely — no signal is better than a bad signal.
-        if sa.get("win_rate") is None and sb.get("win_rate") is None:
-            if debug:
-                print(f"  [skip] {pa} vs {pb}: both players lack historical data")
-            continue
+        # Data quality note: if NEITHER player has meaningful historical data
+        # (win_rate is None = fewer than 5 matches), the model is guessing ~50%.
+        # We still show the card — user decides whether to bet.
+        low_data = sa.get("win_rate") is None and sb.get("win_rate") is None
+        if low_data and debug:
+            print(f"  [low-data] {pa} vs {pb}: both players lack historical data — showing anyway")
 
         # Pick the side with the HIGHEST POSITIVE edge.
         # If neither side has positive edge, still include the market for display
@@ -1561,6 +1560,7 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "sb_matches_52w": sb.get("matches_52w"),
             "h2h":          h2,
             "has_edge":     edge >= min_edge,  # POSITIVE edge only (not abs)
+            "low_data":     low_data,          # True if both players lack history
             "rank":         rank_a,
             "rank_a":       rank_a,
             "rank_b":       rank_b,
@@ -2146,8 +2146,9 @@ def generate_outright_signals_data_only(markets_df, debug=False):
 
 
 def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False):
-    edge_signals = [s for s in signals if s.get("has_edge")]
-    n_signals = len(edge_signals)
+    # Show ALL matches — no edge filtering. Cards self-describe their edge/confidence.
+    edge_signals = signals  # was: [s for s in signals if s.get("has_edge")]
+    n_signals = len([s for s in signals if s.get("has_edge")])  # count with edge for summary
     n_total   = len(signals)
     total_vol = sum(s["volume"] for s in signals)
 
@@ -2160,12 +2161,18 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
 
     cards_html = ""
     if not edge_signals:
-        cards_html = f'<div class="empty">No betting signals above threshold — but {n_total} match prediction(s) shown below.</div>'
+        cards_html = '<div class="empty">No tennis matches found on Polymarket right now.</div>'
     else:
         for i, s in enumerate(edge_signals):
             tier_label, tier_color, tier_class = edge_tier(s["edge"])
             vbadge_html, is_value = value_badge(s["model_prob"], s["poly_price"])
             edge_sign = "+" if s["edge"] > 0 else ""
+            # Extra badges for no-edge and low-data matches
+            extra_badges = ""
+            if not s.get("has_edge"):
+                extra_badges += '<span class="tier-badge" style="color:#6c757d;border-color:#6c757d">NO EDGE</span>'
+            if s.get("low_data"):
+                extra_badges += '<span class="tier-badge" style="color:#ff9800;border-color:#ff9800">LOW DATA</span>'
             pa, pb = s["player_a"], s["player_b"]
             h2h = s["h2h"]
             h2h_str = f'{h2h["p1_wins"]}–{h2h["p2_wins"]}' if h2h["total"] > 0 else "No H2H"
@@ -2215,7 +2222,7 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
                     <div class="match-info">
                         <span class="match-num">#{i+1}</span>
                         <span class="match-title">{s['match']}</span>
-                        <span class="tier-badge" style="color:{tier_color}">{tier_label}</span>{vbadge_html}
+                        <span class="tier-badge" style="color:{tier_color}">{tier_label}</span>{vbadge_html}{extra_badges}
                     </div>
                     <div class="card-meta">
                         {f'<span class="tourney">{tourney_line}</span>' if tourney_line else ''}

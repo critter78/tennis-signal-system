@@ -1630,6 +1630,8 @@ function renderSignals() {
         const edgeColor = edge >= 10 ? '#f44336' : edge >= 7 ? '#e65100' : edge >= 5 ? '#d4740a' : '#6c757d';
 
         const activeBadge = isBet ? '<span class="active-bet-badge">ACTIVE BET</span>' : '';
+        const noEdgeBadge = !s.has_edge ? '<span class="sig-badge" style="color:#6c757d;border-color:#6c757d">NO EDGE</span>' : '';
+        const lowDataBadge = s.low_data ? '<span class="sig-badge" style="color:#ff9800;border-color:#ff9800">LOW DATA</span>' : '';
 
         html += `
         <div class="sig-card ${isBet ? 'is-bet' : ''}" id="sig-${s.match.replace(/[^a-zA-Z0-9]/g, '')}">
@@ -1654,7 +1656,7 @@ function renderSignals() {
                             <div style="font-size:7px; color:${(s.confidence||0) >= 65 ? '#81c784' : (s.confidence||0) >= 55 ? '#ffb74d' : '#aaa'}; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:2px">CONF</div>
                             <div style="font-size:16px; font-weight:700; color:${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}">${(s.confidence||0).toFixed(1)}%</div>
                         </div>
-                        <div class="sig-badge-col">${tierBadge}${valBadge}${eloBadge}</div>
+                        <div class="sig-badge-col">${tierBadge}${valBadge}${eloBadge}${noEdgeBadge}${lowDataBadge}</div>
                     </div>
                 </div>
                 <div class="sig-nums-box">
