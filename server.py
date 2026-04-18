@@ -376,8 +376,8 @@ button:hover { background: #e65100; }
 .error { color: #f44336; font-size: 11px; margin-bottom: 12px; }
 .powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
 .login-logo { margin-top: 14px; text-align: center; }
-.login-logo img { height: 76px; mix-blend-mode: lighten; display: block; margin: 0 auto 4px; }
-.login-logo .logo-text { font-size: 11px; color: #d4740a; font-weight: 700; letter-spacing: 0.08em; line-height: 1.2; }
+.login-logo .dog-img { height: 76px; display: block; margin: 0 auto 6px; }
+.login-logo .text-img { height: 22px; display: block; margin: 0 auto; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 12px; }
 .footer-text { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; }
 </style>
@@ -392,7 +392,7 @@ footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padd
         <button type="submit">ACCESS DASHBOARD</button>
     </form>
     <div class="powered-by">POWERED BY AMORA EDGE FROM CRITTERLABS.IO</div>
-    <div class="login-logo"><img src="/static/critterlabs_dog.png" alt="CritterLabs"><div class="logo-text">CRITTER<br>LABS</div></div>
+    <div class="login-logo"><img class="dog-img" src="/static/critterlabs_dog.png" alt="CritterLabs Dog"><img class="text-img" src="/static/critterlabs_text.png" alt="Critter Labs"></div>
 </div>
 <footer>
     <span class="footer-text">CritterLabs.io &mdash; All Rights Reserved, 2026</span>
