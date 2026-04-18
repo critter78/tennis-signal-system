@@ -617,11 +617,14 @@ Chart.defaults.font.size = 10;
         const done = resolvedCount >= p.max;
         const dotColor = done ? '#4caf50' : active ? p.color : '#2d3139';
         const borderColor = active ? p.color : 'transparent';
+        const statusTag = done
+            ? ' <span style="color:#4caf50; font-weight:600">✓</span>'
+            : active
+            ? ' <span style="color:' + p.color + '; font-weight:600">' + phaseProgress + '%</span>'
+            : '';
         return `<div style="display:flex; align-items:center; gap:6px; padding:4px 0">
             <div style="width:10px; height:10px; border-radius:50%; background:${dotColor}; border:2px solid ${borderColor}; flex-shrink:0"></div>
-            <span style="font-size:9px; color:${active ? '#e0e0e0' : done ? '#81c784' : '#6c757d'}; font-weight:${active ? '700' : '400'}">${p.label}</span>
-            ${active ? '<span style="font-size:9px; color:' + p.color + '; margin-left:auto; font-weight:600">' + phaseProgress + '% through</span>' : ''}
-            ${done ? '<span style="font-size:9px; color:#4caf50; margin-left:auto">✓</span>' : ''}
+            <span style="font-size:9px; color:${active ? '#e0e0e0' : done ? '#81c784' : '#6c757d'}; font-weight:${active ? '700' : '400'}">${p.label}${statusTag}</span>
         </div>`;
     }).join('');
 
