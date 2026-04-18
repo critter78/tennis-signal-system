@@ -375,9 +375,9 @@ button { width: 100%; background: #d4740a; color: white; border: none; padding: 
 button:hover { background: #e65100; }
 .error { color: #f44336; font-size: 11px; margin-bottom: 12px; }
 .powered-by { font-size: 9px; color: #4a4e57; margin-top: 16px; letter-spacing: 0.04em; }
-footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 18px; }
-.footer-inner { display: inline-flex; align-items: center; gap: 8px; }
-.footer-inner img { height: 50px; border-radius: 6px; }
+footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 12px; }
+.footer-inner { display: inline-flex; align-items: center; gap: 10px; }
+.footer-inner img { height: 36px; border-radius: 50%; }
 .footer-text { font-size: 10px; color: #3a3e47; letter-spacing: 0.03em; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
