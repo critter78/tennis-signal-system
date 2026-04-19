@@ -1507,9 +1507,6 @@ def _run_inline_resolver():
         unresolved = [p for p in picks if p.get("outcome") is None]
         output_lines.append(f"Total picks: {len(picks)}, Unresolved: {len(unresolved)}")
 
-        if not unresolved:
-            return {"status": "success", "message": "All picks already resolved!", "output": "All picks already resolved!"}
-
         # Only check picks older than 3 hours (most Polymarket tennis markets
         # resolve within 1-2 hours of match completion)
         from datetime import timedelta
@@ -1529,10 +1526,10 @@ def _run_inline_resolver():
                     pass
             eligible_indices.add(i)
 
-        output_lines.append(f"Eligible (>24h old): {len(eligible_indices)}")
+        output_lines.append(f"Eligible (>3h old): {len(eligible_indices)}")
 
-        if not eligible_indices:
-            return {"status": "success", "output": "\n".join(output_lines) + "\nNo eligible picks to resolve."}
+        # NOTE: Do NOT return early here — even if no picks are eligible,
+        # Phase 0 still needs to run to resolve BETS (which are independent of picks)
 
         # Bulk fetch resolved markets from Polymarket (3 API calls)
         resolved_markets = []
@@ -2133,7 +2130,7 @@ def _run_inline_resolver():
         output_lines.append(f"\nNew resolutions: {new_resolutions} ({time.time()-t0:.1f}s total)")
 
         # Save if anything changed (resolutions or reverts)
-        if new_resolutions > 0 or n_reverted > 0:
+        if new_resolutions > 0 or n_reverted > 0 or n_void_reverted > 0:
             PICKS_FILE.parent.mkdir(exist_ok=True)
             with open(PICKS_FILE, 'w') as f:
                 for p in picks:
