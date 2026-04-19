@@ -604,13 +604,19 @@ def lookup_player_rank(player_name, cache=None):
             best = min(candidates, key=lambda x: x["rank"])
             return best["rank"], best["tour"]
 
-    # Partial last name match — require both sides to be at least 4 chars
-    # to avoid false positives (e.g., "tu" matching "turati")
-    if len(last) >= 4:
+    # Partial last name match — very strict to avoid gendered name collisions
+    # e.g. "medvedeva" (WTA) must NOT match "medvedev" (ATP)
+    # Only allow if one name fully contains the other AND they share the same length
+    # (handles minor transliteration variants like "djokovic"/"djokovich")
+    if len(last) >= 5:
         for ln, candidates in lastname_index.items():
-            if len(ln) > 3 and (ln in last or last in ln):
-                best = min(candidates, key=lambda x: x["rank"])
-                return best["rank"], best["tour"]
+            if len(ln) >= 5 and ln != last:
+                # Only match if exact same length and differ by at most 1 trailing char
+                # This catches transliteration (e.g. tsitsipas/tsitsipa) but NOT
+                # gendered variants (medvedev/medvedeva — different lengths)
+                if len(ln) == len(last) and ln[:-1] == last[:-1]:
+                    best = min(candidates, key=lambda x: x["rank"])
+                    return best["rank"], best["tour"]
 
     return None, None
 
