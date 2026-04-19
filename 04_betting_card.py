@@ -1081,7 +1081,7 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
 
     return {
         "win_rate":       round(n_w / n_t * 100, 1) if n_t > 5 else None,
-        "surf_win_rate":  round(len(s_w) / s_t * 100, 1) if s_t > 3 else None,
+        "surf_win_rate":  round(len(s_w) / s_t * 100, 1) if s_t > 0 else None,
         "l10_form":       f"{l10_w}/{len(l10)}",
         "matches_52w":    n_t,
         "days_rest":      last_match,

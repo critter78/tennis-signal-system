@@ -2047,10 +2047,12 @@ function renderSignals() {
 
                             // Agreement: 4 models — BASE, ELO, SURF ELO, LSTM
                             let models = 0, agree = 0;
-                            if (baseP != null) { models++; if (baseP > 50) agree++; }
-                            if (eloP != null) { models++; if (eloP > 50) agree++; }
-                            if (surfEloP != null) { models++; if (surfEloP > 50) agree++; }
-                            if (lstmP != null) { models++; if (lstmP > 50) agree++; }
+                            const modelVotes = [];
+                            if (baseP != null) { models++; const v = baseP > 50; if (v) agree++; modelVotes.push('BASE ' + baseP.toFixed(1) + '% ' + (v ? '✓' : '✗')); }
+                            if (eloP != null) { models++; const v = eloP > 50; if (v) agree++; modelVotes.push('ELO ' + eloP.toFixed(1) + '% ' + (v ? '✓' : '✗')); }
+                            if (surfEloP != null) { models++; const v = surfEloP > 50; if (v) agree++; modelVotes.push('SURF ELO ' + surfEloP.toFixed(1) + '% ' + (v ? '✓' : '✗')); }
+                            if (lstmP != null) { models++; const v = lstmP > 50; if (v) agree++; modelVotes.push('LSTM ' + lstmP.toFixed(1) + '% ' + (v ? '✓' : '✗')); }
+                            const tooltipText = modelVotes.join(' | ');
 
                             let label, bgColor, textColor;
                             if (models <= 1) {
@@ -2068,7 +2070,7 @@ function renderSignals() {
                             }
 
                             return '</div><div style="display:flex; align-items:center; gap:5px; margin-top:4px">' +
-                                '<span style="background:' + bgColor + '; color:' + textColor + '; font-size:9px; font-weight:700; padding:2px 7px; border-radius:3px; letter-spacing:0.3px; border:1px solid ' + textColor + '40">' + label + '</span>' +
+                                '<span title="' + tooltipText + '" style="cursor:help; background:' + bgColor + '; color:' + textColor + '; font-size:9px; font-weight:700; padding:2px 7px; border-radius:3px; letter-spacing:0.3px; border:1px solid ' + textColor + '40">' + label + '</span>' +
                                 '<span style="background:#0f1117; border:1px solid ' + textColor + '60; color:' + textColor + '; font-size:12px; font-weight:800; padding:2px 8px; border-radius:3px">' + consensusP.toFixed(1) + '%</span>' +
                                 '<span style="font-size:8px; color:#6c757d; letter-spacing:0.3px">CONSENSUS</span>' +
                                 '</div>';
@@ -2381,16 +2383,23 @@ let _playerData = [];
 let _playersLoaded = false;
 
 // Preload player data on page load so hover overlays work immediately
-(function preloadPlayerData() {
+// Preload with retry — if profiles aren't generated yet, try again after 30s
+(function preloadPlayerData(attempt) {
+    attempt = attempt || 1;
     fetch('/api/players', {signal: AbortSignal.timeout(60000)})
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-            if (data && data.players) {
+            if (data && data.players && data.players.length > 0) {
                 _playerData = data.players;
                 console.log('[preload] Player data loaded:', _playerData.length, 'players');
+            } else if (attempt < 4) {
+                // Profiles not generated yet — retry in 30s
+                setTimeout(() => preloadPlayerData(attempt + 1), 30000);
             }
         })
-        .catch(() => {}); // silent fail — will retry when tab is opened
+        .catch(() => {
+            if (attempt < 4) setTimeout(() => preloadPlayerData(attempt + 1), 30000);
+        });
 })();
 
 function loadPlayerCards() {
