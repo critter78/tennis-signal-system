@@ -380,26 +380,27 @@ window.PICKS_DATA = [];
     </div>
     <!-- ── Performance Summary Cards ── -->
     <div id="perfSummaryCards" class="stats-row" style="margin-bottom:16px"></div>
-    <!-- ── Daily P&L Chart ── -->
-    <div class="chart-card" style="margin-bottom:16px">
-        <h3>DAILY P&L</h3>
-        <canvas id="chartDailyPnl" height="160"></canvas>
-    </div>
     <!-- ── Daily Breakdown Table ── -->
     <div class="chart-card" style="overflow-x:auto; margin-bottom:16px">
         <h3>DAILY BREAKDOWN</h3>
         <div id="perfDailyTable"></div>
     </div>
+    <!-- ── Bet History (hides resolved >5 days) ── -->
     <div class="filters" id="betFilters"></div>
     <div class="chart-card" style="overflow-x:auto">
         <h3>MY BET HISTORY</h3>
         <div id="betTableWrap"></div>
     </div>
+    <!-- ── Active Bet Cards ── -->
     <div id="activeBetCards" style="margin-top:20px"></div>
 </div>
 
 <!-- PERFORMANCE -->
 <div class="panel" id="panel-performance">
+    <div class="chart-card" style="margin-bottom:20px">
+        <h3>DAILY P&L</h3>
+        <canvas id="chartDailyPnl" height="160"></canvas>
+    </div>
     <div class="grid-2">
         <div class="chart-card"><h3>WIN RATE BY SURFACE</h3><canvas id="chartSurface"></canvas></div>
         <div class="chart-card"><h3>WIN RATE BY EDGE TIER</h3><canvas id="chartTier"></canvas></div>
@@ -1415,11 +1416,24 @@ function renderMyBets() {
         };
     });
 
-    // ── Match outcome stats ──
-    const bWins = enriched.filter(b => b.outcome === 'win').length;
-    const bLosses = enriched.filter(b => b.outcome === 'loss').length;
-    const bVoid = enriched.filter(b => b.outcome === 'void').length;
-    const bPending = enriched.filter(b => !b.outcome).length;
+    // ── Filter out resolved bets older than 5 days ──
+    const FIVE_DAYS = 5 * 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const visible = enriched.filter(b => {
+        if (!b.outcome || b.outcome === '') return true; // pending — always show
+        // Resolved — check age
+        const resolvedTime = b.resolved_at ? new Date(b.resolved_at).getTime() : null;
+        const betTime = new Date(b.timestamp || b.card_date || '').getTime();
+        const refTime = resolvedTime || betTime;
+        if (!refTime || isNaN(refTime)) return true; // no timestamp — show to be safe
+        return (nowMs - refTime) < FIVE_DAYS;
+    });
+
+    // ── Match outcome stats (use visible for display, enriched for totals) ──
+    const bWins = visible.filter(b => b.outcome === 'win').length;
+    const bLosses = visible.filter(b => b.outcome === 'loss').length;
+    const bVoid = visible.filter(b => b.outcome === 'void').length;
+    const bPending = visible.filter(b => !b.outcome).length;
 
     // ── Trade P&L stats (from actual wallet data) ──
     const hasAnyTradeData = enriched.some(b => b._hasTradeData);
@@ -1435,16 +1449,19 @@ function renderMyBets() {
     let html = `<div style="margin-bottom:12px; font-size:11px; color:#6c757d; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">
         <div>`;
 
+    const hiddenCount = enriched.length - visible.length;
+    const hiddenNote = hiddenCount > 0 ? ` <span style="color:#6c757d; font-size:9px">(${hiddenCount} older resolved hidden)</span>` : '';
+
     if (hasAnyTradeData) {
-        html += `<strong style="color:#e0e0e0">${enriched.length}</strong> bets |
+        html += `<strong style="color:#e0e0e0">${visible.length}</strong> bets${hiddenNote} |
             Trade: <strong style="color:#4caf50">${tradeWins}W</strong> -
             <strong style="color:#f44336">${tradeLosses}L</strong>${tradeVoid ? ` - <strong style="color:#888">${tradeVoid}V</strong>` : ''}${tradePartial ? ` - <strong style="color:#d4740a">${tradePartial}P</strong>` : ''} -
             <strong style="color:#6c757d">${tradeOpen} open</strong> |
             Trade P&L: <strong style="color:${totalTradePnl >= 0 ? '#4caf50' : '#f44336'}">${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)}</strong> |
             Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>${(tradeWins + tradeLosses) > 0 ? ` | Win Rate: <strong style="color:${tradeWins/(tradeWins+tradeLosses) >= 0.5 ? '#4caf50' : '#f44336'}">${(tradeWins/(tradeWins+tradeLosses)*100).toFixed(0)}%</strong>` : ''}`;
     } else {
-        const bPnl = enriched.reduce((s, b) => s + (b.pnl || 0), 0);
-        html += `<strong style="color:#e0e0e0">${enriched.length}</strong> bets |
+        const bPnl = visible.reduce((s, b) => s + (b.pnl || 0), 0);
+        html += `<strong style="color:#e0e0e0">${visible.length}</strong> bets${hiddenNote} |
             Match: <strong style="color:#4caf50">${bWins}W</strong> -
             <strong style="color:#f44336">${bLosses}L</strong>${bVoid ? ` - <strong style="color:#888">${bVoid}V</strong>` : ''} -
             <strong style="color:#6c757d">${bPending} pending</strong> |
@@ -1463,7 +1480,7 @@ function renderMyBets() {
         <th>Match</th><th>Win %</th><th>Edge</th>
     </tr></thead><tbody>`;
 
-    enriched.forEach(b => {
+    visible.forEach(b => {
         const date = (b.timestamp || b.card_date || '').slice(0, 10);
 
         // Match outcome column
@@ -1518,7 +1535,6 @@ function round2(n) { return Math.round(n * 100) / 100; }
 renderMyBets();
 
 // ─── PERFORMANCE REPORTING ───
-let perfChart = null;
 let currentPerfRange = 'all';
 
 function setPerfRange(range, btn) {
@@ -1700,18 +1716,30 @@ function renderPerformance() {
         tableEl.innerHTML = tbl;
     }
 
-    // Daily P&L bar chart
+}
+
+renderPerformance();
+
+// ─── DAILY P&L CHART (Performance tab) ───
+(function renderDailyPnlChart() {
+    const allEnriched = getEnrichedBets();
+    const dayMap = {};
+    allEnriched.forEach(b => {
+        const d = (b.timestamp || b.card_date || '').slice(0, 10);
+        if (!d) return;
+        if (!dayMap[d]) dayMap[d] = { wins: 0, losses: 0, pnl: 0 };
+        if (b.outcome === 'win') { dayMap[d].wins++; dayMap[d].pnl += (b.pnl || 0); }
+        else if (b.outcome === 'loss') { dayMap[d].losses++; dayMap[d].pnl += (b.pnl || 0); }
+    });
     const sortedDays = Object.keys(dayMap).sort();
-    const chartLabels = sortedDays;
+    if (sortedDays.length === 0) return;
     const chartData = sortedDays.map(d => round2(dayMap[d].pnl));
     const chartColors = chartData.map(v => v >= 0 ? '#4caf50' : '#f44336');
 
-    const ctx = document.getElementById('chartDailyPnl');
-    if (perfChart) perfChart.destroy();
-    perfChart = new Chart(ctx, {
+    new Chart(document.getElementById('chartDailyPnl'), {
         type: 'bar',
         data: {
-            labels: chartLabels,
+            labels: sortedDays,
             datasets: [{
                 label: 'Daily P&L ($)',
                 data: chartData,
@@ -1728,7 +1756,7 @@ function renderPerformance() {
                     callbacks: {
                         label: ctx => {
                             const v = ctx.raw;
-                            const d = dayMap[chartLabels[ctx.dataIndex]];
+                            const d = dayMap[sortedDays[ctx.dataIndex]];
                             return `P&L: ${v >= 0 ? '+' : ''}$${v.toFixed(2)} | ${d.wins}W-${d.losses}L`;
                         }
                     }
@@ -1740,9 +1768,7 @@ function renderPerformance() {
             }
         }
     });
-}
-
-renderPerformance();
+})();
 
 // ─── ACTIVE BET CARDS (mini cards for pending bets) ───
 function renderActiveBetCards() {
@@ -1798,11 +1824,10 @@ function renderActiveBetCards() {
     });
 
     let html = `<div style="margin-bottom:8px; font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600">${activeBets.length > 0 ? 'Active Bets' : 'Recently Resolved'}${activeBets.length > 0 && recentlyResolved.length > 0 ? ' + Recently Resolved' : ''}</div>`;
-    html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px">';
+    html += '<div style="display:flex; flex-direction:column; gap:6px">';
 
     cardData.forEach(({bet, sig: s, status}) => {
-        const pa = s.player_a || (bet.match||'').split(/\s+vs\.?\s+/)[0] || '—';
-        const pb = s.player_b || (bet.match||'').split(/\s+vs\.?\s+/)[1] || '—';
+        const matchName = bet.match || '—';
         const edge = (s.edge||bet.edge||0);
         const edgeSign = edge > 0 ? '+' : '';
         const modelP = (s.model_prob||bet.model_prob||0);
@@ -1814,56 +1839,50 @@ function renderActiveBetCards() {
 
         // Outcome badge for resolved
         let badge = '';
-        let borderColor = '#333';
+        let borderColor = '#2d3139';
         let opacity = '1';
         if (status === 'resolved') {
             if (bet.outcome === 'win') {
-                badge = '<div style="position:absolute; top:-1px; right:-1px; background:#4caf50; color:#fff; font-size:10px; font-weight:800; padding:3px 10px; border-radius:0 8px 0 8px; letter-spacing:0.5px">WIN</div>';
-                borderColor = '#4caf50';
+                badge = '<span style="background:#4caf50; color:#fff; font-size:9px; font-weight:800; padding:2px 8px; border-radius:3px; margin-left:8px">WIN</span>';
+                borderColor = '#4caf5060';
             } else if (bet.outcome === 'loss') {
-                badge = '<div style="position:absolute; top:-1px; right:-1px; background:#f44336; color:#fff; font-size:10px; font-weight:800; padding:3px 10px; border-radius:0 8px 0 8px; letter-spacing:0.5px">LOSS</div>';
-                borderColor = '#f44336';
+                badge = '<span style="background:#f44336; color:#fff; font-size:9px; font-weight:800; padding:2px 8px; border-radius:3px; margin-left:8px">LOSS</span>';
+                borderColor = '#f4433660';
                 opacity = '0.7';
             } else if (bet.outcome === 'void') {
-                badge = '<div style="position:absolute; top:-1px; right:-1px; background:#888; color:#fff; font-size:10px; font-weight:800; padding:3px 10px; border-radius:0 8px 0 8px; letter-spacing:0.5px">VOID</div>';
-                borderColor = '#888';
+                badge = '<span style="background:#888; color:#fff; font-size:9px; font-weight:800; padding:2px 8px; border-radius:3px; margin-left:8px">VOID</span>';
+                borderColor = '#88888860';
                 opacity = '0.6';
             }
         }
 
-        html += `<div style="position:relative; background:#1a1a2e; border:1px solid ${borderColor}; border-radius:8px; padding:10px 12px; font-size:11px; color:#ccc; opacity:${opacity}">
-            ${badge}
+        html += `<div style="background:#1a1d27; border:1px solid ${borderColor}; border-radius:6px; padding:8px 12px; opacity:${opacity}">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
-                <div style="font-weight:700; color:#e0e0e0; font-size:12px">${pa} vs ${pb}</div>
-                <span style="font-size:9px; color:#888; ${badge ? 'margin-right:50px' : ''}">${tourney}</span>
+                <div style="font-weight:700; color:#e0e0e0; font-size:12px">${matchName}${badge}</div>
+                <span style="font-size:9px; color:#6c757d">${tourney}</span>
             </div>
-            <div style="display:flex; gap:10px; padding:5px 8px; background:#111; border-radius:4px">
-                <div style="text-align:center; flex:1">
-                    <div style="font-size:7px; color:#888">YOUR BET</div>
+            <div style="display:flex; gap:0; background:#0f1117; border-radius:4px; overflow:hidden">
+                <div style="text-align:center; flex:1; padding:5px 8px; border-right:1px solid #2d3139">
+                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">YOUR BET</div>
                     <div style="font-weight:700; color:#d4740a; font-size:12px">${(bet.bet_on||'').split(' ').pop()}</div>
                 </div>
-                <div style="text-align:center; flex:1">
-                    <div style="font-size:7px; color:#888">BUY</div>
-                    <div style="font-weight:600">${buyStr}</div>
+                <div style="text-align:center; flex:1; padding:5px 8px; border-right:1px solid #2d3139">
+                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">BUY PRICE</div>
+                    <div style="font-weight:600; color:#e0e0e0">${buyStr}</div>
                 </div>
-                <div style="text-align:center; flex:1">
-                    <div style="font-size:7px; color:#888">STAKE</div>
-                    <div style="font-weight:600">${stakeStr}</div>
+                <div style="text-align:center; flex:1; padding:5px 8px; border-right:1px solid #2d3139">
+                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">STAKE</div>
+                    <div style="font-weight:600; color:#e0e0e0">${stakeStr}</div>
                 </div>
-                <div style="text-align:center; flex:1">
-                    <div style="font-size:7px; color:#888">WIN %</div>
-                    <div style="font-weight:600; color:#4caf50">${modelP.toFixed ? modelP.toFixed(0) : modelP}%</div>
+                <div style="text-align:center; flex:1; padding:5px 8px; border-right:1px solid #2d3139">
+                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">MODEL</div>
+                    <div style="font-weight:600; color:#4caf50">${modelP.toFixed ? modelP.toFixed(1) : modelP}%</div>
                 </div>
-                <div style="text-align:center; flex:1">
-                    <div style="font-size:7px; color:#888">EDGE</div>
+                <div style="text-align:center; flex:1; padding:5px 8px">
+                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">EDGE</div>
                     <div style="font-weight:700; color:${edge >= 10 ? '#4caf50' : edge >= 5 ? '#d4740a' : '#6c757d'}">${edgeSign}${typeof edge === 'number' ? edge.toFixed(1) : edge}%</div>
                 </div>
-                ${status === 'resolved' && bet.pnl != null ? `<div style="text-align:center; flex:1">
-                    <div style="font-size:7px; color:#888">P&L</div>
-                    <div style="font-weight:700; color:${bet.pnl >= 0 ? '#4caf50' : '#f44336'}">${bet.pnl >= 0 ? '+' : ''}$${Math.abs(bet.pnl).toFixed(2)}</div>
-                </div>` : ''}
             </div>
-            ${s.poly_link ? '<div style="margin-top:4px; text-align:right"><a href="' + s.poly_link + '" target="_blank" style="color:#d4740a; font-size:9px; text-decoration:none">Polymarket →</a></div>' : ''}
         </div>`;
     });
 
