@@ -23,7 +23,10 @@ from pathlib import Path
 
 import requests
 
-CACHE_DIR = Path("data")
+# Use persistent disk on Render, fall back to repo-relative for local dev
+_PERSISTENT = Path("/data/data")
+CACHE_DIR = _PERSISTENT if _PERSISTENT.exists() else Path("data")
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 RANKINGS_CACHE = CACHE_DIR / "live_rankings.json"
 CACHE_MAX_AGE_HOURS = 12  # Re-fetch if cache is older than this
 

@@ -2,11 +2,18 @@ import json, argparse, numpy as np, pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
 
-LOGS_DIR = Path("logs"); LOGS_DIR.mkdir(exist_ok=True)
+# Use persistent disk on Render, fall back to repo-relative for local dev
+_PERSISTENT = Path("/data")
+if _PERSISTENT.exists() and _PERSISTENT.is_dir():
+    LOGS_DIR = _PERSISTENT / "logs"
+    DATA_DIR = _PERSISTENT / "data"
+else:
+    LOGS_DIR = Path("logs")
+    DATA_DIR = Path("data")
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 PICKS_LOG = LOGS_DIR / "picks.jsonl"
 PERF_LOG = LOGS_DIR / "performance.json"
 LSTM_EXPORT = LOGS_DIR / "lstm_training.csv"
-DATA_DIR = Path("data")
 
 def log_picks(signals, run_id=None):
     if not signals: return 0
