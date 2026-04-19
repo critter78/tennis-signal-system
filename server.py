@@ -1484,6 +1484,161 @@ def api_players():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/live-prices", methods=["GET"])
+@enable_cors
+def api_live_prices():
+    """Fetch fresh Polymarket prices for all active signal markets.
+    Returns a map of slug → {prices: {outcome: price_cents}, volume}."""
+    import requests as req
+
+    try:
+        # Read current picks to get slugs
+        picks_path = LOGS_DIR / "picks.jsonl"
+        if not picks_path.exists():
+            picks_path = BASE_DIR / "logs" / "picks.jsonl"
+
+        slugs = set()
+        if picks_path.exists():
+            with open(picks_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        pick = json.loads(line)
+                        slug = pick.get("slug", "")
+                        if slug:
+                            slugs.add(slug)
+                    except json.JSONDecodeError:
+                        continue
+
+        if not slugs:
+            return jsonify({"prices": {}, "message": "No active markets"})
+
+        price_map = {}
+        for slug in slugs:
+            try:
+                r = req.get(
+                    f"https://gamma-api.polymarket.com/events?slug={slug}",
+                    timeout=8,
+                )
+                r.raise_for_status()
+                events = r.json()
+                if not events:
+                    continue
+                ev = events[0] if isinstance(events, list) else events
+                markets = ev.get("markets", [ev])
+                for m in markets:
+                    outcomes_raw = m.get("outcomes", "")
+                    prices_raw = m.get("outcomePrices", "")
+                    try:
+                        outcomes = json.loads(outcomes_raw) if isinstance(outcomes_raw, str) else (outcomes_raw or [])
+                    except (json.JSONDecodeError, TypeError):
+                        outcomes = []
+                    try:
+                        prices_list = json.loads(prices_raw) if isinstance(prices_raw, str) else (prices_raw or [])
+                    except (json.JSONDecodeError, TypeError):
+                        prices_list = []
+
+                    if outcomes and prices_list and len(outcomes) == len(prices_list):
+                        prices = {}
+                        for name, price in zip(outcomes, prices_list):
+                            try:
+                                prices[str(name)] = round(float(price) * 100, 1)
+                            except (ValueError, TypeError):
+                                pass
+                        vol = float(m.get("volume", 0) or 0)
+                        mid = m.get("id") or m.get("conditionId", "")
+                        q = m.get("question", "")
+                        price_map[slug] = {
+                            "prices": prices,
+                            "volume": vol,
+                            "market_id": mid,
+                            "question": q,
+                        }
+            except Exception as e:
+                logger.debug(f"Live price fetch failed for {slug}: {e}")
+                continue
+
+        return jsonify({"prices": price_map, "count": len(price_map)})
+
+    except Exception as e:
+        logger.error(f"Error in /api/live-prices: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/whales", methods=["GET"])
+@enable_cors
+def api_whales():
+    """Fetch whale data for a specific market on-demand.
+    Query params: slug (market slug), token_ids (comma-sep CLOB token IDs),
+    outcomes (comma-sep outcome names), volume (total market volume)."""
+    import requests as req
+
+    try:
+        slug = request.args.get("slug", "")
+        token_ids_raw = request.args.get("token_ids", "")
+        outcomes_raw = request.args.get("outcomes", "")
+        volume = float(request.args.get("volume", 0))
+
+        clob_token_ids = [t.strip() for t in token_ids_raw.split(",") if t.strip()]
+        outcomes = [o.strip() for o in outcomes_raw.split(",") if o.strip()]
+
+        # If no token IDs provided, try to look them up from the slug
+        if not clob_token_ids and slug:
+            try:
+                r = req.get(f"https://gamma-api.polymarket.com/events?slug={slug}", timeout=8)
+                r.raise_for_status()
+                events = r.json()
+                if events:
+                    ev = events[0] if isinstance(events, list) else events
+                    markets = ev.get("markets", [ev])
+                    for m in markets:
+                        ids_raw = m.get("clobTokenIds", "")
+                        if isinstance(ids_raw, str):
+                            try:
+                                clob_token_ids = json.loads(ids_raw) if ids_raw else []
+                            except (json.JSONDecodeError, TypeError):
+                                clob_token_ids = []
+                        else:
+                            clob_token_ids = ids_raw or []
+
+                        out_raw = m.get("outcomes", "")
+                        if isinstance(out_raw, str):
+                            try:
+                                outcomes = json.loads(out_raw) if out_raw else []
+                            except (json.JSONDecodeError, TypeError):
+                                outcomes = []
+                        else:
+                            outcomes = out_raw or []
+
+                        if not volume:
+                            volume = float(m.get("volume", 0) or 0)
+                        break
+            except Exception as e:
+                logger.debug(f"Whale slug lookup failed for {slug}: {e}")
+
+        if not clob_token_ids or volume <= 0:
+            return jsonify({"whale_data": None, "message": "Missing token IDs or volume"})
+
+        # Import whale function from betting card module
+        from importlib import import_module
+        bc = import_module("04_betting_card")
+        # Temporarily enable whale fetching
+        old_skip = bc._SKIP_WHALES
+        bc._SKIP_WHALES = False
+        try:
+            whale_data = bc._fetch_whale_data(clob_token_ids, outcomes, volume)
+        finally:
+            bc._SKIP_WHALES = old_skip
+
+        return jsonify({"whale_data": whale_data})
+
+    except Exception as e:
+        logger.error(f"Error in /api/whales: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/generate", methods=["POST"])
 @enable_cors
 def generate_card():
@@ -2347,7 +2502,7 @@ def admin_full_refresh():
 
     steps = [
         ("rankings", ["python3", str(BASE_DIR / "09_rankings_fetcher.py"), "--refresh"], 60),
-        ("card", ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300"], 300),
+        ("card", ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300", "--skip-whales"], 300),
         ("dedup", ["python3", str(BASE_DIR / "05_bet_logger.py"), "dedup"], 30),
     ]
 
@@ -2367,7 +2522,7 @@ def admin_full_refresh():
                 # Retry card gen at lower volume
                 if name == "card":
                     r2 = subprocess.run(
-                        ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100"],
+                        ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100", "--skip-whales"],
                         cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
                     )
                     out2 = (r2.stdout or "")[-500:]
@@ -2442,13 +2597,13 @@ def api_refresh():
     try:
         logger.info("[2/5] Generating betting card...")
         r = subprocess.run(
-            ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300"],
+            ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300", "--skip-whales"],
             cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
         )
         if r.returncode != 0:
             logger.info("  Card gen failed at $300, trying $100...")
             r = subprocess.run(
-                ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100"],
+                ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100", "--skip-whales"],
                 cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
             )
         results["card"] = {

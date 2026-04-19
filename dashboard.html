@@ -2302,6 +2302,14 @@ function renderSignals() {
                         '</div>' +
                     '</div>' +
                     eloDetailHtml +
+                    // ── WHALE TRACKER (on-demand) ──
+                    '<div id="whale-' + (s.slug||'').replace(/[^a-zA-Z0-9]/g,'_') + '" style="margin-top:10px; padding-top:8px; border-top:1px solid #333">' +
+                        '<div style="display:flex; justify-content:space-between; align-items:center">' +
+                            '<span style="font-size:10px; color:#d4740a; font-weight:700; text-transform:uppercase; letter-spacing:0.5px">&#x1F40B; Whale Tracker</span>' +
+                            '<button onclick="loadWhaleData(this, \'' + (s.slug||'').replace(/'/g,"\\'") + '\', ' + (s.volume||0) + ')" style="background:#2a2d37; color:#42a5f5; border:1px solid #42a5f540; padding:3px 10px; border-radius:4px; font-size:9px; cursor:pointer; font-weight:600">Load Whale Data</button>' +
+                        '</div>' +
+                        '<div class="whale-content" style="font-size:10px; color:#6c757d; margin-top:4px">Click to fetch top holders from Polymarket</div>' +
+                    '</div>' +
                     '</details>';
                 })()}
             </div>
@@ -2348,8 +2356,134 @@ function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, mark
     } catch(e) {}
 }
 
+// ─── WHALE TRACKER (on-demand fetch) ───
+function loadWhaleData(btn, slug, volume) {
+    var container = btn.closest('[id^="whale-"]');
+    var contentDiv = container.querySelector('.whale-content');
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+    contentDiv.innerHTML = '<span style="color:#888">Fetching trade data from Polymarket...</span>';
+
+    fetch('/api/whales?slug=' + encodeURIComponent(slug) + '&volume=' + volume, {signal: AbortSignal.timeout(30000)})
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data || !data.whale_data) {
+                contentDiv.innerHTML = '<span style="color:#6c757d">No whale activity detected for this market</span>';
+                btn.style.display = 'none';
+                return;
+            }
+            var wd = data.whale_data;
+            var wh = '';
+            // Whales (>5% of volume)
+            if (wd.whales && wd.whales.length > 0) {
+                wh += '<div style="margin-bottom:6px">';
+                wh += '<div style="font-size:9px; color:#888; margin-bottom:3px">Large Holders (&gt;5% of $' + (wd.total_volume >= 1000 ? Math.round(wd.total_volume/1000) + 'K' : Math.round(wd.total_volume)) + ' volume)</div>';
+                wd.whales.forEach(function(w) {
+                    wh += '<div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0">';
+                    wh += '<span style="color:#aaa; font-family:monospace; font-size:9px">' + w.address_short + '</span>';
+                    wh += '<span><span style="color:#42a5f5">' + w.side + '</span> &middot; <span style="color:#4caf50; font-weight:600">$' + (w.amount >= 1000 ? (w.amount/1000).toFixed(1) + 'K' : Math.round(w.amount)) + '</span> <span style="color:#ffd740">(' + w.pct.toFixed(1) + '%)</span></span>';
+                    wh += '</div>';
+                });
+                wh += '</div>';
+            }
+            // Top 3 positions per side
+            if (wd.top_positions && Object.keys(wd.top_positions).length > 0) {
+                wh += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">';
+                Object.keys(wd.top_positions).forEach(function(outcome) {
+                    var holders = wd.top_positions[outcome];
+                    if (!holders || holders.length === 0) return;
+                    wh += '<div>';
+                    wh += '<div style="font-size:9px; color:#888; margin-bottom:2px; font-weight:600">Top 3 \u2014 ' + outcome + '</div>';
+                    holders.forEach(function(h, i) {
+                        var medal = i === 0 ? '\uD83E\uDD47' : i === 1 ? '\uD83E\uDD48' : '\uD83E\uDD49';
+                        wh += '<div style="display:flex; justify-content:space-between; font-size:9.5px; padding:1px 0">';
+                        wh += '<span style="color:#aaa">' + medal + ' ' + h.address_short + '</span>';
+                        wh += '<span style="color:#4caf50">$' + (h.amount >= 1000 ? (h.amount/1000).toFixed(1) + 'K' : Math.round(h.amount)) + '</span>';
+                        wh += '</div>';
+                    });
+                    wh += '</div>';
+                });
+                wh += '</div>';
+            }
+            if (!wh) wh = '<span style="color:#6c757d">No whale activity detected</span>';
+            contentDiv.innerHTML = wh;
+            btn.style.display = 'none';
+        })
+        .catch(function(e) {
+            contentDiv.innerHTML = '<span style="color:#f44336">Failed to load whale data</span>';
+            btn.disabled = false;
+            btn.textContent = 'Retry';
+        });
+}
+
 // Initial render
 renderSignals();
+
+// ─── LIVE POLY PRICE REFRESH ───
+// Fetches fresh prices from Polymarket on dashboard load and updates cards in-place
+(function refreshLivePrices() {
+    fetch('/api/live-prices', {signal: AbortSignal.timeout(30000)})
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data || !data.prices) return;
+            var priceMap = data.prices;
+            var updated = 0;
+            picks.forEach(function(p) {
+                var slug = p.slug || '';
+                if (!slug || !priceMap[slug]) return;
+                var fresh = priceMap[slug];
+                if (!fresh.prices) return;
+                // Match outcomes to player names
+                var pa = p.player_a || '';
+                var pb = p.player_b || '';
+                var keys = Object.keys(fresh.prices);
+                var vals = Object.values(fresh.prices);
+                if (keys.length < 2) return;
+                var newPa, newPb;
+                // Try to match by last name
+                var paLast = pa.split(' ').pop().toLowerCase();
+                var pbLast = pb.split(' ').pop().toLowerCase();
+                if (keys[0].toLowerCase().indexOf(paLast) >= 0) {
+                    newPa = vals[0]; newPb = vals[1];
+                } else if (keys[1].toLowerCase().indexOf(paLast) >= 0) {
+                    newPa = vals[1]; newPb = vals[0];
+                } else if (keys[0].toLowerCase() === 'yes') {
+                    newPa = vals[0]; newPb = vals[1];
+                } else {
+                    newPa = vals[0]; newPb = vals[1];
+                }
+                // Update the pick data
+                if (newPa !== undefined && newPb !== undefined) {
+                    p.poly_price_a = newPa;
+                    p.poly_price_b = newPb;
+                    // Update poly_price for bet_on player
+                    if (p.bet_on === pa) {
+                        p.poly_price = newPa;
+                    } else {
+                        p.poly_price = newPb;
+                    }
+                    // Recalculate edges with fresh price
+                    if (p.model_prob !== undefined && p.model_prob !== null) {
+                        p.base_edge = parseFloat((p.base_prob - p.poly_price).toFixed(1));
+                        p.edge = parseFloat((p.model_prob - p.poly_price).toFixed(1));
+                    }
+                    p._live_price = true;
+                    updated++;
+                }
+            });
+            if (updated > 0) {
+                console.log('[live-prices] Updated ' + updated + ' markets with fresh Polymarket prices');
+                renderSignals();
+                // Update freshness indicator
+                var el = document.getElementById('dataFreshness');
+                if (el) {
+                    var existing = el.innerHTML;
+                    el.innerHTML = existing + ' <span style="color:#42a5f5; font-size:10px">| Live prices &#10003;</span>';
+                }
+            }
+        })
+        .catch(function(e) { console.log('[live-prices] Refresh failed:', e); });
+})();
 
 // ─── DATE/TIME CLOCK WITH SUN/MOON ───
 function updateClock() {

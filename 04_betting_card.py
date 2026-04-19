@@ -140,6 +140,16 @@ def _parse_market(m, min_volume=0):
     if not prices:
         return None
 
+    # Parse CLOB token IDs for trade lookups (whale tracker)
+    clob_ids_raw = m.get("clobTokenIds", "")
+    if isinstance(clob_ids_raw, str):
+        try:
+            clob_ids = json.loads(clob_ids_raw) if clob_ids_raw else []
+        except (json.JSONDecodeError, TypeError):
+            clob_ids = []
+    else:
+        clob_ids = clob_ids_raw or []
+
     return {
         "market_id": m.get("id") or m.get("condition_id") or m.get("conditionId", ""),
         "slug":      m.get("slug", ""),
@@ -148,6 +158,151 @@ def _parse_market(m, min_volume=0):
         "volume":    vol,
         "liquidity": float(m.get("liquidity", 0) or 0),
         "prices":    prices,
+        "clob_token_ids": clob_ids,
+        "outcomes":  outcomes_list,
+    }
+
+
+# ─── WHALE TRACKER: Top holders / large positions ───
+
+CLOB_API = "https://clob.polymarket.com"
+WHALE_THRESHOLD_PCT = 5.0   # Flag wallets holding > 5% of total volume
+
+# Skip whale fetching during pipeline/cron (too slow — 80+ API calls)
+# Set SKIP_WHALES=1 env var or pass --skip-whales CLI flag
+import os as _os
+_SKIP_WHALES = _os.environ.get("SKIP_WHALES", "0") == "1"
+
+
+def _fetch_whale_data(clob_token_ids, outcomes, total_volume):
+    """
+    Fetch trades for a market and identify whale positions.
+
+    Returns dict with:
+      - whales: list of {address, side, amount, pct} for wallets > WHALE_THRESHOLD_PCT
+      - top_positions: {outcome_name: [{address_short, amount, pct}, ...top 3]}
+    """
+    if _SKIP_WHALES:
+        return None
+    if not clob_token_ids or total_volume <= 0:
+        return None
+
+    # Map token_id → outcome name
+    token_outcome = {}
+    for i, tid in enumerate(clob_token_ids):
+        if i < len(outcomes):
+            token_outcome[str(tid)] = outcomes[i]
+        else:
+            token_outcome[str(tid)] = f"Outcome {i}"
+
+    # Aggregate volume by (wallet, outcome)
+    wallet_side_vol = {}  # (wallet, outcome) -> total_usd
+
+    for tid in clob_token_ids:
+        if not tid:
+            continue
+        try:
+            # Fetch up to 1000 recent trades for this token
+            cursor = None
+            fetched = 0
+            max_fetch = 2000
+
+            while fetched < max_fetch:
+                params = {"asset_id": str(tid), "limit": 500}
+                if cursor:
+                    params["next_cursor"] = cursor
+
+                r = requests.get(
+                    f"{CLOB_API}/trades",
+                    params=params,
+                    timeout=12,
+                )
+                r.raise_for_status()
+                data = r.json()
+
+                trades = []
+                if isinstance(data, list):
+                    trades = data
+                elif isinstance(data, dict):
+                    trades = data.get("data", data.get("trades", []))
+                    cursor = data.get("next_cursor")
+
+                if not trades:
+                    break
+
+                outcome_name = token_outcome.get(str(tid), "Unknown")
+
+                for t in trades:
+                    # Each trade has maker_address, taker_address, size, price
+                    size = float(t.get("size", 0) or 0)
+                    price = float(t.get("price", 0) or 0)
+                    usd_val = size * price  # approximate USD value
+
+                    for addr_key in ("maker_address", "taker_address"):
+                        addr = t.get(addr_key, "")
+                        if addr:
+                            key = (addr.lower(), outcome_name)
+                            wallet_side_vol[key] = wallet_side_vol.get(key, 0) + usd_val
+
+                fetched += len(trades)
+                if not cursor or (isinstance(data, list)):
+                    break  # No pagination or list response
+
+        except Exception as e:
+            print(f"  [whale] trades fetch error for token {tid}: {e}", file=sys.stderr)
+            continue
+
+    if not wallet_side_vol:
+        return None
+
+    # Build per-outcome leaderboards
+    outcome_boards = {}  # outcome -> [{addr, amount, pct}, ...]
+    for (wallet, outcome), amount in wallet_side_vol.items():
+        pct = (amount / total_volume) * 100 if total_volume > 0 else 0
+        if outcome not in outcome_boards:
+            outcome_boards[outcome] = []
+        outcome_boards[outcome].append({
+            "address": wallet,
+            "address_short": wallet[:6] + "..." + wallet[-4:] if len(wallet) > 10 else wallet,
+            "amount": round(amount, 2),
+            "pct": round(pct, 1),
+        })
+
+    # Sort each board by amount descending, keep top 3
+    top_positions = {}
+    for outcome, holders in outcome_boards.items():
+        holders.sort(key=lambda x: x["amount"], reverse=True)
+        top_positions[outcome] = holders[:3]
+
+    # Identify whales (anyone with > WHALE_THRESHOLD_PCT of total volume)
+    whales = []
+    # Aggregate per wallet across all outcomes
+    wallet_total = {}
+    for (wallet, outcome), amount in wallet_side_vol.items():
+        wallet_total[wallet] = wallet_total.get(wallet, 0) + amount
+
+    for wallet, amount in wallet_total.items():
+        pct = (amount / total_volume) * 100 if total_volume > 0 else 0
+        if pct >= WHALE_THRESHOLD_PCT:
+            # Find which side they're mostly on
+            side_amounts = {}
+            for (w, o), a in wallet_side_vol.items():
+                if w == wallet:
+                    side_amounts[o] = side_amounts.get(o, 0) + a
+            primary_side = max(side_amounts, key=side_amounts.get) if side_amounts else "Unknown"
+            whales.append({
+                "address_short": wallet[:6] + "..." + wallet[-4:] if len(wallet) > 10 else wallet,
+                "side": primary_side,
+                "amount": round(amount, 2),
+                "pct": round(pct, 1),
+            })
+
+    whales.sort(key=lambda x: x["amount"], reverse=True)
+
+    return {
+        "whales": whales[:5],  # Top 5 whales
+        "top_positions": top_positions,
+        "total_volume": round(total_volume, 2),
     }
 
 
@@ -1578,6 +1733,17 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             print(f"  [ELO] Intelligence failed for {pa} vs {pb}: {e}", file=sys.stderr)
             elo_intel = {}
 
+        # ── Whale tracker: fetch top holders for this market ──
+        whale_data = None
+        try:
+            clob_ids = mkt.get("clob_token_ids", [])
+            mkt_outcomes = mkt.get("outcomes", [])
+            mkt_vol = float(mkt.get("volume", 0))
+            if clob_ids and mkt_vol > 0:
+                whale_data = _fetch_whale_data(clob_ids, mkt_outcomes, mkt_vol)
+        except Exception as e:
+            print(f"  [whale] Failed for {pa} vs {pb}: {e}", file=sys.stderr)
+
         signals.append({
             "market_id":    mkt.get("market_id", ""),
             "slug":         slug,
@@ -1675,6 +1841,8 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "elo_edge":             _elo_edge_for_bet(elo_intel, bet_player, pa, poly_price),
             "surf_elo_prob":        _surf_elo_prob_for_bet(elo_intel, bet_player, pa),
             "surf_elo_edge":        _surf_elo_edge_for_bet(elo_intel, bet_player, pa, poly_price),
+            # ── WHALE TRACKER ──
+            "whale_data":           whale_data,
         })
 
     # Sort by positive edge first (true signals), then by abs edge for the rest
@@ -1932,6 +2100,17 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
         slug = mkt.get("slug", "")
         poly_link = f"https://polymarket.com/event/{slug}" if slug else "https://polymarket.com/sports/tennis/games"
 
+        # ── Whale tracker for outright markets ──
+        whale_data = None
+        try:
+            clob_ids = mkt.get("clob_token_ids", [])
+            mkt_outcomes = mkt.get("outcomes", [])
+            mkt_vol = float(mkt.get("volume", 0))
+            if clob_ids and mkt_vol > 0:
+                whale_data = _fetch_whale_data(clob_ids, mkt_outcomes, mkt_vol)
+        except Exception as e:
+            print(f"  [whale] Failed for outright {player}: {e}", file=sys.stderr)
+
         signals.append({
             "market_id":       mkt.get("market_id", ""),
             "slug":            slug,
@@ -2002,6 +2181,8 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
             "sb_losses_ytd":   None,
             "sa_ytd_year":     sa.get("ytd_year"),
             "sb_ytd_year":     None,
+            # ── WHALE TRACKER ──
+            "whale_data":      whale_data,
         })
 
     print(f"  → {n_matched} players matched, {n_unmatched} unmatched in historical data")
@@ -2086,6 +2267,17 @@ def generate_signals_data_only(markets_df, df_hist=None, debug=False):
         slug = mkt.get("slug", "")
         poly_link = f"https://polymarket.com/event/{slug}" if slug else "https://polymarket.com/sports/tennis/games"
 
+        # ── Whale tracker (data-only) ──
+        whale_data = None
+        try:
+            clob_ids = mkt.get("clob_token_ids", [])
+            mkt_outcomes = mkt.get("outcomes", [])
+            mkt_vol = float(mkt.get("volume", 0))
+            if clob_ids and mkt_vol > 0:
+                whale_data = _fetch_whale_data(clob_ids, mkt_outcomes, mkt_vol)
+        except Exception:
+            pass
+
         signals.append({
             "match":        f"{pa} vs {pb}",
             "player_a":     pa,
@@ -2134,6 +2326,8 @@ def generate_signals_data_only(markets_df, df_hist=None, debug=False):
             "sa_momentum": None, "sb_momentum": None,
             "sa_wins_ytd": None, "sb_wins_ytd": None,
             "sa_losses_ytd": None, "sb_losses_ytd": None,
+            # ── WHALE TRACKER ──
+            "whale_data":   whale_data,
         })
 
     if debug:
@@ -2167,6 +2361,17 @@ def generate_outright_signals_data_only(markets_df, debug=False):
         slug = mkt.get("slug", "")
         poly_link = f"https://polymarket.com/event/{slug}" if slug else "https://polymarket.com/sports/tennis/games"
 
+        # ── Whale tracker (outright data-only) ──
+        whale_data = None
+        try:
+            clob_ids = mkt.get("clob_token_ids", [])
+            mkt_outcomes = mkt.get("outcomes", [])
+            mkt_vol = float(mkt.get("volume", 0))
+            if clob_ids and mkt_vol > 0:
+                whale_data = _fetch_whale_data(clob_ids, mkt_outcomes, mkt_vol)
+        except Exception:
+            pass
+
         signals.append({
             "match":        f"{player} — {tournament}",
             "player_a":     player,
@@ -2199,6 +2404,8 @@ def generate_outright_signals_data_only(markets_df, debug=False):
             "round":        "Outright",
             "surface":      surface,
             "data_only":    True,
+            # ── WHALE TRACKER ──
+            "whale_data":   whale_data,
         })
 
     if debug:
@@ -3769,7 +3976,14 @@ def main():
                         help="Auto-open card in browser after generating")
     parser.add_argument("--debug",      action="store_true",
                         help="Print raw market questions for debugging")
+    parser.add_argument("--skip-whales", action="store_true",
+                        help="Skip whale tracker API calls (faster pipeline)")
     args = parser.parse_args()
+
+    # Apply --skip-whales flag
+    if args.skip_whales:
+        global _SKIP_WHALES
+        _SKIP_WHALES = True
 
     print("=" * 60)
     print("  🎾  TENNIS BETTING CARD GENERATOR")
