@@ -1477,7 +1477,7 @@ function renderMyBets() {
         <th>Date</th><th>Match</th><th>Pick</th>
         <th>Buy</th><th>Sell</th><th>Stake</th>
         <th>Trade</th><th>Trade P&L</th>
-        <th>Match</th><th>Win %</th><th>Edge</th>
+        <th>Match</th><th>ROI</th><th>Edge</th>
     </tr></thead><tbody>`;
 
     visible.forEach(b => {
@@ -1518,7 +1518,7 @@ function renderMyBets() {
             <td>${tradeRes}</td>
             <td>${tradePnl}</td>
             <td>${matchRes}</td>
-            <td style="color:${b.model_prob && b.model_prob >= 55 ? '#4caf50' : b.model_prob && b.model_prob >= 45 ? '#d4740a' : '#f44336'}">${b.model_prob ? b.model_prob.toFixed(1) + '%' : '—'}</td>
+            <td style="color:${(() => { const s = b._hasTradeData ? b.actual_stake : 100; const pnl = b.trade_pnl != null ? b.trade_pnl : b.pnl; if (!b.outcome || pnl == null || !s) return '#6c757d'; return pnl >= 0 ? '#4caf50' : '#f44336'; })()}">${(() => { const s = b._hasTradeData ? b.actual_stake : 100; const pnl = b.trade_pnl != null ? b.trade_pnl : b.pnl; if (!b.outcome || pnl == null || !s) return '—'; return (pnl / s * 100).toFixed(0) + '%'; })()}</td>
             <td style="color:${Math.abs(b.edge||0) >= 10 ? '#f44336' : '#d4740a'}">${(b.edge||0) > 0 ? '+' : ''}${(b.edge||0).toFixed(1)}%</td>
         </tr>`;
     });
