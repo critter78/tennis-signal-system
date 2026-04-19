@@ -368,10 +368,10 @@ window.PICKS_DATA = [];
 <div class="panel" id="panel-mybets">
     <!-- ── Date Filter Bar ── -->
     <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center">
-        <button class="perf-range-btn active" data-range="all" onclick="setPerfRange('all',this)">All Time</button>
+        <button class="perf-range-btn" data-range="all" onclick="setPerfRange('all',this)">All Time</button>
         <button class="perf-range-btn" data-range="today" onclick="setPerfRange('today',this)">Today</button>
         <button class="perf-range-btn" data-range="yesterday" onclick="setPerfRange('yesterday',this)">Yesterday</button>
-        <button class="perf-range-btn" data-range="7d" onclick="setPerfRange('7d',this)">Last 7d</button>
+        <button class="perf-range-btn active" data-range="7d" onclick="setPerfRange('7d',this)">Last 7d</button>
         <button class="perf-range-btn" data-range="30d" onclick="setPerfRange('30d',this)">Last 30d</button>
         <span style="color:#6c757d; font-size:10px; margin:0 4px">|</span>
         <input type="date" id="perfDateFrom" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2d3139; padding:5px 8px; font-size:11px; font-family:'IBM Plex Mono',monospace" onchange="setPerfRange('custom')">
@@ -1535,7 +1535,7 @@ function round2(n) { return Math.round(n * 100) / 100; }
 renderMyBets();
 
 // ─── PERFORMANCE REPORTING ───
-let currentPerfRange = 'all';
+let currentPerfRange = '7d';
 
 function setPerfRange(range, btn) {
     currentPerfRange = range;
@@ -1626,7 +1626,9 @@ function getEnrichedBets() {
             const polyDec = (bet.poly_price || 50) / 100;
             myPnl = myOutcome === 'win' ? round2(100 * (1 - polyDec)) : round2(-100 * polyDec);
         }
-        return { ...bet, outcome: myOutcome, pnl: myPnl, _hasTradeData: hasTradeData };
+        // Prefer trade_pnl (actual wallet) over notional pnl
+        const bestPnl = bet.trade_pnl != null ? bet.trade_pnl : myPnl;
+        return { ...bet, outcome: myOutcome, pnl: myPnl, bestPnl: bestPnl, _hasTradeData: hasTradeData };
     });
 }
 
@@ -1642,7 +1644,7 @@ function renderPerformance() {
     const losses = resolved.filter(b => b.outcome === 'loss');
     const voids = filtered.filter(b => b.outcome === 'void');
     const pending = filtered.filter(b => !b.outcome);
-    const totalPnl = resolved.reduce((s, b) => s + (b.pnl || 0), 0);
+    const totalPnl = resolved.reduce((s, b) => s + (b.bestPnl || 0), 0);
     const totalStaked = filtered.reduce((s, b) => s + (b.actual_stake || 0), 0);
     const winRate = resolved.length > 0 ? (wins.length / resolved.length * 100).toFixed(1) : '—';
     const roi = totalStaked > 0 ? (totalPnl / totalStaked * 100).toFixed(1) : '—';
@@ -1658,15 +1660,15 @@ function renderPerformance() {
         `<div class="stat-card"><div class="label">ROI</div><div class="value ${roi !== '—' && parseFloat(roi) >= 0 ? 'green' : 'red'}">${roi}${roi !== '—' ? '%' : ''}</div></div>`,
     ].join('');
 
-    // Group by day
+    // Group by day — use bestPnl (actual trade P&L when available)
     const dayMap = {};
     filtered.forEach(b => {
         const d = (b.timestamp || b.card_date || '').slice(0, 10);
         if (!d) return;
         if (!dayMap[d]) dayMap[d] = { bets: 0, wins: 0, losses: 0, voids: 0, pending: 0, pnl: 0, staked: 0 };
         dayMap[d].bets++;
-        if (b.outcome === 'win') { dayMap[d].wins++; dayMap[d].pnl += (b.pnl || 0); }
-        else if (b.outcome === 'loss') { dayMap[d].losses++; dayMap[d].pnl += (b.pnl || 0); }
+        if (b.outcome === 'win') { dayMap[d].wins++; dayMap[d].pnl += (b.bestPnl || 0); }
+        else if (b.outcome === 'loss') { dayMap[d].losses++; dayMap[d].pnl += (b.bestPnl || 0); }
         else if (b.outcome === 'void') dayMap[d].voids++;
         else dayMap[d].pending++;
         dayMap[d].staked += (b.actual_stake || 0);
@@ -1728,8 +1730,8 @@ renderPerformance();
         const d = (b.timestamp || b.card_date || '').slice(0, 10);
         if (!d) return;
         if (!dayMap[d]) dayMap[d] = { wins: 0, losses: 0, pnl: 0 };
-        if (b.outcome === 'win') { dayMap[d].wins++; dayMap[d].pnl += (b.pnl || 0); }
-        else if (b.outcome === 'loss') { dayMap[d].losses++; dayMap[d].pnl += (b.pnl || 0); }
+        if (b.outcome === 'win') { dayMap[d].wins++; dayMap[d].pnl += (b.bestPnl || 0); }
+        else if (b.outcome === 'loss') { dayMap[d].losses++; dayMap[d].pnl += (b.bestPnl || 0); }
     });
     const sortedDays = Object.keys(dayMap).sort();
     if (sortedDays.length === 0) return;
