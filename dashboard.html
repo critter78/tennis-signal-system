@@ -2063,11 +2063,12 @@ function renderSignals() {
                                 bgColor = '#4a2800'; textColor = '#d4740a';
                             }
 
-                            return ' <span style="display:inline-flex; align-items:center; gap:4px; margin-left:8px; vertical-align:middle">' +
+                            return '</div><div style="display:flex; align-items:center; gap:5px; margin-top:4px">' +
                                 '<span style="background:' + bgColor + '; color:' + textColor + '; font-size:9px; font-weight:700; padding:2px 7px; border-radius:3px; letter-spacing:0.3px; border:1px solid ' + textColor + '40">' + label + '</span>' +
-                                '<span style="background:#0f1117; border:1px solid ' + textColor + '60; color:' + textColor + '; font-size:11px; font-weight:800; padding:2px 7px; border-radius:3px">' + consensusP.toFixed(1) + '%</span>' +
-                                '</span>';
-                        })()}</div>
+                                '<span style="background:#0f1117; border:1px solid ' + textColor + '60; color:' + textColor + '; font-size:12px; font-weight:800; padding:2px 8px; border-radius:3px">' + consensusP.toFixed(1) + '%</span>' +
+                                '<span style="font-size:8px; color:#6c757d; letter-spacing:0.3px">CONSENSUS</span>' +
+                                '</div>';
+                        })()}
                     </div>
                     <div class="sig-pick-right">
                         <div style="background:${(s.confidence||0) >= 65 ? '#1b5e20' : (s.confidence||0) >= 55 ? '#4a2800' : '#2d3139'}; border:1px solid ${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}; padding:6px 12px; text-align:center; min-width:70px">
