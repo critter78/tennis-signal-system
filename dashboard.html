@@ -420,6 +420,10 @@ window.PICKS_DATA = [];
         <div class="chart-card"><h3>CALIBRATION — MODEL PROB vs ACTUAL WIN RATE</h3><canvas id="chartCalib"></canvas></div>
         <div class="chart-card"><h3>MODEL vs MARKET PRICING</h3><canvas id="chartModelMarket"></canvas></div>
     </div>
+    <div class="chart-card" style="margin-bottom:20px">
+        <h3>ROLLING WIN RATE TREND (20-PICK WINDOW)</h3>
+        <canvas id="chartWinRateTrend" height="140"></canvas>
+    </div>
     <div class="grid-2">
         <div class="chart-card"><h3>ACCURACY BY RANKING TIER</h3><canvas id="chartRankTier"></canvas></div>
         <div class="chart-card"><h3>EDGE ACCURACY — DID HIGH-EDGE PICKS WIN MORE?</h3><canvas id="chartEdgeAcc"></canvas></div>
@@ -1205,6 +1209,77 @@ Chart.defaults.font.size = 10;
     });
 })();
 
+// ─── ROLLING WIN RATE TREND ───
+(function() {
+    if (resolved.length < 5) return;
+    const sorted = [...resolved].sort((a, b) => (a.logged_at || '').localeCompare(b.logged_at || ''));
+    const windowSize = 20;
+    const labels = [];
+    const winRates = [];
+    const cumWinRates = [];
+    let cumWins = 0;
+
+    for (let i = 0; i < sorted.length; i++) {
+        cumWins += sorted[i].outcome === 'win' ? 1 : 0;
+        cumWinRates.push(round2(cumWins / (i + 1) * 100));
+
+        if (i >= windowSize - 1) {
+            const window = sorted.slice(i - windowSize + 1, i + 1);
+            const ww = window.filter(p => p.outcome === 'win').length;
+            winRates.push(round2(ww / windowSize * 100));
+            labels.push(sorted[i].logged_at ? sorted[i].logged_at.slice(5, 10) : '#' + (i + 1));
+        }
+    }
+    // Cumulative from windowSize onward
+    const cumSlice = cumWinRates.slice(windowSize - 1);
+
+    new Chart(document.getElementById('chartWinRateTrend'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Rolling ' + windowSize + ' Win Rate',
+                    data: winRates,
+                    borderColor: '#d4740a',
+                    backgroundColor: '#d4740a20',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Cumulative Win Rate',
+                    data: cumSlice,
+                    borderColor: '#4caf5080',
+                    borderDash: [5, 3],
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 1.5
+                },
+                {
+                    label: '50% Line',
+                    data: labels.map(() => 50),
+                    borderColor: '#6c757d40',
+                    borderDash: [2, 4],
+                    fill: false,
+                    pointRadius: 0,
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { labels: { font: { size: 9 } } } },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 45 } },
+                y: { min: 0, max: 100, grid: { color: '#1e2130' }, ticks: { callback: v => v + '%' } }
+            }
+        }
+    });
+})();
+
 // ─── MY BETS TABLE ───
 let tradesSynced = false;
 
@@ -1335,6 +1410,7 @@ function renderMyBets() {
             outcome: myOutcome,
             pnl: myPnl,
             actual_winner: match ? match.actual_winner : null,
+            model_prob: match ? match.model_prob : (bet.model_prob || null),
             _hasTradeData: hasTradeData,
         };
     });
@@ -1384,7 +1460,7 @@ function renderMyBets() {
         <th>Date</th><th>Match</th><th>Pick</th>
         <th>Buy</th><th>Sell</th><th>Stake</th>
         <th>Trade</th><th>Trade P&L</th>
-        <th>Match</th><th>Edge</th>
+        <th>Match</th><th>Win %</th><th>Edge</th>
     </tr></thead><tbody>`;
 
     enriched.forEach(b => {
@@ -1425,6 +1501,7 @@ function renderMyBets() {
             <td>${tradeRes}</td>
             <td>${tradePnl}</td>
             <td>${matchRes}</td>
+            <td style="color:${b.model_prob && b.model_prob >= 55 ? '#4caf50' : b.model_prob && b.model_prob >= 45 ? '#d4740a' : '#f44336'}">${b.model_prob ? b.model_prob.toFixed(1) + '%' : '—'}</td>
             <td style="color:${Math.abs(b.edge||0) >= 10 ? '#f44336' : '#d4740a'}">${(b.edge||0) > 0 ? '+' : ''}${(b.edge||0).toFixed(1)}%</td>
         </tr>`;
     });
@@ -1672,23 +1749,41 @@ function renderActiveBetCards() {
     const container = document.getElementById('activeBetCards');
     if (!container) return;
 
-    // Find pending bets (no resolved outcome yet)
-    const pendingBets = myBets.filter(bet => {
-        const match = picks.find(p => p.match === bet.match && p.outcome);
-        return !match; // no resolved outcome = still active
+    const now = Date.now();
+    const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+
+    // Categorize bets: active (pending) + recently resolved (within 12h)
+    const enrichedAll = getEnrichedBets();
+    const activeBets = [];
+    const recentlyResolved = [];
+
+    enrichedAll.forEach(bet => {
+        if (!bet.outcome || bet.outcome === '') {
+            activeBets.push({ bet, status: 'active' });
+        } else if (bet.resolved_at) {
+            const resolvedTime = new Date(bet.resolved_at).getTime();
+            if (now - resolvedTime < TWELVE_HOURS) {
+                recentlyResolved.push({ bet, status: 'resolved' });
+            }
+        } else if (bet.outcome === 'win' || bet.outcome === 'loss') {
+            // No resolved_at timestamp — show for 12h from card_date/timestamp
+            const betTime = new Date(bet.timestamp || bet.card_date || '').getTime();
+            if (betTime && now - betTime < 48 * 60 * 60 * 1000) {
+                recentlyResolved.push({ bet, status: 'resolved' });
+            }
+        }
     });
 
-    if (pendingBets.length === 0) {
+    const allCards = [...activeBets, ...recentlyResolved];
+    if (allCards.length === 0) {
         container.innerHTML = '';
         return;
     }
 
-    // Match each pending bet to its signal data from picks
-    const cards = pendingBets.map(bet => {
-        // Find the most recent signal for this match
+    // Find signal data for each bet
+    const cardData = allCards.map(({bet, status}) => {
         let sig = picks.filter(p => p.match === bet.match).sort((a,b) => (b.logged_at||'').localeCompare(a.logged_at||''))[0];
         if (!sig) {
-            // Fuzzy match by last names
             const parts = (bet.match||'').toLowerCase().split(/\s+vs\.?\s+/);
             if (parts.length === 2) {
                 const la = parts[0].trim().split(' ').pop();
@@ -1699,87 +1794,76 @@ function renderActiveBetCards() {
                 }).sort((a,b) => (b.logged_at||'').localeCompare(a.logged_at||''))[0];
             }
         }
-        return { bet, sig: sig || bet }; // fallback to bet data itself
+        return { bet, sig: sig || bet, status };
     });
 
-    let html = '<div style="margin-bottom:8px; font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600">Active Bets — Match Details</div>';
-    html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:12px">';
+    let html = `<div style="margin-bottom:8px; font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600">${activeBets.length > 0 ? 'Active Bets' : 'Recently Resolved'}${activeBets.length > 0 && recentlyResolved.length > 0 ? ' + Recently Resolved' : ''}</div>`;
+    html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px">';
 
-    cards.forEach(({bet, sig: s}) => {
+    cardData.forEach(({bet, sig: s, status}) => {
         const pa = s.player_a || (bet.match||'').split(/\s+vs\.?\s+/)[0] || '—';
         const pb = s.player_b || (bet.match||'').split(/\s+vs\.?\s+/)[1] || '—';
         const edge = (s.edge||bet.edge||0);
         const edgeSign = edge > 0 ? '+' : '';
-        const edgeColor = edge >= 10 ? '#4caf50' : edge >= 5 ? '#d4740a' : '#6c757d';
         const modelP = (s.model_prob||bet.model_prob||0);
         const polyP = (s.poly_price||bet.poly_price||0);
-
-        // Stats
-        const swrA = s.sa_swr != null ? s.sa_swr + '%' : '—';
-        const swrB = s.sb_swr != null ? s.sb_swr + '%' : '—';
-        const formA = s.sa_form || '—';
-        const formB = s.sb_form || '—';
-        const rankA = s.rank_a || s.sa_rank_now;
-        const rankB = s.rank_b || s.sb_rank_now;
-        const actA = s.sa_matches_52w || s.a_n_matches_52w;
-        const actB = s.sb_matches_52w || s.b_n_matches_52w;
-
-        const tourney = [s.tournament, s.round, s.surface].filter(Boolean).join(' • ');
-
-        // Your bet details
+        const tourney = [s.tournament, s.surface].filter(Boolean).join(' • ');
         const hasTradeData = bet.actual_stake && bet.actual_stake > 0;
         const stakeStr = hasTradeData ? '$' + bet.actual_stake.toFixed(2) : '$100*';
         const buyStr = hasTradeData ? bet.actual_buy_price + 'c' : polyP + 'c';
 
-        html += `<div style="background:#1a1a2e; border:1px solid #333; border-left:3px solid ${edgeColor}; border-radius:8px; padding:12px; font-size:11px; color:#ccc">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        // Outcome badge for resolved
+        let badge = '';
+        let borderColor = '#333';
+        let opacity = '1';
+        if (status === 'resolved') {
+            if (bet.outcome === 'win') {
+                badge = '<div style="position:absolute; top:-1px; right:-1px; background:#4caf50; color:#fff; font-size:10px; font-weight:800; padding:3px 10px; border-radius:0 8px 0 8px; letter-spacing:0.5px">WIN</div>';
+                borderColor = '#4caf50';
+            } else if (bet.outcome === 'loss') {
+                badge = '<div style="position:absolute; top:-1px; right:-1px; background:#f44336; color:#fff; font-size:10px; font-weight:800; padding:3px 10px; border-radius:0 8px 0 8px; letter-spacing:0.5px">LOSS</div>';
+                borderColor = '#f44336';
+                opacity = '0.7';
+            } else if (bet.outcome === 'void') {
+                badge = '<div style="position:absolute; top:-1px; right:-1px; background:#888; color:#fff; font-size:10px; font-weight:800; padding:3px 10px; border-radius:0 8px 0 8px; letter-spacing:0.5px">VOID</div>';
+                borderColor = '#888';
+                opacity = '0.6';
+            }
+        }
+
+        html += `<div style="position:relative; background:#1a1a2e; border:1px solid ${borderColor}; border-radius:8px; padding:10px 12px; font-size:11px; color:#ccc; opacity:${opacity}">
+            ${badge}
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
                 <div style="font-weight:700; color:#e0e0e0; font-size:12px">${pa} vs ${pb}</div>
-                <span style="font-size:9px; color:#888">${tourney}</span>
+                <span style="font-size:9px; color:#888; ${badge ? 'margin-right:50px' : ''}">${tourney}</span>
             </div>
-            <div style="display:flex; gap:12px; margin-bottom:8px; padding:6px 8px; background:#111; border-radius:4px">
+            <div style="display:flex; gap:10px; padding:5px 8px; background:#111; border-radius:4px">
                 <div style="text-align:center; flex:1">
-                    <div style="font-size:8px; color:#888">YOUR BET</div>
-                    <div style="font-weight:700; color:#d4740a">${(bet.bet_on||'').split(' ').pop()}</div>
+                    <div style="font-size:7px; color:#888">YOUR BET</div>
+                    <div style="font-weight:700; color:#d4740a; font-size:12px">${(bet.bet_on||'').split(' ').pop()}</div>
                 </div>
                 <div style="text-align:center; flex:1">
-                    <div style="font-size:8px; color:#888">BUY PRICE</div>
+                    <div style="font-size:7px; color:#888">BUY</div>
                     <div style="font-weight:600">${buyStr}</div>
                 </div>
                 <div style="text-align:center; flex:1">
-                    <div style="font-size:8px; color:#888">STAKE</div>
+                    <div style="font-size:7px; color:#888">STAKE</div>
                     <div style="font-weight:600">${stakeStr}</div>
                 </div>
                 <div style="text-align:center; flex:1">
-                    <div style="font-size:8px; color:#888">MODEL</div>
-                    <div style="font-weight:600; color:#4caf50">${modelP.toFixed ? modelP.toFixed(1) : modelP}%</div>
+                    <div style="font-size:7px; color:#888">WIN %</div>
+                    <div style="font-weight:600; color:#4caf50">${modelP.toFixed ? modelP.toFixed(0) : modelP}%</div>
                 </div>
                 <div style="text-align:center; flex:1">
-                    <div style="font-size:8px; color:#888">EDGE</div>
-                    <div style="font-weight:700; color:${edgeColor}">${edgeSign}${typeof edge === 'number' ? edge.toFixed(1) : edge}%</div>
+                    <div style="font-size:7px; color:#888">EDGE</div>
+                    <div style="font-weight:700; color:${edge >= 10 ? '#4caf50' : edge >= 5 ? '#d4740a' : '#6c757d'}">${edgeSign}${typeof edge === 'number' ? edge.toFixed(1) : edge}%</div>
                 </div>
+                ${status === 'resolved' && bet.pnl != null ? `<div style="text-align:center; flex:1">
+                    <div style="font-size:7px; color:#888">P&L</div>
+                    <div style="font-weight:700; color:${bet.pnl >= 0 ? '#4caf50' : '#f44336'}">${bet.pnl >= 0 ? '+' : ''}$${Math.abs(bet.pnl).toFixed(2)}</div>
+                </div>` : ''}
             </div>
-            <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:8px; font-size:10px">
-                <div>
-                    <div style="font-weight:600; color:#e0e0e0; margin-bottom:2px">${pa.split(' ').pop()}</div>
-                    <div>Rank: ${rankA ? '<strong style="color:#d4740a">#' + rankA + '</strong>' : '—'}</div>
-                    <div>Surface: ${swrA}</div>
-                    <div>Form: ${formA}</div>
-                    ${actA != null ? '<div>Activity: ' + actA + '</div>' : ''}
-                    <div>Rest: ${s.sa_rest != null ? s.sa_rest + 'd' : '—'}</div>
-                </div>
-                <div style="display:flex; align-items:center; color:#888; font-size:9px">
-                    ${s.h2h && s.h2h.total > 0 ? s.h2h.p1_wins + '–' + s.h2h.p2_wins + '<br>H2H' : ''}
-                </div>
-                <div style="text-align:right">
-                    <div style="font-weight:600; color:#e0e0e0; margin-bottom:2px">${pb.split(' ').pop()}</div>
-                    <div>Rank: ${rankB ? '<strong style="color:#d4740a">#' + rankB + '</strong>' : '—'}</div>
-                    <div>Surface: ${swrB}</div>
-                    <div>Form: ${formB}</div>
-                    ${actB != null ? '<div>Activity: ' + actB + '</div>' : ''}
-                    <div>Rest: ${s.sb_rest != null ? s.sb_rest + 'd' : '—'}</div>
-                </div>
-            </div>
-            ${s.poly_link ? '<div style="margin-top:6px; text-align:right"><a href="' + s.poly_link + '" target="_blank" style="color:#d4740a; font-size:9px; text-decoration:none">Open on Polymarket →</a></div>' : ''}
+            ${s.poly_link ? '<div style="margin-top:4px; text-align:right"><a href="' + s.poly_link + '" target="_blank" style="color:#d4740a; font-size:9px; text-decoration:none">Polymarket →</a></div>' : ''}
         </div>`;
     });
 
