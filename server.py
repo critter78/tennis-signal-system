@@ -754,6 +754,9 @@ def _parse_resolved_market(m):
 
     winner = None
     is_void = False
+    resolved_at = m.get("resolvedAt") or m.get("resolved_at")
+    is_closed = m.get("closed") is True or str(m.get("closed", "")).lower() == "true"
+
     if outcomes and prices and len(outcomes) == len(prices):
         float_prices = []
         for price in prices:
@@ -767,21 +770,33 @@ def _parse_resolved_market(m):
                 winner = str(name)
                 break
 
-        # Detect voided/cancelled market: all prices roughly equal (e.g. 0.50/0.50)
-        if not winner and len(float_prices) >= 2 and all(p is not None for p in float_prices):
+        # If prices didn't give a clear winner, try the lower threshold (0.80)
+        # for markets that are closed/resolved but prices haven't fully settled
+        if not winner and (is_closed or resolved_at):
+            for name, p in zip(outcomes, float_prices):
+                if p is not None and p >= 0.80:
+                    winner = str(name)
+                    break
+
+    # Fallback: check resolution/resolvedOutcome fields BEFORE void detection
+    if not winner and resolved_at:
+        winner = m.get("resolution") or m.get("resolvedOutcome")
+
+    # Detect voided/cancelled market: all prices very close to equal (0.50/0.50)
+    # Only mark void if market is closed AND no winner found by any method
+    # Use tight threshold (< 0.03) to avoid false voids on slow-settling markets
+    if not winner and is_closed and outcomes and prices and len(outcomes) == len(prices):
+        float_prices = []
+        for price in prices:
+            try:
+                float_prices.append(float(price))
+            except (ValueError, TypeError):
+                float_prices.append(None)
+        if len(float_prices) >= 2 and all(p is not None for p in float_prices):
             max_p = max(float_prices)
             min_p = min(float_prices)
-            if max_p - min_p < 0.10:  # All prices within 10% of each other = void
+            if max_p - min_p < 0.01:  # 1% — only true voids (0.50/0.50)
                 is_void = True
-
-    resolved_at = m.get("resolvedAt") or m.get("resolved_at")
-
-    if not winner and not is_void:
-        if resolved_at:
-            winner = m.get("resolution") or m.get("resolvedOutcome")
-
-    # Check if market is actually closed/resolved
-    is_closed = m.get("closed") is True or str(m.get("closed", "")).lower() == "true"
 
     if not winner and not is_void:
         return None
@@ -1495,9 +1510,10 @@ def _run_inline_resolver():
         if not unresolved:
             return {"status": "success", "message": "All picks already resolved!", "output": "All picks already resolved!"}
 
-        # Only check picks older than 24 hours
+        # Only check picks older than 3 hours (most Polymarket tennis markets
+        # resolve within 1-2 hours of match completion)
         from datetime import timedelta
-        cutoff = datetime.utcnow() - timedelta(hours=24)
+        cutoff = datetime.utcnow() - timedelta(hours=3)
 
         eligible_indices = set()
         for i, p in enumerate(picks):
@@ -1589,6 +1605,25 @@ def _run_inline_resolver():
 
         if n_reverted:
             output_lines.append(f"Reverted {n_reverted} incorrectly resolved futures picks")
+
+        # ── REVERT incorrectly voided H2H picks (non-futures) ──
+        # Previous void detection was too aggressive; re-check these
+        n_void_reverted = 0
+        for pick in picks:
+            if pick.get("outcome") != "void":
+                continue
+            match_name = pick.get("match", "")
+            # Only revert H2H picks (contain " vs "), not futures
+            if " vs " in match_name and " — " not in match_name:
+                mt = pick.get("market_type", "")
+                if mt != "outright":
+                    pick.pop("outcome", None)
+                    pick.pop("pnl", None)
+                    pick.pop("actual_winner", None)
+                    pick.pop("resolved_at", None)
+                    n_void_reverted += 1
+        if n_void_reverted:
+            output_lines.append(f"Reverted {n_void_reverted} incorrectly voided H2H picks for re-resolution")
 
         # ── Phase 0: Resolve USER'S TRACKED BETS first (individual slug lookups) ──
         # The user only has a handful of bets — prioritize resolving them
@@ -2477,6 +2512,21 @@ def after_request(response):
     return response
 
 
+def _auto_resolve_loop():
+    """Background thread that auto-resolves bets every 4 hours."""
+    import time as _time
+    AUTO_RESOLVE_INTERVAL = 4 * 3600  # 4 hours
+    _time.sleep(120)  # Wait 2 min after startup before first run
+    while True:
+        try:
+            logger.info("[AUTO-RESOLVE] Running scheduled outcome resolution...")
+            result = _run_inline_resolver()
+            logger.info(f"[AUTO-RESOLVE] Done: {result.get('message', result.get('output', '')[:200])}")
+        except Exception as e:
+            logger.warning(f"[AUTO-RESOLVE] Error: {e}")
+        _time.sleep(AUTO_RESOLVE_INTERVAL)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV") == "development"
@@ -2484,5 +2534,11 @@ if __name__ == "__main__":
     logger.info(f"Starting Tennis Betting Signal Server on port {port}")
     logger.info(f"Base directory: {BASE_DIR}")
     logger.info(f"Debug mode: {debug}")
+
+    # Start background auto-resolver (runs every 4 hours)
+    import threading
+    resolver_thread = threading.Thread(target=_auto_resolve_loop, daemon=True)
+    resolver_thread.start()
+    logger.info("[AUTO-RESOLVE] Background resolver started (every 4 hours)")
 
     app.run(host="0.0.0.0", port=port, debug=debug)
