@@ -1667,6 +1667,8 @@ def _run_inline_resolver():
                             if parsed:
                                 slug_resolved_cache[slug] = parsed
                                 # Also add to unique_resolved for Phase 1 matching
+                                q = parsed.get("question", "").lower()
+                                parsed["_words"] = set(w for w in q.replace("?", "").replace(",", "").split() if len(w) > 2)
                                 unique_resolved.append(parsed)
                                 break
                     except Exception as e:
@@ -1893,6 +1895,8 @@ def _run_inline_resolver():
                     if not parsed:
                         continue
                     # Also add to unique_resolved for Phase 1 matching
+                    q = parsed.get("question", "").lower()
+                    parsed["_words"] = set(w for w in q.replace("?", "").replace(",", "").split() if len(w) > 2)
                     unique_resolved.append(parsed)
                     # Resolve ALL picks with this slug
                     for pick2 in picks:
@@ -1982,7 +1986,7 @@ def _run_inline_resolver():
             # Fast match: find resolved market containing both last names
             rm = None
             for candidate in unique_resolved:
-                if a_last in candidate["_words"] and b_last in candidate["_words"]:
+                if a_last in candidate.get("_words", set()) and b_last in candidate.get("_words", set()):
                     rm = candidate
                     break
 
