@@ -570,16 +570,17 @@ def lookup_player_rank(player_name, cache=None):
 
     # Direct single-word key match: if Tennis Explorer stored "shelton" (after
     # stripping initial from "Shelton B."), try matching the last word directly
+    # Require at least 4 chars to avoid false positives (e.g., "tu", "li")
     parts = _normalize_name(player_name).split()
     if len(parts) >= 2:
         # Try just the last word as a key (e.g., "shelton" from "ben shelton")
         last_word = parts[-1]
-        if last_word in rankings:
+        if len(last_word) >= 4 and last_word in rankings:
             r = rankings[last_word]
             return r["rank"], r["tour"]
         # Also try just the first word (in case name order is reversed)
         first_word = parts[0]
-        if first_word in rankings:
+        if len(first_word) >= 4 and first_word in rankings:
             r = rankings[first_word]
             return r["rank"], r["tour"]
 
@@ -600,11 +601,13 @@ def lookup_player_rank(player_name, cache=None):
             best = min(candidates, key=lambda x: x["rank"])
             return best["rank"], best["tour"]
 
-    # Partial last name match
-    for ln, candidates in lastname_index.items():
-        if len(ln) > 3 and (ln in last or last in ln):
-            best = min(candidates, key=lambda x: x["rank"])
-            return best["rank"], best["tour"]
+    # Partial last name match — require both sides to be at least 4 chars
+    # to avoid false positives (e.g., "tu" matching "turati")
+    if len(last) >= 4:
+        for ln, candidates in lastname_index.items():
+            if len(ln) > 3 and (ln in last or last in ln):
+                best = min(candidates, key=lambda x: x["rank"])
+                return best["rank"], best["tour"]
 
     return None, None
 
