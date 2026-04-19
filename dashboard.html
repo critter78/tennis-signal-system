@@ -1416,17 +1416,12 @@ function renderMyBets() {
         };
     });
 
-    // ── Filter out resolved bets older than 5 days ──
-    const FIVE_DAYS = 5 * 24 * 60 * 60 * 1000;
-    const nowMs = Date.now();
+    // ── Apply same date filter as performance section ──
+    const { from: dateFrom, to: dateTo } = getPerfDateRange();
     const visible = enriched.filter(b => {
-        if (!b.outcome || b.outcome === '') return true; // pending — always show
-        // Resolved — check age
-        const resolvedTime = b.resolved_at ? new Date(b.resolved_at).getTime() : null;
-        const betTime = new Date(b.timestamp || b.card_date || '').getTime();
-        const refTime = resolvedTime || betTime;
-        if (!refTime || isNaN(refTime)) return true; // no timestamp — show to be safe
-        return (nowMs - refTime) < FIVE_DAYS;
+        const d = (b.timestamp || b.card_date || '').slice(0, 10);
+        if (!d) return true; // no date — show to be safe
+        return d >= dateFrom && d <= dateTo;
     });
 
     // ── Match outcome stats (use visible for display, enriched for totals) ──
@@ -1449,8 +1444,7 @@ function renderMyBets() {
     let html = `<div style="margin-bottom:12px; font-size:11px; color:#6c757d; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">
         <div>`;
 
-    const hiddenCount = enriched.length - visible.length;
-    const hiddenNote = hiddenCount > 0 ? ` <span style="color:#6c757d; font-size:9px">(${hiddenCount} older resolved hidden)</span>` : '';
+    const hiddenNote = '';
 
     if (hasAnyTradeData) {
         html += `<strong style="color:#e0e0e0">${visible.length}</strong> bets${hiddenNote} |
@@ -1546,6 +1540,7 @@ function setPerfRange(range, btn) {
         if (b) b.classList.add('active');
     }
     renderPerformance();
+    renderMyBets();
 }
 
 function getPerfDateRange() {
