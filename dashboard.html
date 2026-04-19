@@ -465,7 +465,8 @@ let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
                             myBets[idx].trade_count = sb.trade_count;
                         }
                         // Merge outcome from server (direct bet resolution)
-                        if (sb.outcome && !myBets[idx].outcome) {
+                        // Always accept server outcome if it's win/loss (overrides void or missing)
+                        if (sb.outcome && (!myBets[idx].outcome || myBets[idx].outcome === 'void' || sb.outcome !== myBets[idx].outcome)) {
                             myBets[idx].outcome = sb.outcome;
                             myBets[idx].pnl = sb.pnl;
                             myBets[idx].actual_winner = sb.actual_winner;
@@ -478,7 +479,7 @@ let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
                     }
                 }
             });
-            if (added > 0) localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
+            localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
         }
 
         // Always push local bets to server (so other devices can see them)
