@@ -1628,6 +1628,22 @@ def _run_inline_resolver():
         try:
             bets_data = load_bets()
             bet_list = bets_data.get("bets", []) if isinstance(bets_data, dict) else []
+
+            # Revert incorrectly voided H2H bets for re-resolution
+            n_bet_void_reverted = 0
+            for bet in bet_list:
+                if bet.get("outcome") != "void":
+                    continue
+                match_name = bet.get("match", "")
+                if " vs " in match_name and " — " not in match_name:
+                    bet.pop("outcome", None)
+                    bet.pop("pnl", None)
+                    bet.pop("actual_winner", None)
+                    bet.pop("resolved_at", None)
+                    n_bet_void_reverted += 1
+            if n_bet_void_reverted:
+                output_lines.append(f"Reverted {n_bet_void_reverted} incorrectly voided bets for re-resolution")
+
             bet_slugs = set()
             for bet in bet_list:
                 poly_link = bet.get("poly_link", "")
@@ -1833,7 +1849,7 @@ def _run_inline_resolver():
                     except Exception:
                         pass
 
-                if bet_resolutions > 0:
+                if bet_resolutions > 0 or n_bet_void_reverted > 0:
                     if isinstance(bets_data, dict):
                         bets_data["bets"] = bet_list
                     save_bets(bets_data)
