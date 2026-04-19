@@ -621,7 +621,9 @@ def _compute_surface_elo(df, player, cutoff, surface):
     surface_raw = surface_elo_table.get(player)
 
     if surface_raw is None:
-        return None  # Player has no matches on this surface
+        # No surface-specific matches — use general ELO as fallback
+        # Better than None since we still want a surface ELO probability
+        return round(general)
 
     # 50/50 blend: stabilizes ratings for players with few surface matches
     blended = (general + surface_raw) / 2.0
@@ -988,23 +990,53 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
     all_wins = df[(df["winner"] == player) & (df["date"] < cutoff)].sort_values("date")
     all_losses = df[(df["loser"] == player) & (df["date"] < cutoff)].sort_values("date")
 
-    rank_now = None
-    if "w_rank" in df.columns and len(all_wins) > 0:
-        recent = all_wins.tail(3)["w_rank"].dropna()
-        if len(recent) > 0:
-            rank_now = int(recent.iloc[-1])
-    if "l_rank" in df.columns and len(all_losses) > 0:
-        recent = all_losses.tail(3)["l_rank"].dropna()
-        if len(recent) > 0:
-            l_rank_now = int(recent.iloc[-1])
-            if rank_now is None or l_rank_now < rank_now:
-                rank_now = l_rank_now
+    # Prefer live ranking for rank_now (fresh from rankings fetcher)
+    live_rank, _ = get_live_rank(player)
+    rank_now = live_rank  # Will be None if live lookup fails
+
+    # Fall back to historical rank from match data
+    if rank_now is None:
+        if "w_rank" in df.columns and len(all_wins) > 0:
+            recent = all_wins.tail(3)["w_rank"].dropna()
+            if len(recent) > 0:
+                rank_now = int(recent.iloc[-1])
+        if "l_rank" in df.columns and len(all_losses) > 0:
+            recent = all_losses.tail(3)["l_rank"].dropna()
+            if len(recent) > 0:
+                l_rank_now = int(recent.iloc[-1])
+                if rank_now is None or l_rank_now < rank_now:
+                    rank_now = l_rank_now
 
     # Use wider windows for longer lookbacks (data may have gaps)
     rank_30d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=30),  window_days=45)
     rank_90d  = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=90),  window_days=90)
     rank_180d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=180), window_days=120)
     rank_365d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=365), window_days=180)
+
+    # If rank lookbacks missed, try with much wider windows (data staleness workaround)
+    if rank_90d is None:
+        rank_90d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=90), window_days=180)
+    if rank_180d is None:
+        rank_180d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=180), window_days=240)
+    if rank_365d is None:
+        rank_365d = _get_rank_at(all_wins, all_losses, cutoff - timedelta(days=365), window_days=365)
+
+    # Last resort: use the earliest/latest rank we have in data
+    if rank_90d is None or rank_180d is None or rank_365d is None:
+        all_matches_sorted = pd.concat([all_wins, all_losses]).sort_values("date")
+        if len(all_matches_sorted) > 0:
+            for col in ["w_rank", "l_rank"]:
+                if col in all_matches_sorted.columns:
+                    valid = all_matches_sorted[all_matches_sorted[col].notna() & (all_matches_sorted[col] > 0)]
+                    if len(valid) > 0:
+                        earliest_rank = int(valid.iloc[0][col])
+                        latest_rank = int(valid.iloc[-1][col])
+                        if rank_365d is None:
+                            rank_365d = earliest_rank
+                        if rank_180d is None:
+                            rank_180d = latest_rank
+                        if rank_90d is None:
+                            rank_90d = latest_rank
 
     # Ranking movement: positive = improved (lower rank number), negative = dropped
     rank_move_90d = None
@@ -1022,14 +1054,19 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
     # so YTD reflects the current calendar year even if data is stale
     actual_cutoff = pd.Timestamp(as_of)
     ytd_start = actual_cutoff.replace(month=1, day=1)
+    ytd_year = int(actual_cutoff.year)
     wins_ytd = int(((all_wins["date"] >= ytd_start) & (all_wins["date"] < actual_cutoff)).sum()) if len(all_wins) > 0 else 0
     losses_ytd = int(((all_losses["date"] >= ytd_start) & (all_losses["date"] < actual_cutoff)).sum()) if len(all_losses) > 0 else 0
-    # If no YTD data (data doesn't cover current year), fall back to most recent full year
+    # If no YTD data (data doesn't cover current year), fall back to most recent year in data
     if wins_ytd == 0 and losses_ytd == 0 and len(all_wins) + len(all_losses) > 0:
-        max_data_date = cutoff  # may be adjusted to data end
-        fb_ytd_start = max_data_date.replace(month=1, day=1)
-        wins_ytd = int(((all_wins["date"] >= fb_ytd_start) & (all_wins["date"] < max_data_date)).sum()) if len(all_wins) > 0 else 0
-        losses_ytd = int(((all_losses["date"] >= fb_ytd_start) & (all_losses["date"] < max_data_date)).sum()) if len(all_losses) > 0 else 0
+        all_dates = pd.concat([all_wins[["date"]], all_losses[["date"]]]).dropna()
+        if len(all_dates) > 0:
+            max_data_year = int(all_dates["date"].max().year)
+            fb_ytd_start = pd.Timestamp(f"{max_data_year}-01-01")
+            fb_ytd_end = pd.Timestamp(f"{max_data_year}-12-31") + timedelta(days=1)
+            wins_ytd = int(((all_wins["date"] >= fb_ytd_start) & (all_wins["date"] < fb_ytd_end)).sum()) if len(all_wins) > 0 else 0
+            losses_ytd = int(((all_losses["date"] >= fb_ytd_start) & (all_losses["date"] < fb_ytd_end)).sum()) if len(all_losses) > 0 else 0
+            ytd_year = max_data_year
 
     # ── ELO RATING ──
     elo = _compute_elo(df, player, cutoff)
@@ -1073,6 +1110,7 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
         # YTD record
         "wins_ytd":         wins_ytd,
         "losses_ytd":       losses_ytd,
+        "ytd_year":         ytd_year,
     }
 
 
@@ -1602,6 +1640,8 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "sb_wins_ytd":      sb.get("wins_ytd"),
             "sa_losses_ytd":    sa.get("losses_ytd"),
             "sb_losses_ytd":    sb.get("losses_ytd"),
+            "sa_ytd_year":      sa.get("ytd_year"),
+            "sb_ytd_year":      sb.get("ytd_year"),
             # ── ELO INTELLIGENCE ──
             "elo_prob_a":           elo_intel.get("elo_prob_a"),
             "elo_prob_b":           elo_intel.get("elo_prob_b"),
@@ -1944,6 +1984,8 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
             "sb_wins_ytd":     None,
             "sa_losses_ytd":   sa.get("losses_ytd"),
             "sb_losses_ytd":   None,
+            "sa_ytd_year":     sa.get("ytd_year"),
+            "sb_ytd_year":     None,
         })
 
     print(f"  → {n_matched} players matched, {n_unmatched} unmatched in historical data")
@@ -2319,7 +2361,7 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
                                 <div class="stat-row"><span class="stat-label">Rank Move 12m</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move_365d'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">Rank Move 6m</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">Rank Move 3m</span><span class="stat-val">{fmt_rank_move(s.get('sa_rank_move_90d'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">YTD Record</span><span class="stat-val">{s.get('sa_wins_ytd', 0)}W-{s.get('sa_losses_ytd', 0)}L</span></div>
+                                <div class="stat-row"><span class="stat-label">YTD Record{' (' + str(s.get('sa_ytd_year', '')) + ')' if s.get('sa_ytd_year') and s.get('sa_ytd_year') != datetime.now().year else ''}</span><span class="stat-val">{s.get('sa_wins_ytd', 0)}W-{s.get('sa_losses_ytd', 0)}L</span></div>
                             </div>
                             <div class="adv-col">
                                 <div class="adv-header">{pb}</div>
@@ -2329,7 +2371,7 @@ def build_html(signals, generated_at, min_edge, min_volume, data_only_mode=False
                                 <div class="stat-row"><span class="stat-label">Rank Move 12m</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move_365d'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">Rank Move 6m</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move'))}</span></div>
                                 <div class="stat-row"><span class="stat-label">Rank Move 3m</span><span class="stat-val">{fmt_rank_move(s.get('sb_rank_move_90d'))}</span></div>
-                                <div class="stat-row"><span class="stat-label">YTD Record</span><span class="stat-val">{s.get('sb_wins_ytd', 0)}W-{s.get('sb_losses_ytd', 0)}L</span></div>
+                                <div class="stat-row"><span class="stat-label">YTD Record{' (' + str(s.get('sb_ytd_year', '')) + ')' if s.get('sb_ytd_year') and s.get('sb_ytd_year') != datetime.now().year else ''}</span><span class="stat-val">{s.get('sb_wins_ytd', 0)}W-{s.get('sb_losses_ytd', 0)}L</span></div>
                             </div>
                         </div>
                     </details>
