@@ -1526,8 +1526,6 @@ function renderMyBets() {
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
-renderMyBets();
-
 // ─── PERFORMANCE REPORTING ───
 let currentPerfRange = '7d';
 
@@ -1716,6 +1714,7 @@ function renderPerformance() {
 }
 
 renderPerformance();
+renderMyBets();
 
 // ─── DAILY P&L CHART (Performance tab) ───
 (function renderDailyPnlChart() {
@@ -2018,21 +2017,27 @@ function renderSignals() {
                     <div style="flex:1">
                         <div class="sig-pick-label">${s.market_type === 'outright' ? 'PREDICTED WINNER' : 'PICK'}</div>
                         <div class="sig-pick-name"><span class="player-link" data-player="${betOn}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)" style="color:inherit">${betOn}</span>${(function(){
-                            // Consensus badge: weighted probability from all models
+                            // Consensus badge: weighted probability from 4 models
                             const baseP = s.base_prob || (modelP - (s.lstm_adj||0));
                             const eloP = s.elo_prob;
                             const surfEloP = s.surf_elo_prob;
-                            const lstmAdj = (s.lstm_adj || 0) * 100;
+                            const lstmP = modelP; // base + LSTM adjustment = final prob
 
-                            // 3 models: BASE (40%), ELO (35%), LSTM-adjusted (25%)
-                            // ELO uses surface ELO when available, falls back to general ELO
-                            const lstmP = modelP; // base + LSTM adjustment = final LSTM-adjusted prob
-                            const bestEloP = surfEloP != null ? surfEloP : eloP;
+                            // Dynamic LSTM weight: starts at 15%, gains +2% per 10% readiness
+                            // At 500 resolved (100% ready), LSTM weight = 15 + 20 = 35%
+                            const lstmReadyPct = Math.min(Math.round((resolved.length / 500) * 100), 100);
+                            const lstmBonus = Math.floor(lstmReadyPct / 10) * 2; // +2% per 10%
+                            const lstmWeight = 15 + lstmBonus;
+
+                            // Base weights: Base 45%, ELO 20%, Surf ELO 20%, LSTM 15+bonus
+                            // Redistribute: as LSTM gains weight, reduce Base proportionally
+                            const baseWeight = Math.max(20, 45 - lstmBonus);
 
                             let consensusP, totalW = 0, weightedSum = 0;
-                            if (baseP != null) { weightedSum += baseP * 40; totalW += 40; }
-                            if (bestEloP != null) { weightedSum += bestEloP * 35; totalW += 35; }
-                            if (lstmP != null) { weightedSum += lstmP * 25; totalW += 25; }
+                            if (baseP != null) { weightedSum += baseP * baseWeight; totalW += baseWeight; }
+                            if (eloP != null) { weightedSum += eloP * 20; totalW += 20; }
+                            if (surfEloP != null) { weightedSum += surfEloP * 20; totalW += 20; }
+                            if (lstmP != null) { weightedSum += lstmP * lstmWeight; totalW += lstmWeight; }
                             if (totalW > 0) {
                                 consensusP = weightedSum / totalW;
                                 consensusP = Math.max(1, Math.min(99, consensusP));
@@ -2040,10 +2045,11 @@ function renderSignals() {
                                 consensusP = modelP;
                             }
 
-                            // Agreement: BASE, ELO, LSTM — do they all pick the same side (>50%)?
+                            // Agreement: 4 models — BASE, ELO, SURF ELO, LSTM
                             let models = 0, agree = 0;
                             if (baseP != null) { models++; if (baseP > 50) agree++; }
-                            if (bestEloP != null) { models++; if (bestEloP > 50) agree++; }
+                            if (eloP != null) { models++; if (eloP > 50) agree++; }
+                            if (surfEloP != null) { models++; if (surfEloP > 50) agree++; }
                             if (lstmP != null) { models++; if (lstmP > 50) agree++; }
 
                             let label, bgColor, textColor;
