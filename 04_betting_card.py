@@ -1194,17 +1194,29 @@ def _detect_surface(question):
         "estoril", "munich", "munchen", "bastad", "umag", "kitzbuhel",
         "gstaad", "bucharest", "houston", "sao paulo", "quito", "tiriac",
         "banja luka", "cagliari", "parma", "sardegna", "perugia", "prospera",
-        "tallahassee", "sarasota", "santos", "bmw open", "santa cruz",
-        "bmw open", "santa cruz",
+        "tallahassee", "sarasota", "santos", "santa cruz",
+        # ATP 250 — commonly misdetected
+        "bmw open",  # Munich = Clay
+        "porsche tennis grand prix", "porsche grand prix",  # Stuttgart WTA = Clay
         # WTA
         "strasbourg", "rabat", "bogota", "palermo", "lausanne", "budapest",
         "prague", "istanbul", "iasi", "makarska", "bol",
-        "porsche tennis grand prix", "porsche grand prix",
-        # ATP 250 / Challenger
+        # ATP 250 / Challenger — Clay
         "oeiras",
-        # Challenger / ITF clay events
+        # US Clay Challengers
+        "savannah", "athens",
+        # South American Clay
+        "lima", "santo domingo", "cali", "concepcion", "campinas",
+        "asuncion", "florianopolis", "ibague", "medellin",
+        # European Clay Challengers
         "aix-en-provence", "braunschweig", "heilbronn", "poznan", "meerbusch",
         "troisdorf", "santa margherita", "francavilla", "todi",
+        "split", "prague challenger", "prostejov", "ostrava",
+        "tampere", "barletta", "sassuolo", "rimini", "como", "perugia",
+        "trieste", "cordenons", "sanremo", "porto", "oviedo", "segovia",
+        "alicante", "murcia", "valencia challenger",
+        # Asian Clay
+        "gwangju", "shymkent", "zhalgasbay",
         # Generic clay indicators
         "tierra", "terre battue",
         # French cities commonly hosting clay events
