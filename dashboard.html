@@ -2380,10 +2380,30 @@ setInterval(updateClock, 30000);
 let _playerData = [];
 let _playersLoaded = false;
 
+// Preload player data on page load so hover overlays work immediately
+(function preloadPlayerData() {
+    fetch('/api/players', {signal: AbortSignal.timeout(60000)})
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (data && data.players) {
+                _playerData = data.players;
+                console.log('[preload] Player data loaded:', _playerData.length, 'players');
+            }
+        })
+        .catch(() => {}); // silent fail — will retry when tab is opened
+})();
+
 function loadPlayerCards() {
     if (_playersLoaded) return;
     _playersLoaded = true;
     const grid = document.getElementById('playerCardsGrid');
+
+    // If preload already fetched player data, just render — no second fetch needed
+    if (_playerData.length > 0) {
+        renderPlayerCards(_playerData);
+        return;
+    }
+
     grid.innerHTML = '<div style="text-align:center; padding:60px 0; color:#6c757d"><div style="font-size:14px">Loading player profiles...</div><div style="font-size:11px; margin-top:6px">Computing from match history data (this may take a moment)</div></div>';
 
     fetch('/api/players', {signal: AbortSignal.timeout(120000)})
