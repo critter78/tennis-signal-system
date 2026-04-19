@@ -26,10 +26,12 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
 
-# Use persistent disk on Render, fall back to repo-relative for local dev
-_PERSISTENT_DATA = Path("/data/data")
-DATA_DIR   = _PERSISTENT_DATA if _PERSISTENT_DATA.exists() else Path("data")
+# DATA_DIR always reads from repo (parquet, models, etc.)
+DATA_DIR   = Path("data")
 MODELS_DIR = Path("models")
+# Output dir for player_profiles.json — use persistent disk on Render if available
+_PERSISTENT_OUT = Path("/data/data")
+OUTPUT_DATA_DIR = _PERSISTENT_OUT if _PERSISTENT_OUT.exists() else DATA_DIR
 
 # Live rankings support
 _live_rankings_cache = None
@@ -3732,7 +3734,7 @@ def generate_player_profiles(df_hist, signals):
     profiles.sort(key=lambda p: p.get("elo", 0), reverse=True)
 
     # Save to JSON
-    out_path = DATA_DIR / "player_profiles.json"
+    out_path = OUTPUT_DATA_DIR / "player_profiles.json"
     with open(out_path, "w") as f:
         json.dump({"players": profiles, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")}, f)
 
