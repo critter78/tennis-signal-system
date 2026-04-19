@@ -2022,7 +2022,52 @@ function renderSignals() {
                 <div class="sig-pick">
                     <div style="flex:1">
                         <div class="sig-pick-label">${s.market_type === 'outright' ? 'PREDICTED WINNER' : 'PICK'}</div>
-                        <div class="sig-pick-name"><span class="player-link" data-player="${betOn}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)" style="color:inherit">${betOn}</span></div>
+                        <div class="sig-pick-name"><span class="player-link" data-player="${betOn}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)" style="color:inherit">${betOn}</span>${(function(){
+                            // Consensus badge: weighted probability from all models
+                            const baseP = s.base_prob || (modelP - (s.lstm_adj||0));
+                            const eloP = s.elo_prob;
+                            const surfEloP = s.surf_elo_prob;
+                            const lstmAdj = (s.lstm_adj || 0) * 100;
+
+                            // Weighted consensus: Base 50%, ELO 30%, Surf ELO 20%
+                            // When ELO data missing, redistribute weights
+                            let consensusP, totalW = 0, weightedSum = 0;
+                            if (baseP != null) { weightedSum += baseP * 50; totalW += 50; }
+                            if (eloP != null) { weightedSum += eloP * 30; totalW += 30; }
+                            if (surfEloP != null) { weightedSum += surfEloP * 20; totalW += 20; }
+                            if (totalW > 0) {
+                                consensusP = weightedSum / totalW + lstmAdj;
+                                consensusP = Math.max(1, Math.min(99, consensusP));
+                            } else {
+                                consensusP = modelP;
+                            }
+
+                            // Agreement: check if each model picks same side (>50%)
+                            let models = 0, agree = 0;
+                            if (baseP != null) { models++; if (baseP > 50) agree++; }
+                            if (eloP != null) { models++; if (eloP > 50) agree++; }
+                            if (surfEloP != null) { models++; if (surfEloP > 50) agree++; }
+
+                            let label, bgColor, textColor;
+                            if (models <= 1) {
+                                label = 'LOW DATA';
+                                bgColor = '#2d3139'; textColor = '#6c757d';
+                            } else if (agree === models) {
+                                label = models + '/' + models + ' AGREE';
+                                bgColor = '#1b5e20'; textColor = '#4caf50';
+                            } else if (agree === 0) {
+                                label = 'ALL SPLIT';
+                                bgColor = '#4a1111'; textColor = '#f44336';
+                            } else {
+                                label = agree + '/' + models + ' AGREE';
+                                bgColor = '#4a2800'; textColor = '#d4740a';
+                            }
+
+                            return ' <span style="display:inline-flex; align-items:center; gap:4px; margin-left:8px; vertical-align:middle">' +
+                                '<span style="background:' + bgColor + '; color:' + textColor + '; font-size:9px; font-weight:700; padding:2px 7px; border-radius:3px; letter-spacing:0.3px; border:1px solid ' + textColor + '40">' + label + '</span>' +
+                                '<span style="background:#0f1117; border:1px solid ' + textColor + '60; color:' + textColor + '; font-size:11px; font-weight:800; padding:2px 7px; border-radius:3px">' + consensusP.toFixed(1) + '%</span>' +
+                                '</span>';
+                        })()}</div>
                     </div>
                     <div class="sig-pick-right">
                         <div style="background:${(s.confidence||0) >= 65 ? '#1b5e20' : (s.confidence||0) >= 55 ? '#4a2800' : '#2d3139'}; border:1px solid ${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}; padding:6px 12px; text-align:center; min-width:70px">
