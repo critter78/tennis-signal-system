@@ -2062,7 +2062,7 @@ function renderSignals() {
                                 label = models + '/' + models + ' AGREE';
                                 bgColor = '#1b5e20'; textColor = '#4caf50';
                             } else if (agree === 0) {
-                                label = 'ALL SPLIT';
+                                label = '0/' + models + ' AGREE';
                                 bgColor = '#4a1111'; textColor = '#f44336';
                             } else {
                                 label = agree + '/' + models + ' AGREE';
@@ -2077,10 +2077,20 @@ function renderSignals() {
                         })()}
                     </div>
                     <div class="sig-pick-right">
-                        <div style="background:${(s.confidence||0) >= 65 ? '#1b5e20' : (s.confidence||0) >= 55 ? '#4a2800' : '#2d3139'}; border:1px solid ${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}; padding:6px 12px; text-align:center; min-width:70px">
-                            <div style="font-size:7px; color:${(s.confidence||0) >= 65 ? '#81c784' : (s.confidence||0) >= 55 ? '#ffb74d' : '#aaa'}; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:2px">CONF</div>
-                            <div style="font-size:16px; font-weight:700; color:${(s.confidence||0) >= 65 ? '#4caf50' : (s.confidence||0) >= 55 ? '#d4740a' : '#6c757d'}">${(s.confidence||0).toFixed(1)}%</div>
-                        </div>
+                        ${(() => {
+                            // Show win probability for the bet_on player, not just model certainty
+                            const winProb = modelP; // model probability for the picked player
+                            const isUnderdog = winProb < 50;
+                            const confColor = winProb >= 65 ? '#4caf50' : winProb >= 50 ? '#d4740a' : '#f44336';
+                            const confBg = winProb >= 65 ? '#1b5e20' : winProb >= 50 ? '#4a2800' : '#4a1111';
+                            const confBorder = winProb >= 65 ? '#4caf50' : winProb >= 50 ? '#d4740a' : '#f44336';
+                            const confLabel = isUnderdog ? 'WIN PROB' : 'CONF';
+                            const confLabelColor = winProb >= 65 ? '#81c784' : winProb >= 50 ? '#ffb74d' : '#ff8a80';
+                            return `<div style="background:${confBg}; border:1px solid ${confBorder}; padding:6px 12px; text-align:center; min-width:70px">
+                                <div style="font-size:7px; color:${confLabelColor}; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:2px">${confLabel}</div>
+                                <div style="font-size:16px; font-weight:700; color:${confColor}">${winProb.toFixed(1)}%</div>
+                            </div>`;
+                        })()}
                         <div class="sig-badge-col">${tierBadge}${valBadge}${eloBadge}${noEdgeBadge}${lowDataBadge}</div>
                     </div>
                 </div>
