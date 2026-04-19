@@ -2024,24 +2024,27 @@ function renderSignals() {
                             const surfEloP = s.surf_elo_prob;
                             const lstmAdj = (s.lstm_adj || 0) * 100;
 
-                            // Weighted consensus: Base 50%, ELO 30%, Surf ELO 20%
-                            // When ELO data missing, redistribute weights
+                            // 3 models: BASE (40%), ELO (35%), LSTM-adjusted (25%)
+                            // ELO uses surface ELO when available, falls back to general ELO
+                            const lstmP = modelP; // base + LSTM adjustment = final LSTM-adjusted prob
+                            const bestEloP = surfEloP != null ? surfEloP : eloP;
+
                             let consensusP, totalW = 0, weightedSum = 0;
-                            if (baseP != null) { weightedSum += baseP * 50; totalW += 50; }
-                            if (eloP != null) { weightedSum += eloP * 30; totalW += 30; }
-                            if (surfEloP != null) { weightedSum += surfEloP * 20; totalW += 20; }
+                            if (baseP != null) { weightedSum += baseP * 40; totalW += 40; }
+                            if (bestEloP != null) { weightedSum += bestEloP * 35; totalW += 35; }
+                            if (lstmP != null) { weightedSum += lstmP * 25; totalW += 25; }
                             if (totalW > 0) {
-                                consensusP = weightedSum / totalW + lstmAdj;
+                                consensusP = weightedSum / totalW;
                                 consensusP = Math.max(1, Math.min(99, consensusP));
                             } else {
                                 consensusP = modelP;
                             }
 
-                            // Agreement: check if each model picks same side (>50%)
+                            // Agreement: BASE, ELO, LSTM — do they all pick the same side (>50%)?
                             let models = 0, agree = 0;
                             if (baseP != null) { models++; if (baseP > 50) agree++; }
-                            if (eloP != null) { models++; if (eloP > 50) agree++; }
-                            if (surfEloP != null) { models++; if (surfEloP > 50) agree++; }
+                            if (bestEloP != null) { models++; if (bestEloP > 50) agree++; }
+                            if (lstmP != null) { models++; if (lstmP > 50) agree++; }
 
                             let label, bgColor, textColor;
                             if (models <= 1) {
