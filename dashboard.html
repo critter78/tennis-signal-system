@@ -143,6 +143,10 @@
         .l { color: #f44336; font-weight: 700; }
         .p { color: #6c757d; }
 
+        .perf-range-btn { background:#1a1d27; color:#6c757d; border:1px solid #2d3139; padding:5px 12px; font-size:10px; font-weight:600; font-family:'IBM Plex Mono',monospace; cursor:pointer; letter-spacing:0.04em; transition:all 0.2s; }
+        .perf-range-btn:hover { color:#e0e0e0; border-color:#d4740a; }
+        .perf-range-btn.active { color:#d4740a; border-color:#d4740a; background:#1a1d27; }
+
         .filters { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
         .filters select, .filters input { background: #1a1d27; color: #e0e0e0; border: 1px solid #2d3139; padding: 6px 10px; font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
         .filters label { font-size: 10px; color: #6c757d; }
@@ -362,6 +366,30 @@ window.PICKS_DATA = [];
 
 <!-- MY BETS -->
 <div class="panel" id="panel-mybets">
+    <!-- ── Date Filter Bar ── -->
+    <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center">
+        <button class="perf-range-btn active" data-range="all" onclick="setPerfRange('all',this)">All Time</button>
+        <button class="perf-range-btn" data-range="today" onclick="setPerfRange('today',this)">Today</button>
+        <button class="perf-range-btn" data-range="yesterday" onclick="setPerfRange('yesterday',this)">Yesterday</button>
+        <button class="perf-range-btn" data-range="7d" onclick="setPerfRange('7d',this)">Last 7d</button>
+        <button class="perf-range-btn" data-range="30d" onclick="setPerfRange('30d',this)">Last 30d</button>
+        <span style="color:#6c757d; font-size:10px; margin:0 4px">|</span>
+        <input type="date" id="perfDateFrom" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2d3139; padding:5px 8px; font-size:11px; font-family:'IBM Plex Mono',monospace" onchange="setPerfRange('custom')">
+        <span style="color:#6c757d; font-size:10px">to</span>
+        <input type="date" id="perfDateTo" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2d3139; padding:5px 8px; font-size:11px; font-family:'IBM Plex Mono',monospace" onchange="setPerfRange('custom')">
+    </div>
+    <!-- ── Performance Summary Cards ── -->
+    <div id="perfSummaryCards" class="stats-row" style="margin-bottom:16px"></div>
+    <!-- ── Daily P&L Chart ── -->
+    <div class="chart-card" style="margin-bottom:16px">
+        <h3>DAILY P&L</h3>
+        <canvas id="chartDailyPnl" height="160"></canvas>
+    </div>
+    <!-- ── Daily Breakdown Table ── -->
+    <div class="chart-card" style="overflow-x:auto; margin-bottom:16px">
+        <h3>DAILY BREAKDOWN</h3>
+        <div id="perfDailyTable"></div>
+    </div>
     <div class="filters" id="betFilters"></div>
     <div class="chart-card" style="overflow-x:auto">
         <h3>MY BET HISTORY</h3>
@@ -1411,6 +1439,233 @@ function renderMyBets() {
 function round2(n) { return Math.round(n * 100) / 100; }
 
 renderMyBets();
+
+// ─── PERFORMANCE REPORTING ───
+let perfChart = null;
+let currentPerfRange = 'all';
+
+function setPerfRange(range, btn) {
+    currentPerfRange = range;
+    document.querySelectorAll('.perf-range-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    else if (range !== 'custom') {
+        const b = document.querySelector(`.perf-range-btn[data-range="${range}"]`);
+        if (b) b.classList.add('active');
+    }
+    renderPerformance();
+}
+
+function getPerfDateRange() {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+    switch (currentPerfRange) {
+        case 'today': return { from: todayStr, to: todayStr };
+        case 'yesterday': return { from: yesterdayStr, to: yesterdayStr };
+        case '7d': {
+            const d = new Date(now); d.setDate(d.getDate() - 6);
+            return { from: d.toISOString().slice(0, 10), to: todayStr };
+        }
+        case '30d': {
+            const d = new Date(now); d.setDate(d.getDate() - 29);
+            return { from: d.toISOString().slice(0, 10), to: todayStr };
+        }
+        case 'custom': {
+            const f = document.getElementById('perfDateFrom').value;
+            const t = document.getElementById('perfDateTo').value;
+            return { from: f || '2000-01-01', to: t || todayStr };
+        }
+        default: return { from: '2000-01-01', to: '2099-12-31' };
+    }
+}
+
+function getEnrichedBets() {
+    // Re-use the same enrichment logic from renderMyBets
+    return myBets.map(bet => {
+        let match = picks.find(p => p.match === bet.match && p.bet_on === bet.bet_on && p.outcome);
+        if (!match) match = picks.find(p => p.match === bet.match && p.outcome);
+        if (!match && bet.match) {
+            const parts = bet.match.toLowerCase().split(/\s+vs\.?\s+/);
+            if (parts.length === 2) {
+                const lastA = parts[0].trim().split(' ').pop();
+                const lastB = parts[1].trim().split(' ').pop();
+                match = picks.find(p => {
+                    const pm = (p.match || '').toLowerCase();
+                    return pm.includes(lastA) && pm.includes(lastB) && p.outcome;
+                });
+            }
+        }
+        if (!match && bet.match) {
+            match = picks.find(p => p.match === bet.match);
+            if (!match) {
+                const parts = bet.match.toLowerCase().split(/\s+vs\.?\s+/);
+                if (parts.length === 2) {
+                    const lastA = parts[0].trim().split(' ').pop();
+                    const lastB = parts[1].trim().split(' ').pop();
+                    match = picks.find(p => {
+                        const pm = (p.match || '').toLowerCase();
+                        return pm.includes(lastA) && pm.includes(lastB);
+                    });
+                }
+            }
+        }
+        let myOutcome = null, myPnl = null;
+        if (bet.outcome) {
+            myOutcome = bet.outcome;
+            if (bet.pnl != null) myPnl = bet.pnl;
+        } else if (match && match.outcome && match.actual_winner) {
+            if (match.outcome === 'void') { myOutcome = 'void'; }
+            else {
+                const betOnLast = (bet.bet_on || '').split(' ').pop().toLowerCase();
+                const winnerLast = (match.actual_winner || '').split(' ').pop().toLowerCase();
+                const iWon = betOnLast === winnerLast || (bet.bet_on || '').toLowerCase() === (match.actual_winner || '').toLowerCase();
+                myOutcome = iWon ? 'win' : 'loss';
+            }
+        }
+        const hasTradeData = bet.actual_stake && bet.actual_stake > 0;
+        if (myOutcome === 'void') { myPnl = 0; }
+        else if (myPnl == null && hasTradeData && myOutcome) {
+            myPnl = myOutcome === 'win' ? round2((bet.actual_shares || 0) * 1.0 - bet.actual_stake) : round2(-bet.actual_stake);
+        } else if (myPnl == null && myOutcome) {
+            const polyDec = (bet.poly_price || 50) / 100;
+            myPnl = myOutcome === 'win' ? round2(100 * (1 - polyDec)) : round2(-100 * polyDec);
+        }
+        return { ...bet, outcome: myOutcome, pnl: myPnl, _hasTradeData: hasTradeData };
+    });
+}
+
+function renderPerformance() {
+    const { from, to } = getPerfDateRange();
+    const allEnriched = getEnrichedBets();
+    const filtered = allEnriched.filter(b => {
+        const d = (b.timestamp || b.card_date || '').slice(0, 10);
+        return d >= from && d <= to;
+    });
+    const resolved = filtered.filter(b => b.outcome === 'win' || b.outcome === 'loss');
+    const wins = resolved.filter(b => b.outcome === 'win');
+    const losses = resolved.filter(b => b.outcome === 'loss');
+    const voids = filtered.filter(b => b.outcome === 'void');
+    const pending = filtered.filter(b => !b.outcome);
+    const totalPnl = resolved.reduce((s, b) => s + (b.pnl || 0), 0);
+    const totalStaked = filtered.reduce((s, b) => s + (b.actual_stake || 0), 0);
+    const winRate = resolved.length > 0 ? (wins.length / resolved.length * 100).toFixed(1) : '—';
+    const roi = totalStaked > 0 ? (totalPnl / totalStaked * 100).toFixed(1) : '—';
+
+    // Summary cards
+    const cards = document.getElementById('perfSummaryCards');
+    cards.innerHTML = [
+        `<div class="stat-card"><div class="label">Bets</div><div class="value white">${filtered.length}</div></div>`,
+        `<div class="stat-card"><div class="label">Record</div><div class="value ${wins.length >= losses.length ? 'green' : 'red'}">${wins.length}W - ${losses.length}L</div></div>`,
+        `<div class="stat-card"><div class="label">Win Rate</div><div class="value ${winRate !== '—' && parseFloat(winRate) >= 50 ? 'green' : 'red'}">${winRate}${winRate !== '—' ? '%' : ''}</div></div>`,
+        `<div class="stat-card"><div class="label">P&L</div><div class="value ${totalPnl >= 0 ? 'green' : 'red'}">${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</div></div>`,
+        `<div class="stat-card"><div class="label">Staked</div><div class="value amber">$${totalStaked.toFixed(2)}</div></div>`,
+        `<div class="stat-card"><div class="label">ROI</div><div class="value ${roi !== '—' && parseFloat(roi) >= 0 ? 'green' : 'red'}">${roi}${roi !== '—' ? '%' : ''}</div></div>`,
+    ].join('');
+
+    // Group by day
+    const dayMap = {};
+    filtered.forEach(b => {
+        const d = (b.timestamp || b.card_date || '').slice(0, 10);
+        if (!d) return;
+        if (!dayMap[d]) dayMap[d] = { bets: 0, wins: 0, losses: 0, voids: 0, pending: 0, pnl: 0, staked: 0 };
+        dayMap[d].bets++;
+        if (b.outcome === 'win') { dayMap[d].wins++; dayMap[d].pnl += (b.pnl || 0); }
+        else if (b.outcome === 'loss') { dayMap[d].losses++; dayMap[d].pnl += (b.pnl || 0); }
+        else if (b.outcome === 'void') dayMap[d].voids++;
+        else dayMap[d].pending++;
+        dayMap[d].staked += (b.actual_stake || 0);
+    });
+    const days = Object.keys(dayMap).sort().reverse();
+
+    // Daily breakdown table
+    const tableEl = document.getElementById('perfDailyTable');
+    if (days.length === 0) {
+        tableEl.innerHTML = '<div style="color:#6c757d; font-size:11px; padding:12px">No bets in selected range.</div>';
+    } else {
+        let tbl = `<table><thead><tr><th>Date</th><th>Bets</th><th>W</th><th>L</th><th>V</th><th>Pend</th><th>Win Rate</th><th>P&L</th><th>Staked</th><th>ROI</th></tr></thead><tbody>`;
+        let tW = 0, tL = 0, tV = 0, tP = 0, tPnl = 0, tSt = 0, tBets = 0;
+        days.forEach(d => {
+            const r = dayMap[d];
+            const wr = (r.wins + r.losses) > 0 ? (r.wins / (r.wins + r.losses) * 100).toFixed(0) + '%' : '—';
+            const dr = r.staked > 0 ? (r.pnl / r.staked * 100).toFixed(0) + '%' : '—';
+            tBets += r.bets; tW += r.wins; tL += r.losses; tV += r.voids; tP += r.pending; tPnl += r.pnl; tSt += r.staked;
+            tbl += `<tr>
+                <td style="color:#d4740a">${d}</td>
+                <td>${r.bets}</td>
+                <td class="w">${r.wins}</td>
+                <td class="l">${r.losses}</td>
+                <td style="color:#888">${r.voids || ''}</td>
+                <td style="color:#6c757d">${r.pending || ''}</td>
+                <td style="color:${wr !== '—' && parseInt(wr) >= 50 ? '#4caf50' : '#f44336'}">${wr}</td>
+                <td style="color:${r.pnl >= 0 ? '#4caf50' : '#f44336'}">${r.pnl >= 0 ? '+' : ''}$${r.pnl.toFixed(2)}</td>
+                <td style="color:#d4740a">$${r.staked.toFixed(2)}</td>
+                <td style="color:${dr !== '—' && parseInt(dr) >= 0 ? '#4caf50' : '#f44336'}">${dr}</td>
+            </tr>`;
+        });
+        const tWR = (tW + tL) > 0 ? (tW / (tW + tL) * 100).toFixed(0) + '%' : '—';
+        const tROI = tSt > 0 ? (tPnl / tSt * 100).toFixed(0) + '%' : '—';
+        tbl += `<tr style="border-top:2px solid #d4740a; font-weight:700">
+            <td style="color:#e0e0e0">TOTAL</td>
+            <td style="color:#e0e0e0">${tBets}</td>
+            <td class="w">${tW}</td>
+            <td class="l">${tL}</td>
+            <td style="color:#888">${tV || ''}</td>
+            <td style="color:#6c757d">${tP || ''}</td>
+            <td style="color:${tWR !== '—' && parseInt(tWR) >= 50 ? '#4caf50' : '#f44336'}">${tWR}</td>
+            <td style="color:${tPnl >= 0 ? '#4caf50' : '#f44336'}">${tPnl >= 0 ? '+' : ''}$${tPnl.toFixed(2)}</td>
+            <td style="color:#d4740a">$${tSt.toFixed(2)}</td>
+            <td style="color:${tROI !== '—' && parseInt(tROI) >= 0 ? '#4caf50' : '#f44336'}">${tROI}</td>
+        </tr>`;
+        tbl += '</tbody></table>';
+        tableEl.innerHTML = tbl;
+    }
+
+    // Daily P&L bar chart
+    const sortedDays = Object.keys(dayMap).sort();
+    const chartLabels = sortedDays;
+    const chartData = sortedDays.map(d => round2(dayMap[d].pnl));
+    const chartColors = chartData.map(v => v >= 0 ? '#4caf50' : '#f44336');
+
+    const ctx = document.getElementById('chartDailyPnl');
+    if (perfChart) perfChart.destroy();
+    perfChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                label: 'Daily P&L ($)',
+                data: chartData,
+                backgroundColor: chartColors,
+                borderColor: chartColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const v = ctx.raw;
+                            const d = dayMap[chartLabels[ctx.dataIndex]];
+                            return `P&L: ${v >= 0 ? '+' : ''}$${v.toFixed(2)} | ${d.wins}W-${d.losses}L`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+                y: { grid: { color: '#2d313940' }, ticks: { callback: v => '$' + v } }
+            }
+        }
+    });
+}
+
+renderPerformance();
 
 // ─── ACTIVE BET CARDS (mini cards for pending bets) ───
 function renderActiveBetCards() {
