@@ -4041,6 +4041,7 @@ def main():
         print(f"  Sackmann data: {len(df_sack):,} matches (ATP+WTA 2018-2024)")
 
     # 2) Load TML data (ATP main + challenger, 2016-2026 with serve stats)
+    print(f"  TML parquet path: {tml_path} (exists={tml_path.exists()})")
     if tml_path.exists():
         df_tml = pd.read_parquet(tml_path)
         # Normalize TML columns to match expected format

@@ -22,7 +22,8 @@ sleep 3
 echo "[2/2] Running data pipeline in background..."
 {
     echo "  Fetching TML match data..."
-    python3 12_tml_live_fetch.py --recent 2>&1 | tail -5 || echo "  Warning: TML fetch failed (will use cached data)"
+    python3 12_tml_live_fetch.py --recent 2>&1 | tail -20
+    echo "  TML parquet check: $(ls -la data/tml_history_10y.parquet 2>&1)"
 
     echo "  Fetching live rankings..."
     python3 09_rankings_fetcher.py --refresh 2>&1 | tail -5 || echo "  Warning: Rankings fetch failed"
