@@ -32,7 +32,7 @@ services:
   # Parallel/isolated from v1. Ranks by model_prob (not edge).
   # Auto-sell thresholds: 85c sell-half, 95c sell-all.
   - type: web
-    name: tennis-v2-signal
+    name: tennisv2-signal
     runtime: python
     plan: starter
     rootDir: v2
@@ -47,12 +47,12 @@ services:
         sync: false  # Set manually in Render dashboard (separate from v1)
     healthCheckPath: /api/status
     disk:
-      name: tennis-v2-disk
+      name: tennisv2-disk
       mountPath: /data
       sizeGB: 1
 
   - type: cron
-    name: tennis-v2-refresh-6h
+    name: tennisv2-refresh-6h
     runtime: python
     plan: starter
     rootDir: v2
@@ -63,6 +63,6 @@ services:
       - key: PYTHON_VERSION
         value: "3.11"
       - key: CRON_SECRET
-        sync: false   # Must match tennis-v2-signal's CRON_SECRET
+        sync: false   # Must match tennisv2-signal's CRON_SECRET
       - key: WEB_SERVICE_URL
-        value: "https://tennis-v2-signal.onrender.com"
+        value: "https://tennisv2-signal.onrender.com"

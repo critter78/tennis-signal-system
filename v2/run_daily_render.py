@@ -20,7 +20,7 @@ def main():
     log("V2 CRON: triggering refresh on tennisv2 service")
     log("=" * 60)
 
-    web = os.environ.get("WEB_SERVICE_URL", "https://tennis-v2-signal.onrender.com")
+    web = os.environ.get("WEB_SERVICE_URL", "https://tennisv2-signal.onrender.com")
     secret = os.environ.get("CRON_SECRET", "tennis-v2-cron-2026")
     url = f"{web}/api/refresh"
     log(f"POST {url}")
