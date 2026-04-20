@@ -188,9 +188,9 @@
         .v5-badge-line { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
         .v5-bdg { font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.3px; text-transform: uppercase; cursor: help; min-width: 56px; text-align: center; }
         .v5-pick-right { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
-        .v5-pbox { padding: 5px 0; text-align: center; width: 100px; border-radius: 4px; }
-        .v5-pbox .bl { font-size: 7px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1px; }
-        .v5-pbox .bv { font-size: 15px; font-weight: 700; }
+        .v5-pbox { padding: 6px 0; text-align: center; width: 105px; min-height: 38px; border-radius: 4px; display: flex; flex-direction: column; justify-content: center; }
+        .v5-pbox .bl { font-size: 7px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1px; color: rgba(255,255,255,0.85); }
+        .v5-pbox .bv { font-size: 15px; font-weight: 700; color: #fff; }
         /* v5.1 Number Grids */
         .v5-nbox { padding: 0 14px 6px; }
         .v5-ngrid { display: grid; gap: 1px; background: #2a2d37; border-radius: 6px; overflow: hidden; }
@@ -200,12 +200,8 @@
         .v5-nc .nl { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
         .v5-nc .nv { font-size: 14px; font-weight: 700; }
         .v5-divider { height: 1px; background: linear-gradient(90deg, transparent 0%, #333 15%, #333 85%, transparent 100%); margin: 2px 14px 0; }
-        /* v5.1 SYS WR Badge */
+        /* v5.1 SYS WR Badge (inline badge hidden — using v5-pbox now) */
         .sys-wr-badge { display: none; }
-        .v5-syswr-box { background: #0d2137; border: 2px solid #42a5f5; border-radius: 8px; padding: 8px 0; text-align: center; cursor: help; margin-bottom: 6px; }
-        .v5-syswr-box .bl { font-size: 8px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #90caf9; margin-bottom: 2px; }
-        .v5-syswr-box .bv { font-size: 22px; font-weight: 900; color: #42a5f5; letter-spacing: -0.5px; }
-        .v5-syswr-box .bsub { font-size: 7px; color: #64b5f6; margin-top: 1px; letter-spacing: 0.3px; }
         /* v5.1 Peak Potential */
         .v5-peak-strip { margin: 2px 14px 8px; padding: 8px 10px; background: #12141c; border-radius: 6px; border: 1px solid #2a2d37; display: flex; justify-content: space-between; align-items: center; }
         .v5-peak-label { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -2249,14 +2245,14 @@ function renderSignals() {
                             </div>
                         </div>
                         <div class="v5-pick-right">
-                            ${sysWR != null ? '<div class="v5-pbox" style="background:' + sysWrBg + ';border:1px solid ' + sysWrColor + '" title="' + sysWrTooltip + '"><div class="bl" style="color:' + sysWrLabelColor + '">SYS WIN RATE</div><div class="bv" style="color:' + sysWrColor + '">' + sysWR + '%</div></div>' : ''}
+                            ${sysWR != null ? '<div class="v5-pbox" style="background:#0d2137;border:1px solid #1565c0" title="' + sysWrTooltip + '"><div class="bl">SYS WIN RATE</div><div class="bv">' + sysWR + '%</div></div>' : ''}
                             <div class="v5-pbox" style="background:${confBg};border:1px solid ${confBorder}">
-                                <div class="bl" style="color:${confLabelColor}">WIN PROB</div>
-                                <div class="bv" style="color:${confColor}">${modelP.toFixed(1)}%</div>
+                                <div class="bl">WIN PROB</div>
+                                <div class="bv">${modelP.toFixed(1)}%</div>
                             </div>
                             <div class="v5-pbox" style="background:#4a2800;border:1px solid #d4740a">
-                                <div class="bl" style="color:#ffb74d">EDGE CONF</div>
-                                <div class="bv" style="color:#d4740a">${edgeConfLabel}</div>
+                                <div class="bl">EDGE CONF</div>
+                                <div class="bv">${edgeConfLabel}</div>
                             </div>
                         </div>
                     </div>
