@@ -2459,6 +2459,51 @@ def resolve_outcomes_route():
     return jsonify(result), status_code
 
 
+@app.route("/api/serve-check", methods=["GET"])
+@enable_cors
+def api_serve_check():
+    """Debug endpoint: check how many picks have serve data."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    picks = load_picks_jsonl()
+    total = len(picks)
+    with_serve = [p for p in picks if p.get("sa_aces") is not None or p.get("sb_aces") is not None]
+    without_serve = total - len(with_serve)
+    # Sample a few picks with/without serve data
+    sample_with = []
+    for p in with_serve[:3]:
+        sample_with.append({
+            "match": p.get("match", ""),
+            "sa_aces": p.get("sa_aces"),
+            "sb_aces": p.get("sb_aces"),
+            "sa_first_in": p.get("sa_first_in"),
+        })
+    sample_without = []
+    for p in picks:
+        if p.get("sa_aces") is None and p.get("sb_aces") is None:
+            sample_without.append({
+                "match": p.get("match", ""),
+                "logged_at": p.get("logged_at", ""),
+                "outcome": p.get("outcome"),
+            })
+            if len(sample_without) >= 3:
+                break
+    # Check TML parquet
+    tml_path = BASE_DIR / "data" / "tml_history_10y.parquet"
+    tml_info = {"exists": tml_path.exists()}
+    if tml_path.exists():
+        import os
+        tml_info["size_mb"] = round(os.path.getsize(tml_path) / 1024 / 1024, 1)
+    return jsonify({
+        "total_picks": total,
+        "with_serve_data": len(with_serve),
+        "without_serve_data": without_serve,
+        "sample_with": sample_with,
+        "sample_without": sample_without,
+        "tml_parquet": tml_info,
+    })
+
+
 @app.route("/api/track-peaks", methods=["POST"])
 @enable_cors
 def api_track_peaks():
@@ -2570,12 +2615,14 @@ def _run_pipeline_background():
         try:
             logger.info(f"  Running {name}...")
             r = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=timeout)
-            out = (r.stdout or "")[-500:]
+            # Capture more output for card step (serve data diagnostics appear at end)
+            cap = 4000 if name == "card" else 500
+            out = (r.stdout or "")[-cap:]
             err = (r.stderr or "")[-500:]
             combined = out
             if err:
                 combined += "\n--- STDERR ---\n" + err
-            results[name] = {"status": "ok" if r.returncode == 0 else "error", "output": combined[-800:]}
+            results[name] = {"status": "ok" if r.returncode == 0 else "error", "output": combined[-4500:]}
             if r.returncode != 0:
                 logger.warning(f"  {name} failed: {r.stderr[-200:]}")
                 if name == "card":
@@ -2583,7 +2630,7 @@ def _run_pipeline_background():
                         ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100", "--skip-whales"],
                         cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300
                     )
-                    out2 = (r2.stdout or "")[-500:]
+                    out2 = (r2.stdout or "")[-4000:]
                     err2 = (r2.stderr or "")[-500:]
                     combined2 = out2
                     if err2:
@@ -2591,6 +2638,19 @@ def _run_pipeline_background():
                     results[name] = {"status": "ok" if r2.returncode == 0 else "error", "output": combined2[-800:]}
         except Exception as e:
             results[name] = {"status": "error", "error": str(e)}
+
+    # ── Resolve outcomes (inline — same logic as RESOLVE OUTCOMES NOW button) ──
+    try:
+        logger.info("  Running outcome resolution...")
+        resolve_result = _run_inline_resolver()
+        results["resolve"] = {
+            "status": "ok" if resolve_result.get("status") == "success" else "error",
+            "output": resolve_result.get("output", "")[-400:],
+        }
+        logger.info(f"  Resolver: {resolve_result.get('message', '')[:100]}")
+    except Exception as e:
+        results["resolve"] = {"status": "error", "error": str(e)}
+        logger.error(f"  Outcome resolution exception: {e}")
 
     # Dashboard rebuild
     try:

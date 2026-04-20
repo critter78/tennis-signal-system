@@ -4141,6 +4141,15 @@ def main():
     edge_only = [s for s in signals if s.get("has_edge")]
     print(f"  {len(signals)} match(es) analysed, {len(edge_only)} betting signal(s) above threshold")
 
+    # ── SERVE DATA DIAGNOSTIC (appears at end of stdout for pipeline capture) ──
+    serve_count = sum(1 for s in signals if s.get("sa_aces") is not None or s.get("sb_aces") is not None)
+    print(f"  [SERVE DATA] {serve_count}/{len(signals)} signals have serve stats (sa_aces/sb_aces)")
+    if signals and serve_count == 0:
+        # Extra debug: show what columns df_hist has
+        serve_cols = [c for c in df_hist.columns if c.startswith("w_ace") or c.startswith("l_ace") or c.startswith("w_1st")]
+        print(f"  [SERVE DEBUG] df_hist columns with serve data: {serve_cols[:10]}")
+        print(f"  [SERVE DEBUG] df_hist shape: {df_hist.shape}, w_ace non-null: {df_hist['w_ace'].notna().sum() if 'w_ace' in df_hist.columns else 'N/A'}")
+
     # ── AUTO-LOG PICKS ──
     if signals:
         try:
