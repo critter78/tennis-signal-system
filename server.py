@@ -1552,6 +1552,7 @@ def api_live_prices():
             picks_path = BASE_DIR / "logs" / "picks.jsonl"
 
         slugs = set()
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
         if picks_path.exists():
             with open(picks_path) as f:
                 for line in f:
@@ -1560,6 +1561,10 @@ def api_live_prices():
                         continue
                     try:
                         pick = json.loads(line)
+                        # Only fetch prices for today's picks, not all 500+
+                        logged = pick.get("logged_at", "")
+                        if not logged.startswith(today_str):
+                            continue
                         slug = pick.get("slug", "")
                         if slug:
                             slugs.add(slug)
@@ -1569,12 +1574,14 @@ def api_live_prices():
         if not slugs:
             return jsonify({"prices": {}, "message": "No active markets"})
 
+        # Limit to 20 slugs max to prevent blocking the single worker for minutes
+        slug_list = list(slugs)[:20]
         price_map = {}
-        for slug in slugs:
+        for slug in slug_list:
             try:
                 r = req.get(
                     f"https://gamma-api.polymarket.com/events?slug={slug}",
-                    timeout=8,
+                    timeout=3,
                 )
                 r.raise_for_status()
                 events = r.json()

@@ -12,5 +12,5 @@ echo "=========================================="
 
 mkdir -p cards logs data
 
-echo "Starting gunicorn (1 worker, 600s timeout)..."
-exec gunicorn server:app --bind 0.0.0.0:$PORT --workers 1 --timeout 600
+echo "Starting gunicorn (1 gevent worker, 600s timeout)..."
+exec gunicorn server:app --bind 0.0.0.0:$PORT --workers 1 --worker-class gevent --timeout 600
