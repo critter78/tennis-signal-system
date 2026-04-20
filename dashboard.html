@@ -2008,6 +2008,8 @@ function renderSignals() {
         const latestRun = picks.length > 0 ? picks[picks.length - 1].run_id : null;
         latest = latestRun ? picks.filter(p => p.run_id === latestRun) : picks;
     }
+    // Hide resolved/completed matches from active signals view
+    latest = latest.filter(p => p.outcome === null || p.outcome === undefined);
 
     // Apply filters
     if (filterType === 'edge') latest = latest.filter(p => p.has_edge);
