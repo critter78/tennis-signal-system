@@ -223,6 +223,9 @@
         .v5-vr { text-align: right; font-size: 11.5px; color: #ddd; }
         .v5-vc { text-align: center; font-size: 10px; color: #888; min-width: 100px; padding: 0 6px; font-weight: 500; }
         .v5-win-mark { display: inline-block; width: 18px; height: 18px; vertical-align: middle; margin: 0 2px; opacity: 1; }
+        .v5-win-mark-r { transform: scaleX(-1); }
+        @keyframes freshPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+        .fresh-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4caf50; margin-right: 5px; animation: freshPulse 2.5s ease-in-out infinite; }
         .vg { color: #4caf50; } .vb { color: #f44336; } .vo { color: #d4740a; font-weight: 700; } .vd { color: #555; } .vblue { color: #42a5f5; }
         /* v5.1 H2H */
         .v5-h2h-bar { text-align: center; padding: 5px 0; margin: 2px 0; border-top: 1px solid #2a2d37; border-bottom: 1px solid #2a2d37; }
@@ -2181,8 +2184,8 @@ function renderSignals() {
         const eloA = s.sa_elo, eloB = s.sb_elo;
         const surfEloA = s.sa_surf_elo, surfEloB = s.sb_surf_elo;
         const eloPctA = s.sa_elo_pct, eloPctB = s.sb_elo_pct;
-        const racquetSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='54' cy='30' rx='24' ry='28' fill='none' stroke='%2366ff66' stroke-width='4.5'/%3E%3Cline x1='54' y1='58' x2='40' y2='95' stroke='%2366ff66' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='40' y1='86' x2='42' y2='95' stroke='%2366ff66' stroke-width='8' stroke-linecap='round'/%3E%3Cline x1='38' y1='30' x2='70' y2='30' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='40' y1='20' x2='68' y2='20' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='40' y1='40' x2='68' y2='40' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='54' y1='4' x2='54' y2='55' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='44' y1='6' x2='44' y2='54' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='64' y1='6' x2='64' y2='54' stroke='%2366ff6688' stroke-width='1.5'/%3E%3C/svg%3E";
-        const winMark = (condition) => condition ? '<img class="v5-win-mark" src="' + racquetSvg + '" title="Advantage">' : '';
+        const racquetSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='54' cy='30' rx='24' ry='28' fill='none' stroke='%2366ff66' stroke-width='4.5'/%3E%3Cline x1='54' y1='58' x2='40' y2='88' stroke='%23889a88' stroke-width='5.5' stroke-linecap='round'/%3E%3Cline x1='40' y1='82' x2='38' y2='95' stroke='%23708070' stroke-width='7' stroke-linecap='round'/%3E%3Cline x1='38' y1='30' x2='70' y2='30' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='40' y1='20' x2='68' y2='20' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='40' y1='40' x2='68' y2='40' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='54' y1='4' x2='54' y2='55' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='44' y1='6' x2='44' y2='54' stroke='%2366ff6688' stroke-width='1.5'/%3E%3Cline x1='64' y1='6' x2='64' y2='54' stroke='%2366ff6688' stroke-width='1.5'/%3E%3C/svg%3E";
+        const winMark = (condition, side) => condition ? '<img class="v5-win-mark' + (side === 'r' ? ' v5-win-mark-r' : '') + '" src="' + racquetSvg + '" title="Advantage">' : '';
 
         // Surface color
         const sfcColor = surface === 'Clay' ? '#c17a2a' : surface === 'Grass' ? '#4caf50' : '#42a5f5';
@@ -2307,10 +2310,10 @@ function renderSignals() {
                         <div class="v5-h2h-label">H2H</div>
                         <div class="v5-h2h-v">${h2hStr}</div>
                     </div>
-                    <div class="v5-s3r"><div class="v5-vl"><strong class="vo">${rankA ? '#'+rankA : '—'}</strong> ${rankA && rankB && rankA < rankB ? winMark(true) : ''}</div><div class="v5-vc">Rank</div><div class="v5-vr">${rankB && rankA && rankB < rankA ? winMark(true) : ''} <strong class="vo">${rankB ? '#'+rankB : '—'}</strong></div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${swrA} ${s.sa_swr != null && s.sb_swr != null && s.sa_swr > s.sb_swr ? winMark(true) : ''}</div><div class="v5-vc">Surface WR</div><div class="v5-vr">${s.sa_swr != null && s.sb_swr != null && s.sb_swr > s.sa_swr ? winMark(true) : ''} ${swrB}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${formA} ${s.sa_momentum != null && s.sb_momentum != null && s.sa_momentum > s.sb_momentum ? winMark(true) : ''}</div><div class="v5-vc">Momentum</div><div class="v5-vr">${s.sa_momentum != null && s.sb_momentum != null && s.sb_momentum > s.sa_momentum ? winMark(true) : ''} ${formB}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${actA != null ? actA + ' matches' : '—'} ${actA != null && actB != null && actA > actB ? winMark(true) : ''}</div><div class="v5-vc">Activity</div><div class="v5-vr">${actA != null && actB != null && actB > actA ? winMark(true) : ''} ${actB != null ? actB + ' matches' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl"><strong class="vo">${rankA ? '#'+rankA : '—'}</strong> ${rankA && rankB && rankA < rankB ? winMark(true,'l') : ''}</div><div class="v5-vc">Rank</div><div class="v5-vr">${rankB && rankA && rankB < rankA ? winMark(true,'r') : ''} <strong class="vo">${rankB ? '#'+rankB : '—'}</strong></div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${swrA} ${s.sa_swr != null && s.sb_swr != null && s.sa_swr > s.sb_swr ? winMark(true,'l') : ''}</div><div class="v5-vc">Surface WR</div><div class="v5-vr">${s.sa_swr != null && s.sb_swr != null && s.sb_swr > s.sa_swr ? winMark(true,'r') : ''} ${swrB}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${formA} ${s.sa_momentum != null && s.sb_momentum != null && s.sa_momentum > s.sb_momentum ? winMark(true,'l') : ''}</div><div class="v5-vc">Momentum</div><div class="v5-vr">${s.sa_momentum != null && s.sb_momentum != null && s.sb_momentum > s.sa_momentum ? winMark(true,'r') : ''} ${formB}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${actA != null ? actA + ' matches' : '—'} ${actA != null && actB != null && actA > actB ? winMark(true,'l') : ''}</div><div class="v5-vc">Activity</div><div class="v5-vr">${actA != null && actB != null && actB > actA ? winMark(true,'r') : ''} ${actB != null ? actB + ' matches' : '—'}</div></div>
                     <div class="v5-s3r"><div class="v5-vl">${s.sa_rest != null ? s.sa_rest + 'd' : '—'}</div><div class="v5-vc">Rest</div><div class="v5-vr">${s.sb_rest != null ? s.sb_rest + 'd' : '—'}</div></div>
                 </div>
 
@@ -2332,8 +2335,8 @@ function renderSignals() {
                     <div class="v5-elo-title">ELO Details</div>
                     <div class="v5-s3" style="padding:0">
                         <div class="v5-s3h"><div class="ph" style="font-size:11px">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr" style="font-size:11px">${s.player_b||''}</div></div>
-                        <div class="v5-s3r"><div class="v5-vl">${fmtElo(eloA, eloPctA)} ${eloA && eloB && eloA > eloB ? winMark(true) : ''}</div><div class="v5-vc">ELO</div><div class="v5-vr">${eloA && eloB && eloB > eloA ? winMark(true) : ''} ${fmtElo(eloB, eloPctB)}</div></div>
-                        <div class="v5-s3r"><div class="v5-vl">${surfEloA || '—'}</div><div class="v5-vc">Surface ELO</div><div class="v5-vr">${surfEloB || '—'} ${surfEloA && surfEloB && surfEloB > surfEloA ? winMark(true) : ''}</div></div>
+                        <div class="v5-s3r"><div class="v5-vl">${fmtElo(eloA, eloPctA)} ${eloA && eloB && eloA > eloB ? winMark(true,'l') : ''}</div><div class="v5-vc">ELO</div><div class="v5-vr">${eloA && eloB && eloB > eloA ? winMark(true,'r') : ''} ${fmtElo(eloB, eloPctB)}</div></div>
+                        <div class="v5-s3r"><div class="v5-vl">${surfEloA || '—'}</div><div class="v5-vc">Surface ELO</div><div class="v5-vr">${surfEloB || '—'} ${surfEloA && surfEloB && surfEloB > surfEloA ? winMark(true,'r') : ''}</div></div>
                     </div>
                     ${eloA && eloB ? '<div class="v5-elo-prob-row">ELO Gap: '+ Math.abs(eloA-eloB) +'pts → <span class="v5-elo-prob-val ' + (eloA > eloB ? 'vg' : 'vblue') + '">~' + (eloP||50).toFixed(0) + '% ' + (eloA > eloB ? (s.player_a||'') : (s.player_b||'')) + '</span></div>' : ''}
                 </div>` : ''}
@@ -2345,18 +2348,18 @@ function renderSignals() {
                 <div class="v5-s3" style="padding-bottom:4px">
                     <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Serve</div>
                     <div class="v5-s3h"><div class="ph" style="font-size:11px">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr" style="font-size:11px">${s.player_b||''}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${s.sa_aces != null ? s.sa_aces.toFixed(1) : '—'} ${s.sa_aces != null && s.sb_aces != null && s.sa_aces > s.sb_aces ? winMark(true) : ''}</div><div class="v5-vc">Aces/Match</div><div class="v5-vr">${s.sb_aces != null && s.sa_aces != null && s.sb_aces > s.sa_aces ? winMark(true) : ''} ${s.sb_aces != null ? s.sb_aces.toFixed(1) : '—'}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${s.sa_dfs != null ? s.sa_dfs.toFixed(1) : '—'} ${s.sa_dfs != null && s.sb_dfs != null && s.sa_dfs < s.sb_dfs ? winMark(true) : ''}</div><div class="v5-vc">DFs/Match</div><div class="v5-vr">${s.sb_dfs != null && s.sa_dfs != null && s.sb_dfs < s.sa_dfs ? winMark(true) : ''} ${s.sb_dfs != null ? s.sb_dfs.toFixed(1) : '—'}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${s.sa_first_in != null ? s.sa_first_in.toFixed(1)+'%' : '—'} ${s.sa_first_in != null && s.sb_first_in != null && s.sa_first_in > s.sb_first_in ? winMark(true) : ''}</div><div class="v5-vc">1st Serve %</div><div class="v5-vr">${s.sb_first_in != null && s.sa_first_in != null && s.sb_first_in > s.sa_first_in ? winMark(true) : ''} ${s.sb_first_in != null ? s.sb_first_in.toFixed(1)+'%' : '—'}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${s.sa_first_won != null ? s.sa_first_won.toFixed(1)+'%' : '—'} ${s.sa_first_won != null && s.sb_first_won != null && s.sa_first_won > s.sb_first_won ? winMark(true) : ''}</div><div class="v5-vc">1st Srv Win %</div><div class="v5-vr">${s.sb_first_won != null && s.sa_first_won != null && s.sb_first_won > s.sa_first_won ? winMark(true) : ''} ${s.sb_first_won != null ? s.sb_first_won.toFixed(1)+'%' : '—'}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${s.sa_second_won != null ? s.sa_second_won.toFixed(1)+'%' : '—'} ${s.sa_second_won != null && s.sb_second_won != null && s.sa_second_won > s.sb_second_won ? winMark(true) : ''}</div><div class="v5-vc">2nd Srv Win %</div><div class="v5-vr">${s.sb_second_won != null && s.sa_second_won != null && s.sb_second_won > s.sa_second_won ? winMark(true) : ''} ${s.sb_second_won != null ? s.sb_second_won.toFixed(1)+'%' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_aces != null ? s.sa_aces.toFixed(1) : '—'} ${s.sa_aces != null && s.sb_aces != null && s.sa_aces > s.sb_aces ? winMark(true,'l') : ''}</div><div class="v5-vc">Aces/Match</div><div class="v5-vr">${s.sb_aces != null && s.sa_aces != null && s.sb_aces > s.sa_aces ? winMark(true,'r') : ''} ${s.sb_aces != null ? s.sb_aces.toFixed(1) : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_dfs != null ? s.sa_dfs.toFixed(1) : '—'} ${s.sa_dfs != null && s.sb_dfs != null && s.sa_dfs < s.sb_dfs ? winMark(true,'l') : ''}</div><div class="v5-vc">DFs/Match</div><div class="v5-vr">${s.sb_dfs != null && s.sa_dfs != null && s.sb_dfs < s.sa_dfs ? winMark(true,'r') : ''} ${s.sb_dfs != null ? s.sb_dfs.toFixed(1) : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_first_in != null ? s.sa_first_in.toFixed(1)+'%' : '—'} ${s.sa_first_in != null && s.sb_first_in != null && s.sa_first_in > s.sb_first_in ? winMark(true,'l') : ''}</div><div class="v5-vc">1st Serve %</div><div class="v5-vr">${s.sb_first_in != null && s.sa_first_in != null && s.sb_first_in > s.sa_first_in ? winMark(true,'r') : ''} ${s.sb_first_in != null ? s.sb_first_in.toFixed(1)+'%' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_first_won != null ? s.sa_first_won.toFixed(1)+'%' : '—'} ${s.sa_first_won != null && s.sb_first_won != null && s.sa_first_won > s.sb_first_won ? winMark(true,'l') : ''}</div><div class="v5-vc">1st Srv Win %</div><div class="v5-vr">${s.sb_first_won != null && s.sa_first_won != null && s.sb_first_won > s.sa_first_won ? winMark(true,'r') : ''} ${s.sb_first_won != null ? s.sb_first_won.toFixed(1)+'%' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_second_won != null ? s.sa_second_won.toFixed(1)+'%' : '—'} ${s.sa_second_won != null && s.sb_second_won != null && s.sa_second_won > s.sb_second_won ? winMark(true,'l') : ''}</div><div class="v5-vc">2nd Srv Win %</div><div class="v5-vr">${s.sb_second_won != null && s.sa_second_won != null && s.sb_second_won > s.sa_second_won ? winMark(true,'r') : ''} ${s.sb_second_won != null ? s.sb_second_won.toFixed(1)+'%' : '—'}</div></div>
                 </div>
                 <div class="v5-divider"></div>
                 <div class="v5-s3" style="padding-top:4px">
                     <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Return & Pressure</div>
                     <div class="v5-s3h"><div class="ph" style="font-size:11px">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr" style="font-size:11px">${s.player_b||''}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${s.sa_bp_saved != null ? s.sa_bp_saved.toFixed(1)+'%' : '—'} ${s.sa_bp_saved != null && s.sb_bp_saved != null && s.sa_bp_saved > s.sb_bp_saved ? winMark(true) : ''}</div><div class="v5-vc">BP Saved %</div><div class="v5-vr">${s.sb_bp_saved != null && s.sa_bp_saved != null && s.sb_bp_saved > s.sa_bp_saved ? winMark(true) : ''} ${s.sb_bp_saved != null ? s.sb_bp_saved.toFixed(1)+'%' : '—'}</div></div>
-                    <div class="v5-s3r"><div class="v5-vl">${s.sa_bp_convert != null ? s.sa_bp_convert.toFixed(1)+'%' : '—'} ${s.sa_bp_convert != null && s.sb_bp_convert != null && s.sa_bp_convert > s.sb_bp_convert ? winMark(true) : ''}</div><div class="v5-vc">BP Convert %</div><div class="v5-vr">${s.sb_bp_convert != null && s.sa_bp_convert != null && s.sb_bp_convert > s.sa_bp_convert ? winMark(true) : ''} ${s.sb_bp_convert != null ? s.sb_bp_convert.toFixed(1)+'%' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_bp_saved != null ? s.sa_bp_saved.toFixed(1)+'%' : '—'} ${s.sa_bp_saved != null && s.sb_bp_saved != null && s.sa_bp_saved > s.sb_bp_saved ? winMark(true,'l') : ''}</div><div class="v5-vc">BP Saved %</div><div class="v5-vr">${s.sb_bp_saved != null && s.sa_bp_saved != null && s.sb_bp_saved > s.sa_bp_saved ? winMark(true,'r') : ''} ${s.sb_bp_saved != null ? s.sb_bp_saved.toFixed(1)+'%' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_bp_convert != null ? s.sa_bp_convert.toFixed(1)+'%' : '—'} ${s.sa_bp_convert != null && s.sb_bp_convert != null && s.sa_bp_convert > s.sb_bp_convert ? winMark(true,'l') : ''}</div><div class="v5-vc">BP Convert %</div><div class="v5-vr">${s.sb_bp_convert != null && s.sa_bp_convert != null && s.sb_bp_convert > s.sa_bp_convert ? winMark(true,'r') : ''} ${s.sb_bp_convert != null ? s.sb_bp_convert.toFixed(1)+'%' : '—'}</div></div>
                 </div>
                 <div style="text-align:center;padding:8px 0 4px;font-size:8px;color:#555;letter-spacing:0.3px">DATA SOURCE: TML/SACKMANN MATCH DATABASE</div>
                 ` : `
@@ -2563,11 +2566,12 @@ renderSignals();
             if (updated > 0) {
                 console.log('[live-prices] Updated ' + updated + ' markets with fresh Polymarket prices');
                 renderSignals();
-                // Update freshness indicator
+                // Update freshness indicator with FRESH DATA + pulsing green dot
                 var el = document.getElementById('dataFreshness');
                 if (el) {
+                    var pct = Math.min(99, Math.max(5, Math.round(updated / Math.max(picks.length, 1) * 100)));
                     var existing = el.innerHTML;
-                    el.innerHTML = existing + ' <span style="color:#42a5f5; font-size:10px">| Live prices &#10003;</span>';
+                    el.innerHTML = existing + ' <span style="font-size:10px;color:#aaa">|</span> <span class="fresh-dot"></span><span style="color:#66ff66; font-size:10px; font-weight:600; letter-spacing:0.5px">FRESH DATA ' + pct + '%</span>';
                 }
             }
         })
