@@ -27,3 +27,42 @@ services:
         sync: false  # Must match the web service's CRON_SECRET
       - key: WEB_SERVICE_URL
         value: "https://tennis-betting-server.onrender.com"
+
+  # ─── V2 CONVICTION SIGNAL — tennisv2.critterlabs.io ──────────────────────
+  # Parallel/isolated from v1. Ranks by model_prob (not edge).
+  # Auto-sell thresholds: 85c sell-half, 95c sell-all.
+  - type: web
+    name: tennis-v2-signal
+    runtime: python
+    plan: starter
+    rootDir: v2
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: FLASK_ENV
+        value: production
+      - key: CRON_SECRET
+        sync: false  # Set manually in Render dashboard (separate from v1)
+    healthCheckPath: /api/status
+    disk:
+      name: tennis-v2-disk
+      mountPath: /data
+      sizeGB: 1
+
+  - type: cron
+    name: tennis-v2-refresh-6h
+    runtime: python
+    plan: starter
+    rootDir: v2
+    buildCommand: pip install -r requirements.txt
+    schedule: "15 2,8,14,20 * * *"   # offset 15min from v1 cron to avoid collision
+    startCommand: python3 run_daily_render.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: CRON_SECRET
+        sync: false   # Must match tennis-v2-signal's CRON_SECRET
+      - key: WEB_SERVICE_URL
+        value: "https://tennis-v2-signal.onrender.com"
