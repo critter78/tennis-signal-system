@@ -569,6 +569,11 @@ def _build_player_index(df):
         if len(parts) >= 2:
             index[parts[-1].lower()] = p                           # last name
             index[f"{parts[0].lower()} {parts[-1].lower()}"] = p   # first + last
+        # Compound names: "Daniel Merida Aguilar" → also index "merida aguilar", "daniel merida"
+        if len(parts) >= 3:
+            index[f"{parts[-2].lower()} {parts[-1].lower()}"] = p  # last two words
+            index[f"{parts[0].lower()} {parts[1].lower()}"] = p    # first two words
+            index[parts[1].lower()] = p                            # middle name
     return index, players
 
 
@@ -594,6 +599,24 @@ def find_player(df, name):
         # Try last-name only
         if parts[-1] in _PLAYER_INDEX:
             return _PLAYER_INDEX[parts[-1]]
+
+    # Compound names: "Daniel Merida Aguilar" → try "Daniel Merida", "Merida Aguilar"
+    if len(parts) >= 3:
+        # Try first two words (compound first name)
+        key2 = f"{parts[0]} {parts[1]}"
+        if key2 in _PLAYER_INDEX:
+            return _PLAYER_INDEX[key2]
+        # Try last two words (compound surname)
+        key3 = f"{parts[-2]} {parts[-1]}"
+        if key3 in _PLAYER_INDEX:
+            return _PLAYER_INDEX[key3]
+        # Try "First CompoundLast" with hyphen
+        key4 = f"{parts[0]} {parts[1]}-{parts[2]}"
+        if key4 in _PLAYER_INDEX:
+            return _PLAYER_INDEX[key4]
+        # Try middle name as last name
+        if parts[1] in _PLAYER_INDEX:
+            return _PLAYER_INDEX[parts[1]]
 
     # Fuzzy fallback on full player set
     best, score = "", 0.0
