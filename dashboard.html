@@ -160,9 +160,9 @@
         .sig-card.is-bet { border-color: #e65100; border-width: 2px; }
         /* v5.1 Card Header */
         .card-hdr { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 14px; background: linear-gradient(135deg, #1a1d27 0%, #22252f 100%); border-bottom: 1px solid #2a2d37; }
-        .hdr-names { font-size: 15px; font-weight: 700; color: #fff; background: linear-gradient(180deg, #10121a 0%, #161922 100%); border: 1px solid #2a2d37; border-radius: 5px; padding: 5px 12px; margin-bottom: 4px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), inset 0 0 12px rgba(212,116,10,0.22), inset 0 -1px 6px rgba(212,116,10,0.15), inset 1px 0 6px rgba(212,116,10,0.10), inset -1px 0 6px rgba(212,116,10,0.10), 0 1px 0 rgba(255,255,255,0.05); }
+        .hdr-names { font-size: 15px; font-weight: 700; color: #fff; background: linear-gradient(180deg, #10121a 0%, #161922 100%); border: 1px solid #2a2d37; border-radius: 5px; padding: 6px 12px; margin-bottom: 4px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), inset 0 0 12px rgba(212,116,10,0.22), inset 0 -1px 6px rgba(212,116,10,0.15), inset 1px 0 6px rgba(212,116,10,0.10), inset -1px 0 6px rgba(212,116,10,0.10), 0 1px 0 rgba(255,255,255,0.05); display: flex; flex-direction: column; }
         .hdr-names .pa { color: #fff; }
-        .hdr-names .vs { color: #6c757d; font-weight: 400; font-size: 12px; margin: 0 4px; }
+        .hdr-names .vs { color: #6c757d; font-weight: 400; font-size: 12px; }
         .hdr-names .pb { color: #ccc; }
         .hdr-right { text-align: right; font-size: 10px; line-height: 1.6; }
         .hdr-tourney { color: #e0e0e0; font-weight: 600; }
@@ -2209,7 +2209,7 @@ function renderSignals() {
             <!-- HEADER with plaque names -->
             <div class="card-hdr">
                 <div>
-                    <div class="hdr-names"><span class="pa player-link" data-player="${s.player_a||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_a||''}</span><span class="vs">vs</span><span class="pb player-link" data-player="${s.player_b||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_b||''}</span></div>
+                    <div class="hdr-names"><span class="pa player-link" data-player="${s.player_a||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_a||''}</span><span><span class="vs">vs </span><span class="pb player-link" data-player="${s.player_b||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_b||''}</span></span></div>
                     ${isBet ? '<span class="active-tag">ACTIVE BET</span>' : ''}
                 </div>
                 <div class="hdr-right">
@@ -2245,7 +2245,7 @@ function renderSignals() {
                             </div>
                         </div>
                         <div class="v5-pick-right">
-                            ${sysWR != null ? '<div class="v5-pbox" style="background:#0d2137;border:1px solid #1565c0" title="' + sysWrTooltip + '"><div class="bl">SYS WIN RATE</div><div class="bv">' + sysWR + '%</div></div>' : ''}
+                            ${sysWR != null ? '<div class="v5-pbox" style="background:#0a2a5c;border:1px solid #2196f3" title="' + sysWrTooltip + '"><div class="bl">SYS WIN RATE</div><div class="bv">' + sysWR + '%</div></div>' : ''}
                             <div class="v5-pbox" style="background:${confBg};border:1px solid ${confBorder}">
                                 <div class="bl">WIN PROB</div>
                                 <div class="bv">${modelP.toFixed(1)}%</div>
