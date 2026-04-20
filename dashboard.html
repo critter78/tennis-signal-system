@@ -2042,6 +2042,37 @@ function renderSignals() {
 
     html += '<div class="sig-grid">';
 
+    // ─── SYS WIN RATE calibration buckets ───
+    // Bin resolved picks by model_prob → compute win rate per bucket.
+    // Each card shows the win rate of the bucket IT falls into (not a global metric).
+    const sysWrBuckets = [
+        { min: 70, max: 200, label: '70%+',  w: 0, n: 0 },
+        { min: 65, max: 70,  label: '65-70', w: 0, n: 0 },
+        { min: 60, max: 65,  label: '60-65', w: 0, n: 0 },
+        { min: 55, max: 60,  label: '55-60', w: 0, n: 0 },
+        { min: 50, max: 55,  label: '50-55', w: 0, n: 0 },
+        { min: 0,  max: 50,  label: '<50',   w: 0, n: 0 },
+    ];
+    resolved.forEach(r => {
+        const mp = r.model_prob || 0;
+        const bucket = sysWrBuckets.find(b => mp >= b.min && mp < b.max);
+        if (bucket) { bucket.n++; if (r.outcome === 'win') bucket.w++; }
+    });
+    const globalSysWR = resolved.length > 10
+        ? Math.round((resolved.filter(r => r.outcome === 'win').length / resolved.length) * 100)
+        : null;
+    // Lookup helper: returns { wr, n, label, isBucket } for this card's modelP
+    const getSysWR = (mp) => {
+        const b = sysWrBuckets.find(b => mp >= b.min && mp < b.max);
+        if (b && b.n >= 5) {
+            return { wr: Math.round((b.w / b.n) * 100), n: b.n, label: b.label, isBucket: true };
+        }
+        if (globalSysWR != null) {
+            return { wr: globalSysWR, n: resolved.length, label: 'all', isBucket: false };
+        }
+        return null;
+    };
+
     latest.forEach(s => {
         const edge = Math.abs(s.edge || 0);
         const isBet = myBets.some(b => b.match === s.match && b.bet_on === (s.bet_on || s.predicted_winner));
@@ -2158,8 +2189,18 @@ function renderSignals() {
         // Surface color
         const sfcColor = surface === 'Clay' ? '#c17a2a' : surface === 'Grass' ? '#4caf50' : '#42a5f5';
 
-        // SYS WR — compute from resolved picks
-        const sysWR = resolved.length > 10 ? Math.round((resolved.filter(r => r.outcome === 'win').length / resolved.length) * 100) : null;
+        // SYS WR — bucket-calibrated by this card's model_prob (varies per card)
+        const sysWRData = getSysWR(modelP);
+        const sysWR = sysWRData ? sysWRData.wr : null;
+        // Color by win rate: green if beating coin flip, amber if near, red if below
+        const sysWrColor = sysWR == null ? '#6c757d' : sysWR >= 60 ? '#4caf50' : sysWR >= 52 ? '#d4740a' : '#f44336';
+        const sysWrBg = sysWR == null ? '#2d3139' : sysWR >= 60 ? '#1b5e20' : sysWR >= 52 ? '#4a2800' : '#4a1111';
+        const sysWrLabelColor = sysWR == null ? '#6c757d' : sysWR >= 60 ? '#81c784' : sysWR >= 52 ? '#ffb74d' : '#ff8a80';
+        const sysWrTooltip = sysWRData
+            ? (sysWRData.isBucket
+                ? `System win rate when model predicts ${sysWRData.label}% — ${sysWRData.n} resolved picks in this bucket`
+                : `Overall system win rate — ${sysWRData.n} resolved picks (bucket too sparse, showing global)`)
+            : '';
 
         // Peak potential — estimate from entry price range
         const peakRange = polyP < 20 ? '+80% — +250%' : polyP < 40 ? '+50% — +150%' : polyP < 60 ? '+40% — +100%' : '+20% — +60%';
@@ -2204,11 +2245,11 @@ function renderSignals() {
                                 ${tierBadge ? '<span class="v5-bdg" style="background:#4a2800;color:#d4740a;border:1px solid #d4740a40">' + (edge >= 10 ? 'STRONG' : edge >= 7 ? 'SOLID' : 'WATCH') + '</span>' : ''}
                                 ${valBadge ? '<span class="v5-bdg" style="background:#1b5e20;color:#4caf50;border:1px solid #4caf5040">VALUE</span>' : ''}
                                 ${eloBadge ? '<span class="v5-bdg" style="background:#1a237e;color:#42a5f5;border:1px solid #42a5f540">ELO PICK</span>' : ''}
-                                ${sysWR ? '<span class="sys-wr-badge" title="System picks winners ' + sysWR + '% of the time. Based on ' + resolved.length + ' resolved matches.">SYS WR: ' + sysWR + '%</span>' : ''}
+                                ${sysWR != null ? '<span class="sys-wr-badge" title="' + sysWrTooltip + '">SYS WR: ' + sysWR + '%</span>' : ''}
                             </div>
                         </div>
                         <div class="v5-pick-right">
-                            ${sysWR ? '<div class="v5-syswr-box" title="System picks winners ' + sysWR + '% of the time. Based on ' + resolved.length + ' resolved matches."><div class="bl">SYS WIN RATE</div><div class="bv">' + sysWR + '%</div><div class="bsub">' + resolved.length + ' resolved picks</div></div>' : ''}
+                            ${sysWR != null ? '<div class="v5-pbox" style="background:' + sysWrBg + ';border:1px solid ' + sysWrColor + '" title="' + sysWrTooltip + '"><div class="bl" style="color:' + sysWrLabelColor + '">SYS WIN RATE</div><div class="bv" style="color:' + sysWrColor + '">' + sysWR + '%</div></div>' : ''}
                             <div class="v5-pbox" style="background:${confBg};border:1px solid ${confBorder}">
                                 <div class="bl" style="color:${confLabelColor}">WIN PROB</div>
                                 <div class="bv" style="color:${confColor}">${modelP.toFixed(1)}%</div>
