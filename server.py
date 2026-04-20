@@ -2501,6 +2501,7 @@ def admin_full_refresh():
     logger.info("=" * 50)
 
     steps = [
+        ("tml_fetch", ["python3", str(BASE_DIR / "12_tml_live_fetch.py"), "--recent"], 120),
         ("rankings", ["python3", str(BASE_DIR / "09_rankings_fetcher.py"), "--refresh"], 60),
         ("card", ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "300", "--skip-whales"], 300),
         ("dedup", ["python3", str(BASE_DIR / "05_bet_logger.py"), "dedup"], 30),
