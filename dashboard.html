@@ -175,7 +175,7 @@
         .v5-tab-btn { flex: 1; padding: 8px 4px; text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; font-family: 'IBM Plex Mono', monospace; }
         .v5-tab-btn:hover { color: #aaa; }
         .v5-tab-btn.active { color: #d4740a; border-bottom-color: #d4740a; background: #1a1d2780; }
-        .v5-tab-btn .ti { font-size: 12px; display: block; margin-bottom: 1px; }
+        .v5-tab-btn .ti { font-size: 16px; display: block; margin-bottom: 2px; }
         .v5-tab-panel { display: none; }
         .v5-tab-panel.active { display: block; }
         /* v5.1 Low data banner */
@@ -2228,7 +2228,7 @@ function renderSignals() {
 
             <!-- TAB BAR -->
             <div class="v5-tab-bar">
-                <button class="v5-tab-btn active" onclick="v5switchTab(this,'signal')"><span class="ti">⚡</span>Signal</button>
+                <button class="v5-tab-btn active" onclick="v5switchTab(this,'signal')"><span class="ti" style="color:#ffd600">⚡</span>Signal</button>
                 <button class="v5-tab-btn" onclick="v5switchTab(this,'matchup')"><span class="ti">⚖</span>Matchup</button>
                 <button class="v5-tab-btn" onclick="v5switchTab(this,'deep')"><span class="ti">📈</span>Deep Stats</button>
                 <button class="v5-tab-btn" onclick="v5switchTab(this,'market')"><span class="ti">💰</span>Market</button>
