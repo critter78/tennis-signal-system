@@ -319,8 +319,11 @@ def serve_dashboard(is_shared=False, share_expires=None):
                 response.headers["Content-Type"] = "text/html"
                 return response
 
-            # Shared view needs extra processing
-            content, picks_data = _get_cached_dashboard()
+            # Shared view: build from RAW template (not cached version with injected data)
+            # This avoids the regex-on-huge-JSON bug that caused fallback to old card HTML
+            with open(DASHBOARD_TEMPLATE, 'r') as f:
+                content = f.read()
+            picks_data = load_picks_jsonl()
 
             # For shared views: only show Today's Signals, hide everything else
             if is_shared and share_expires:
@@ -394,14 +397,15 @@ def serve_dashboard(is_shared=False, share_expires=None):
                                  if k not in ("outcome", "pnl", "actual_winner", "resolved_at", "myOutcome", "myStake", "myOdds")}
                         shared_picks.append(clean)
                 shared_json = json.dumps(shared_picks, separators=(',', ':'))
-                # Replace the full picks data with shared-only subset
-                import re
-                content = re.sub(
-                    r'window\.PICKS_DATA\s*=\s*\[.*?\];?',
-                    f'window.PICKS_DATA = {shared_json};',
-                    content,
-                    count=1,
-                    flags=re.DOTALL
+                # Simple string replace on the raw template (has empty PICKS_DATA)
+                content = content.replace(
+                    "window.PICKS_DATA = [];",
+                    f"window.PICKS_DATA = {shared_json};"
+                )
+                # Fallback if template uses no-semicolon form
+                content = content.replace(
+                    "window.PICKS_DATA = []",
+                    f"window.PICKS_DATA = {shared_json}"
                 )
 
             response = make_response(content)
