@@ -2302,11 +2302,31 @@ function renderSignals() {
 
             <!-- TAB 3: DEEP STATS -->
             <div class="v5-tab-panel" data-v5tab="deep">
+                ${s.sa_aces != null || s.sb_aces != null ? `
+                <div class="v5-s3" style="padding-bottom:4px">
+                    <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Serve</div>
+                    <div class="v5-s3h"><div class="ph" style="font-size:11px">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr" style="font-size:11px">${s.player_b||''}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_aces != null ? s.sa_aces.toFixed(1) : '—'} ${s.sa_aces != null && s.sb_aces != null && s.sa_aces > s.sb_aces ? winMark(true) : ''}</div><div class="v5-vc">Aces/Match</div><div class="v5-vr">${s.sb_aces != null && s.sa_aces != null && s.sb_aces > s.sa_aces ? winMark(true) : ''} ${s.sb_aces != null ? s.sb_aces.toFixed(1) : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_dfs != null ? s.sa_dfs.toFixed(1) : '—'} ${s.sa_dfs != null && s.sb_dfs != null && s.sa_dfs < s.sb_dfs ? winMark(true) : ''}</div><div class="v5-vc">DFs/Match</div><div class="v5-vr">${s.sb_dfs != null && s.sa_dfs != null && s.sb_dfs < s.sa_dfs ? winMark(true) : ''} ${s.sb_dfs != null ? s.sb_dfs.toFixed(1) : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_first_in != null ? s.sa_first_in.toFixed(1)+'%' : '—'} ${s.sa_first_in != null && s.sb_first_in != null && s.sa_first_in > s.sb_first_in ? winMark(true) : ''}</div><div class="v5-vc">1st Serve %</div><div class="v5-vr">${s.sb_first_in != null && s.sa_first_in != null && s.sb_first_in > s.sa_first_in ? winMark(true) : ''} ${s.sb_first_in != null ? s.sb_first_in.toFixed(1)+'%' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_first_won != null ? s.sa_first_won.toFixed(1)+'%' : '—'} ${s.sa_first_won != null && s.sb_first_won != null && s.sa_first_won > s.sb_first_won ? winMark(true) : ''}</div><div class="v5-vc">1st Srv Win %</div><div class="v5-vr">${s.sb_first_won != null && s.sa_first_won != null && s.sb_first_won > s.sa_first_won ? winMark(true) : ''} ${s.sb_first_won != null ? s.sb_first_won.toFixed(1)+'%' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_second_won != null ? s.sa_second_won.toFixed(1)+'%' : '—'} ${s.sa_second_won != null && s.sb_second_won != null && s.sa_second_won > s.sb_second_won ? winMark(true) : ''}</div><div class="v5-vc">2nd Srv Win %</div><div class="v5-vr">${s.sb_second_won != null && s.sa_second_won != null && s.sb_second_won > s.sa_second_won ? winMark(true) : ''} ${s.sb_second_won != null ? s.sb_second_won.toFixed(1)+'%' : '—'}</div></div>
+                </div>
+                <div class="v5-divider"></div>
+                <div class="v5-s3" style="padding-top:4px">
+                    <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Return & Pressure</div>
+                    <div class="v5-s3h"><div class="ph" style="font-size:11px">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr" style="font-size:11px">${s.player_b||''}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_bp_saved != null ? s.sa_bp_saved.toFixed(1)+'%' : '—'} ${s.sa_bp_saved != null && s.sb_bp_saved != null && s.sa_bp_saved > s.sb_bp_saved ? winMark(true) : ''}</div><div class="v5-vc">BP Saved %</div><div class="v5-vr">${s.sb_bp_saved != null && s.sa_bp_saved != null && s.sb_bp_saved > s.sa_bp_saved ? winMark(true) : ''} ${s.sb_bp_saved != null ? s.sb_bp_saved.toFixed(1)+'%' : '—'}</div></div>
+                    <div class="v5-s3r"><div class="v5-vl">${s.sa_bp_convert != null ? s.sa_bp_convert.toFixed(1)+'%' : '—'} ${s.sa_bp_convert != null && s.sb_bp_convert != null && s.sa_bp_convert > s.sb_bp_convert ? winMark(true) : ''}</div><div class="v5-vc">BP Convert %</div><div class="v5-vr">${s.sb_bp_convert != null && s.sa_bp_convert != null && s.sb_bp_convert > s.sa_bp_convert ? winMark(true) : ''} ${s.sb_bp_convert != null ? s.sb_bp_convert.toFixed(1)+'%' : '—'}</div></div>
+                </div>
+                <div style="text-align:center;padding:8px 0 4px;font-size:8px;color:#555;letter-spacing:0.3px">DATA SOURCE: TML/SACKMANN MATCH DATABASE</div>
+                ` : `
                 <div class="v5-deep-empty">
                     <div style="font-size:24px;margin-bottom:8px">📊</div>
-                    Deep serve &amp; clutch metrics are computed from match-level data.<br>
-                    Available in production when Sackmann/TML data pipeline is active.
+                    Serve &amp; return metrics not yet available for this match.<br>
+                    <span style="font-size:9px;color:#555">Requires TML data pipeline — run 12_tml_live_fetch.py</span>
                 </div>
+                `}
             </div>
 
             <!-- TAB 4: MARKET -->

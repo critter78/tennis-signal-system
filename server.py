@@ -2576,9 +2576,30 @@ def api_refresh():
     logger.info("API REFRESH: Full pipeline starting")
     logger.info("=" * 50)
 
+    # Step 0: Fetch fresh TML match data (2016-2026 ATP with serve stats)
+    try:
+        logger.info("[0/7] Fetching TML live data...")
+        tml_script = BASE_DIR / "12_tml_live_fetch.py"
+        if tml_script.exists():
+            r = subprocess.run(
+                ["python3", str(tml_script), "--recent"],
+                cwd=str(BASE_DIR), capture_output=True, text=True, timeout=120
+            )
+            results["tml_fetch"] = {
+                "status": "ok" if r.returncode == 0 else "error",
+                "output": (r.stdout or "")[-300:],
+            }
+            if r.returncode != 0:
+                logger.warning(f"TML fetch failed: {r.stderr[-200:]}")
+        else:
+            results["tml_fetch"] = {"status": "skipped", "reason": "12_tml_live_fetch.py not found"}
+    except Exception as e:
+        results["tml_fetch"] = {"status": "error", "error": str(e)}
+        logger.warning(f"TML fetch exception: {e}")
+
     # Step 1: Fetch live rankings
     try:
-        logger.info("[1/4] Fetching live rankings...")
+        logger.info("[1/7] Fetching live rankings...")
         r = subprocess.run(
             ["python3", str(BASE_DIR / "09_rankings_fetcher.py"), "--refresh"],
             cwd=str(BASE_DIR), capture_output=True, text=True, timeout=60

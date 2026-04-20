@@ -1824,6 +1824,21 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
             "sb_losses_ytd":    sb.get("losses_ytd"),
             "sa_ytd_year":      sa.get("ytd_year"),
             "sb_ytd_year":      sb.get("ytd_year"),
+            # ── SERVE & RETURN STATS (from TML data) ──
+            "sa_aces":          sa.get("aces_per_match"),
+            "sb_aces":          sb.get("aces_per_match"),
+            "sa_dfs":           sa.get("dfs_per_match"),
+            "sb_dfs":           sb.get("dfs_per_match"),
+            "sa_first_in":      sa.get("first_in_pct"),
+            "sb_first_in":      sb.get("first_in_pct"),
+            "sa_first_won":     sa.get("first_won_pct"),
+            "sb_first_won":     sb.get("first_won_pct"),
+            "sa_second_won":    sa.get("second_won_pct"),
+            "sb_second_won":    sb.get("second_won_pct"),
+            "sa_bp_saved":      sa.get("bp_saved_pct"),
+            "sb_bp_saved":      sb.get("bp_saved_pct"),
+            "sa_bp_convert":    sa.get("bp_convert_pct"),
+            "sb_bp_convert":    sb.get("bp_convert_pct"),
             # ── ELO INTELLIGENCE ──
             "elo_prob_a":           elo_intel.get("elo_prob_a"),
             "elo_prob_b":           elo_intel.get("elo_prob_b"),
@@ -2181,6 +2196,14 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
             "sb_losses_ytd":   None,
             "sa_ytd_year":     sa.get("ytd_year"),
             "sb_ytd_year":     None,
+            # ── SERVE & RETURN STATS (from TML data) ──
+            "sa_aces":         sa.get("aces_per_match"),  "sb_aces": None,
+            "sa_dfs":          sa.get("dfs_per_match"),   "sb_dfs": None,
+            "sa_first_in":     sa.get("first_in_pct"),    "sb_first_in": None,
+            "sa_first_won":    sa.get("first_won_pct"),   "sb_first_won": None,
+            "sa_second_won":   sa.get("second_won_pct"),  "sb_second_won": None,
+            "sa_bp_saved":     sa.get("bp_saved_pct"),    "sb_bp_saved": None,
+            "sa_bp_convert":   sa.get("bp_convert_pct"),  "sb_bp_convert": None,
             # ── WHALE TRACKER ──
             "whale_data":      whale_data,
         })
@@ -4003,14 +4026,68 @@ def main():
         model, feature_cols = bundle["model"], bundle["feature_cols"]
         print(f"  Model v{meta['version']} loaded (AUC {meta['mean_auc']:.4f})")
 
-    # Load historical data
+    # Load historical data — merge TML (2016-2026 ATP) + Sackmann (2018-2024 ATP+WTA)
     hist_path = DATA_DIR / "raw" / "matches_combined.parquet"
+    tml_path = DATA_DIR / "tml_history_10y.parquet"
+
+    frames = []
+
+    # 1) Load existing Sackmann data (has WTA)
     if hist_path.exists():
-        df_hist = pd.read_parquet(hist_path)
+        df_sack = pd.read_parquet(hist_path)
+        df_sack["date"] = pd.to_datetime(df_sack["date"], errors="coerce")
+        df_sack["_src"] = "sackmann"
+        frames.append(df_sack)
+        print(f"  Sackmann data: {len(df_sack):,} matches (ATP+WTA 2018-2024)")
+
+    # 2) Load TML data (ATP main + challenger, 2016-2026 with serve stats)
+    if tml_path.exists():
+        df_tml = pd.read_parquet(tml_path)
+        # Normalize TML columns to match expected format
+        tml_rename = {
+            "winner_name": "winner",
+            "loser_name": "loser",
+            "tourney_name": "tournament",
+            "winner_rank": "w_rank",
+            "loser_rank": "l_rank",
+            "winner_rank_points": "w_rank_pts",
+            "loser_rank_points": "l_rank_pts",
+        }
+        df_tml = df_tml.rename(columns={k: v for k, v in tml_rename.items() if k in df_tml.columns})
+        # Use match_date as the primary date column (already datetime from 12_tml_live_fetch)
+        if "match_date" in df_tml.columns:
+            df_tml["date"] = pd.to_datetime(df_tml["match_date"], errors="coerce")
+        elif "tourney_date" in df_tml.columns:
+            df_tml["date"] = pd.to_datetime(df_tml["tourney_date"].astype(str), format="%Y%m%d", errors="coerce")
+        df_tml["_src"] = "tml"
+        # TML is ATP only — mark it
+        if "tour" not in df_tml.columns:
+            df_tml["tour"] = "atp"
+        frames.append(df_tml)
+        print(f"  TML data: {len(df_tml):,} matches (ATP 2016-2026)")
+
+    if frames:
+        df_hist = pd.concat(frames, ignore_index=True)
         df_hist["date"] = pd.to_datetime(df_hist["date"], errors="coerce")
-        print(f"  Historical data: {len(df_hist):,} matches")
+
+        # Dedup overlapping years: prefer TML (has 2025-2026 + better serve coverage)
+        # Key: winner + loser + date + tournament
+        before = len(df_hist)
+        df_hist["_dedup_key"] = (
+            df_hist["winner"].astype(str).str.lower().str.strip() + "|" +
+            df_hist["loser"].astype(str).str.lower().str.strip() + "|" +
+            df_hist["date"].astype(str) + "|" +
+            df_hist["tournament"].astype(str).str.lower().str.strip()
+        )
+        # Keep TML rows over Sackmann for duplicates (TML has better serve data + is more current)
+        df_hist = df_hist.sort_values("_src", ascending=True)  # sackmann first, tml second
+        df_hist = df_hist.drop_duplicates(subset="_dedup_key", keep="last")  # keep tml
+        df_hist = df_hist.drop(columns=["_dedup_key", "_src"], errors="ignore")
+        df_hist = df_hist.sort_values("date").reset_index(drop=True)
+        dupes = before - len(df_hist)
+        print(f"  Merged: {len(df_hist):,} unique matches ({dupes:,} duplicates removed)")
     else:
-        print("  No historical data — run 01_data_pipeline.py first")
+        print("  No historical data — run 01_data_pipeline.py or 12_tml_live_fetch.py")
         df_hist = pd.DataFrame(columns=["winner","loser","date","surface"])
 
     # Fetch live markets
