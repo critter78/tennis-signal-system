@@ -276,24 +276,51 @@ def get_system_status():
         }
 
 
+_dashboard_cache = {"html": None, "ts": 0, "picks_ts": 0}
+
+def _get_cached_dashboard():
+    """Return cached dashboard HTML, rebuilding if stale (>30s) or picks changed."""
+    import time
+    now = time.time()
+    picks_mtime = PICKS_FILE.stat().st_mtime if PICKS_FILE.exists() else 0
+    tmpl_mtime = DASHBOARD_TEMPLATE.stat().st_mtime if DASHBOARD_TEMPLATE.exists() else 0
+
+    if (_dashboard_cache["html"]
+        and now - _dashboard_cache["ts"] < 30
+        and picks_mtime == _dashboard_cache["picks_ts"]
+        and tmpl_mtime == _dashboard_cache.get("tmpl_ts", 0)):
+        return _dashboard_cache["html"], load_picks_jsonl()
+
+    # Rebuild
+    with open(DASHBOARD_TEMPLATE, 'r') as f:
+        content = f.read()
+    picks_data = load_picks_jsonl()
+    picks_json = json.dumps(picks_data, separators=(',', ':'))  # compact JSON
+    if "window.PICKS_DATA = [];" in content:
+        content = content.replace("window.PICKS_DATA = [];", f"window.PICKS_DATA = {picks_json};")
+    else:
+        content = content.replace("window.PICKS_DATA = []", f"window.PICKS_DATA = {picks_json}")
+
+    _dashboard_cache["html"] = content
+    _dashboard_cache["ts"] = now
+    _dashboard_cache["picks_ts"] = picks_mtime
+    _dashboard_cache["tmpl_ts"] = tmpl_mtime
+    return content, picks_data
+
+
 def serve_dashboard(is_shared=False, share_expires=None):
     """Serve the dashboard HTML with picks data injected."""
     try:
-        logger.info(f"DASHBOARD_TEMPLATE path: {DASHBOARD_TEMPLATE}")
-        logger.info(f"DASHBOARD_TEMPLATE exists: {DASHBOARD_TEMPLATE.exists()}")
         if DASHBOARD_TEMPLATE.exists():
-            picks_data = load_picks_jsonl()
-            logger.info(f"Serving from template: {DASHBOARD_TEMPLATE} ({DASHBOARD_TEMPLATE.stat().st_size} bytes)")
-            with open(DASHBOARD_TEMPLATE, 'r') as f:
-                content = f.read()
-            logger.info(f"Template has myOutcome: {'myOutcome' in content}")
+            if not is_shared:
+                # Fast path: serve cached dashboard
+                content, _ = _get_cached_dashboard()
+                response = make_response(content)
+                response.headers["Content-Type"] = "text/html"
+                return response
 
-            picks_json = json.dumps(picks_data, indent=2)
-            # Handle both with and without semicolon
-            if "window.PICKS_DATA = [];" in content:
-                content = content.replace("window.PICKS_DATA = [];", f"window.PICKS_DATA = {picks_json};")
-            else:
-                content = content.replace("window.PICKS_DATA = []", f"window.PICKS_DATA = {picks_json}")
+            # Shared view needs extra processing
+            content, picks_data = _get_cached_dashboard()
 
             # For shared views: only show Today's Signals, hide everything else
             if is_shared and share_expires:
@@ -366,9 +393,16 @@ def serve_dashboard(is_shared=False, share_expires=None):
                         clean = {k: v for k, v in p.items()
                                  if k not in ("outcome", "pnl", "actual_winner", "resolved_at", "myOutcome", "myStake", "myOdds")}
                         shared_picks.append(clean)
-                shared_json = json.dumps(shared_picks, indent=2)
-                content = content.replace(f"window.PICKS_DATA = {json.dumps(picks_data, indent=2)};", f"window.PICKS_DATA = {shared_json};")
-                content = content.replace(f"window.PICKS_DATA = {json.dumps(picks_data, indent=2)}", f"window.PICKS_DATA = {shared_json}")
+                shared_json = json.dumps(shared_picks, separators=(',', ':'))
+                # Replace the full picks data with shared-only subset
+                import re
+                content = re.sub(
+                    r'window\.PICKS_DATA\s*=\s*\[.*?\];?',
+                    f'window.PICKS_DATA = {shared_json};',
+                    content,
+                    count=1,
+                    flags=re.DOTALL
+                )
 
             response = make_response(content)
             response.headers["Content-Type"] = "text/html"
