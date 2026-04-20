@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CritterLabs Signal Card — Mockup v5.1</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0f1117;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #e0e0e0;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 30px 16px; min-height: 100vh;
+}
+h1 { color: #d4740a; font-size: 18px; margin-bottom: 4px; }
+.subtitle { color: #6c757d; font-size: 12px; margin-bottom: 28px; }
+.cards-wrap { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; max-width: 1020px; }
+
+/* ═══ CARD ═══ */
+.sig-card {
+    background: #1a1d27; border-radius: 10px; width: 470px;
+    overflow: hidden; border: 1px solid #2a2d37;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 8px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* ═══ HEADER (#1) ═══ */
+.card-hdr {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, #1a1d27 0%, #22252f 100%);
+    border-bottom: 1px solid #2a2d37;
+}
+.hdr-left {}
+.hdr-names {
+    font-size: 15px; font-weight: 700; color: #fff;
+    background: linear-gradient(180deg, #10121a 0%, #161922 100%);
+    border: 1px solid #2a2d37; border-radius: 5px;
+    padding: 5px 12px; margin-bottom: 4px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), inset 0 0 12px rgba(212,116,10,0.22), inset 0 -1px 6px rgba(212,116,10,0.15), inset 1px 0 6px rgba(212,116,10,0.10), inset -1px 0 6px rgba(212,116,10,0.10), 0 1px 0 rgba(255,255,255,0.05);
+}
+.hdr-names .pa { color: #fff; }
+.hdr-names .vs { color: #6c757d; font-weight: 400; font-size: 12px; margin: 0 4px; }
+.hdr-names .pb { color: #ccc; }
+.active-tag { display: inline-block; background: #d4740a; color: #fff; font-size: 8px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; margin-top: 3px; }
+.hdr-right { text-align: right; font-size: 10px; line-height: 1.6; }
+.hdr-tourney { color: #e0e0e0; font-weight: 600; }
+.hdr-surface { font-weight: 700; }
+.hdr-date { color: #6c757d; }
+.hdr-round { color: #888; }
+
+/* LOW DATA */
+.low-data { background: #3e2723; border-bottom: 1px solid #f4433640; color: #ff8a80; font-size: 10px; padding: 6px 14px; display: flex; align-items: center; gap: 6px; }
+
+/* ═══ TAB BAR ═══ */
+.tab-bar { display: flex; background: #12141c; border-bottom: 2px solid #2a2d37; padding: 0 6px; }
+.tab-btn {
+    flex: 1; padding: 8px 4px; text-align: center;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: #6c757d; background: transparent; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
+}
+.tab-btn:hover { color: #aaa; }
+.tab-btn.active { color: #d4740a; border-bottom-color: #d4740a; background: #1a1d2780; }
+.tab-btn .ti { font-size: 12px; display: block; margin-bottom: 1px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ═══ PICK SECTION (#2, #10) ═══ */
+.pick-area { padding: 12px 14px 8px; }
+.pick-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.pick-left {}
+.pick-lbl { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.pick-name { font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+
+/* Badge row (#2 & #10 — all badges same side, uniform) */
+.badge-line { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.bdg {
+    font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 3px;
+    letter-spacing: 0.3px; text-transform: uppercase; cursor: help;
+    min-width: 56px; text-align: center;
+}
+
+/* Right side: WIN PROB + EDGE CONF stacked, same width (#2) */
+.pick-right { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.pbox {
+    padding: 5px 0; text-align: center; width: 100px; border-radius: 4px;
+}
+.pbox .bl { font-size: 7px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1px; }
+.pbox .bv { font-size: 15px; font-weight: 700; }
+
+/* ═══ NUMBER GRIDS (now 3 rows of 4) ═══ */
+.nbox { padding: 0 14px 6px; }
+.ngrid { display: grid; gap: 1px; background: #2a2d37; border-radius: 6px; overflow: hidden; }
+.g4 { grid-template-columns: repeat(4,1fr); }
+.g3 { grid-template-columns: repeat(3,1fr); }
+.nc { background: #1a1d27; padding: 7px 4px; text-align: center; }
+.nc .nl { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
+.nc .nv { font-size: 14px; font-weight: 700; }
+.divider { height: 1px; background: linear-gradient(90deg, transparent 0%, #333 15%, #333 85%, transparent 100%); margin: 2px 14px 0; }
+
+/* ═══ 3-COL STATS (#4, #5, #6) ═══ */
+.s3 { padding: 10px 14px; }
+.s3h { display: grid; grid-template-columns: 1fr auto 1fr; margin-bottom: 6px; }
+.s3h .ph { font-size: 12px; font-weight: 700; color: #e0e0e0; padding-bottom: 4px; border-bottom: 1px solid #333; }
+.s3h .pr { text-align: right; }
+.s3h .pc { text-align: center; min-width: 100px; padding: 0 6px; }
+.s3r {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    padding: 4px 0; border-bottom: 1px solid #1f222c;
+}
+.s3r:last-child { border-bottom: none; }
+.vl { text-align: left; font-size: 11.5px; color: #ddd; }
+.vr { text-align: right; font-size: 11.5px; color: #ddd; }
+.vc { text-align: center; font-size: 10px; color: #888; min-width: 100px; padding: 0 6px; font-weight: 500; }
+/* Winner check — subtle gold/silver (#5) */
+.win-mark { display: inline-block; width: 14px; height: 14px; vertical-align: middle; margin: 0 2px; opacity: 0.85; }
+.vg { color: #4caf50; }
+.vb { color: #f44336; }
+.vo { color: #d4740a; font-weight: 700; }
+.vd { color: #555; }
+.vblue { color: #42a5f5; }
+
+/* H2H (#3) */
+.h2h-bar { text-align: center; padding: 5px 0; margin: 2px 0; border-top: 1px solid #2a2d37; border-bottom: 1px solid #2a2d37; }
+.h2h-label { font-size: 8px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1px; }
+.h2h-v { font-size: 16px; font-weight: 700; color: #d4740a; }
+
+/* ═══ ELO BOX (#8, #11) ═══ */
+.elo-box { margin: 8px 14px; padding: 8px 10px; background: #12141c; border-radius: 6px; border: 1px solid #2a2d37; }
+.elo-title { font-size: 9px; color: #42a5f5; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; text-align: center; }
+.elo-prob-row { text-align: center; font-size: 10px; color: #ccc; margin-top: 6px; padding-top: 5px; border-top: 1px solid #2a2d37; }
+.elo-prob-val { font-weight: 700; font-size: 12px; }
+
+/* ═══ DEEP STATS ═══ */
+.clutch-header {
+    padding: 8px 14px; font-size: 10px; color: #42a5f5; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid #2a2d37; background: #12141c;
+}
+.clutch-score-row {
+    display: flex; justify-content: space-around; padding: 10px 14px;
+    background: #12141c; border-bottom: 1px solid #2a2d37;
+}
+.clutch-player { text-align: center; }
+.clutch-name { font-size: 10px; color: #888; margin-bottom: 2px; }
+.clutch-val { font-size: 22px; font-weight: 800; }
+.clutch-label { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px; }
+.clutch-vs { display: flex; align-items: center; color: #333; font-size: 12px; font-weight: 700; }
+.bar-section { padding: 8px 14px; }
+.bar-row { margin-bottom: 8px; }
+.bar-label { font-size: 9px; color: #999; margin-bottom: 3px; display: flex; justify-content: space-between; }
+.bar-track { display: flex; height: 18px; border-radius: 3px; overflow: hidden; background: #2a2d37; position: relative; }
+.bar-a { background: linear-gradient(90deg, #d4740a, #e8943a); display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
+.bar-b { background: linear-gradient(270deg, #42a5f5, #64b5f6); display: flex; align-items: center; justify-content: flex-start; padding-left: 4px; }
+.bar-val { font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+.bar-center { position: absolute; left: 50%; transform: translateX(-50%); top: 0; bottom: 0; width: 2px; background: #555; z-index: 1; }
+
+/* ═══ MARKET TAB (#13, #14, #15) ═══ */
+.market-section { padding: 12px 14px; }
+.market-header { font-size: 10px; color: #d4740a; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; text-align: center; }
+.market-stat { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-bottom: 1px solid #1f222c; color: #ddd; }
+.market-stat:last-child { border-bottom: none; }
+.market-stat .ml { color: #888; }
+/* Top Dogs (#13) centered header */
+.topdogs-hdr { text-align: center; font-size: 11px; font-weight: 700; color: #d4740a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.whale-row { display: flex; justify-content: space-between; font-size: 10.5px; padding: 3px 0; color: #ddd; }
+.waddr { color: #aaa; font-family: monospace; font-size: 9px; }
+
+/* ═══ FOOTER ═══ */
+.card-foot { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-top: 1px solid #2a2d37; }
+.bet-btn { background: #d4740a; color: #fff; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; }
+.bet-btn.on { background: #4caf50; }
+.plink { color: #42a5f5; font-size: 11px; text-decoration: none; }
+.live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; margin-right: 4px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+
+/* ═══ SYSTEM TRACK RECORD BADGE ═══ */
+.sys-wr-badge {
+    font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 3px;
+    letter-spacing: 0.3px; text-transform: uppercase; cursor: help;
+    min-width: 56px; text-align: center;
+    background: #0d2137; color: #42a5f5; border: 1px solid #42a5f540;
+}
+
+/* ═══ PEAK POTENTIAL STRIP ═══ */
+.peak-strip {
+    margin: 2px 14px 8px; padding: 8px 10px;
+    background: #12141c; border-radius: 6px; border: 1px solid #2a2d37;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.peak-left { display: flex; flex-direction: column; gap: 1px; }
+.peak-label { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+.peak-value { font-size: 14px; font-weight: 700; color: #4caf50; }
+.peak-sub { font-size: 9px; color: #888; }
+.peak-right { text-align: right; }
+.peak-bar-wrap { display: flex; align-items: center; gap: 6px; }
+.peak-bar-track { width: 90px; height: 6px; background: #2a2d37; border-radius: 3px; overflow: hidden; }
+.peak-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #d4740a, #4caf50); }
+.peak-bar-label { font-size: 8px; color: #888; }
+.peak-hit-rate { font-size: 11px; font-weight: 700; color: #4caf50; }
+.peak-hit-sub { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.3px; }
+
+/* NOTES */
+.notes { max-width: 920px; margin-top: 40px; padding: 20px; background: #1a1d27; border-radius: 10px; border: 1px solid #2a2d37; }
+.notes h2 { color: #d4740a; font-size: 14px; margin-bottom: 12px; }
+.notes li { color: #aaa; font-size: 12px; line-height: 1.9; list-style: none; }
+.notes li strong { color: #e0e0e0; }
+.tag { display: inline-block; font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-right: 4px; }
+.tn { background: #1b5e20; color: #4caf50; }
+.tc { background: #4a2800; color: #d4740a; }
+
+/* Dog logo SVG inline for winner marks */
+</style>
+</head>
+<body>
+
+<h1>SIGNAL CARD — MOCKUP v5.1</h1>
+<p class="subtitle">CritterLabs Tennis Betting System — Racquets, plaque names, depth, return stats</p>
+
+<div class="cards-wrap">
+
+<!-- ══════════════════════════════════════════ -->
+<!-- CARD 1: Shapovalov vs Molcan (DATA-RICH)  -->
+<!-- ══════════════════════════════════════════ -->
+<div class="sig-card" id="card1">
+
+    <!-- HEADER (#1) — Names left, Tournament/Surface/Date/Round right -->
+    <div class="card-hdr">
+        <div class="hdr-left">
+            <div class="hdr-names"><span class="pa">Denis Shapovalov</span><span class="vs">vs</span><span class="pb">Alex Molcan</span></div>
+        </div>
+        <div class="hdr-right">
+            <div class="hdr-tourney">BMW Open <span class="hdr-surface" style="color:#c17a2a">| Clay</span></div>
+            <div class="hdr-date">Apr 20, 2026</div>
+            <div class="hdr-round">Round 2</div>
+        </div>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab(this,'signal')"><span class="ti">&#9889;</span>Signal</button>
+        <button class="tab-btn" onclick="switchTab(this,'matchup')"><span class="ti">&#9878;</span>Matchup</button>
+        <button class="tab-btn" onclick="switchTab(this,'deep')"><span class="ti">&#128200;</span>Deep Stats</button>
+        <button class="tab-btn" onclick="switchTab(this,'market')"><span class="ti">&#128176;</span>Market</button>
+    </div>
+
+    <!-- ═══ TAB 1: SIGNAL ═══ -->
+    <div class="tab-panel active" data-tab="signal">
+        <div class="pick-area">
+            <div class="pick-top">
+                <div class="pick-left">
+                    <div class="pick-lbl">PICK</div>
+                    <div class="pick-name">Denis Shapovalov</div>
+                    <!-- (#10) All badges on left side, uniform sizing -->
+                    <div class="badge-line">
+                        <span class="bdg" style="background:#4a2800;color:#d4740a;border:1px solid #d4740a40" title="BASE 58.2% ✓ | ELO 62.1% ✓ | SURF ELO 44.3% ✗ | LSTM 55.7% ✓">3/4 AGREE</span>
+                        <span class="bdg" style="background:#1b5e20;color:#4caf50;border:1px solid #4caf5040">SOLID</span>
+                        <span class="bdg" style="background:#1a237e;color:#42a5f5;border:1px solid #42a5f540">ELO PICK</span>
+                        <span class="sys-wr-badge" title="System picks winners 74% of the time when model probability is 50-60%. Based on 62 resolved matches in this range.">SYS WR: 74%</span>
+                    </div>
+                </div>
+                <!-- (#2) WIN PROB + EDGE CONF same width, stacked neatly -->
+                <div class="pick-right">
+                    <div class="pbox" style="background:#1b5e20;border:1px solid #4caf50">
+                        <div class="bl" style="color:#81c784">WIN PROB</div>
+                        <div class="bv" style="color:#4caf50">55.7%</div>
+                    </div>
+                    <div class="pbox" style="background:#4a2800;border:1px solid #d4740a">
+                        <div class="bl" style="color:#ffb74d">EDGE CONF</div>
+                        <div class="bv" style="color:#d4740a">MODERATE</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- (#10) 3 rows of 4 — Consensus number moves to row 3 -->
+        <div class="nbox"><div class="ngrid g4">
+            <div class="nc"><div class="nl">Poly Price</div><div class="nv vd">42.3c</div></div>
+            <div class="nc"><div class="nl">Base Model</div><div class="nv">58.2%</div></div>
+            <div class="nc"><div class="nl">LSTM Model</div><div class="nv vblue">55.7%</div></div>
+            <div class="nc"><div class="nl">Kelly</div><div class="nv vo">5.8%</div></div>
+        </div></div>
+        <div class="nbox"><div class="ngrid g4">
+            <div class="nc"><div class="nl">Base Edge</div><div class="nv vo">+15.9%</div></div>
+            <div class="nc"><div class="nl">LSTM Edge</div><div class="nv vblue">+13.4%</div></div>
+            <div class="nc"><div class="nl">LSTM Adj</div><div class="nv vb">-2.5%</div></div>
+            <div class="nc"><div class="nl">Combined</div><div class="nv vg" style="font-weight:800">+13.4%</div></div>
+        </div></div>
+        <!-- Row 3: ELO Prob, Surf ELO, ELO Edge, Consensus (#10) -->
+        <div class="nbox"><div class="ngrid g4">
+            <div class="nc"><div class="nl">ELO Prob</div><div class="nv vblue">62.1%</div></div>
+            <div class="nc"><div class="nl">Surf ELO</div><div class="nv vblue">44.3%</div></div>
+            <div class="nc"><div class="nl">ELO Edge</div><div class="nv vg">+19.8%</div></div>
+            <div class="nc"><div class="nl">Consensus</div><div class="nv" style="color:#e0e0e0;font-weight:800">55.8%</div></div>
+        </div></div>
+
+        <!-- PEAK POTENTIAL STRIP -->
+        <div class="peak-strip" title="Based on 120 historical picks. Picks at similar entry prices (40-55c) see +40-100% peak movement during the match 97% of the time.">
+            <div class="peak-left">
+                <div class="peak-label">Peak Potential</div>
+                <div class="peak-value">+40% — +100%</div>
+                <div class="peak-sub">Expected price movement during match</div>
+            </div>
+            <div class="peak-right">
+                <div class="peak-hit-rate">97%</div>
+                <div class="peak-hit-sub">Hit 10%+ peak</div>
+                <div style="margin-top:4px">
+                    <div class="peak-bar-wrap">
+                        <div class="peak-bar-track"><div class="peak-bar-fill" style="width:97%"></div></div>
+                        <div class="peak-bar-label">120 picks</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ TAB 2: MATCHUP ═══ -->
+    <div class="tab-panel" data-tab="matchup">
+        <div class="s3">
+            <div class="s3h">
+                <div class="ph">Denis Shapovalov</div>
+                <div class="ph pc"></div>
+                <div class="ph pr">Alex Molcan</div>
+            </div>
+
+            <!-- (#3) H2H — small label, just the score -->
+            <div class="h2h-bar">
+                <div class="h2h-label">H2H</div>
+                <div class="h2h-v">2 — 1</div>
+            </div>
+
+            <!-- (#4, #5) Stats — brighter text, winner gets dog mark -->
+            <div class="s3r">
+                <div class="vl"><strong class="vo">#74</strong> <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div>
+                <div class="vc">Rank</div>
+                <div class="vr"><strong class="vo">#128</strong></div>
+            </div>
+            <div class="s3r">
+                <div class="vl">54.2% <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div>
+                <div class="vc">Surface WR</div>
+                <div class="vr">46.1%</div>
+            </div>
+            <div class="s3r">
+                <div class="vl">6/10 <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div>
+                <div class="vc">Momentum</div>
+                <div class="vr">4/10</div>
+            </div>
+            <div class="s3r">
+                <div class="vl">28 matches <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div>
+                <div class="vc">Activity</div>
+                <div class="vr">22 matches</div>
+            </div>
+            <div class="s3r">
+                <div class="vl">3d <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div>
+                <div class="vc">Rest</div>
+                <div class="vr">5d</div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- (#6) Advanced stats — brighter -->
+        <div style="padding:4px 14px 0"><div style="font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600; margin-bottom:4px">Advanced Stats</div></div>
+        <div class="s3" style="padding-top:2px">
+            <div class="s3h">
+                <div class="ph" style="font-size:11px">Denis Shapovalov</div><div class="ph pc"></div><div class="ph pr" style="font-size:11px">Alex Molcan</div>
+            </div>
+            <div class="s3r">
+                <div class="vl">1W-3L</div>
+                <div class="vc">vs Top 10</div>
+                <div class="vr">0W-2L</div>
+            </div>
+            <div class="s3r">
+                <div class="vl">4W-6L <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div>
+                <div class="vc">vs Top 20</div>
+                <div class="vr">1W-5L</div>
+            </div>
+            <div class="s3r">
+                <div class="vl"><span class="vg">&#9650;18</span> <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div>
+                <div class="vc">Rank Move 12m</div>
+                <div class="vr"><span class="vb">&#9660;22</span></div>
+            </div>
+            <div class="s3r">
+                <div class="vl"><span class="vg">&#9650;12</span> <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div>
+                <div class="vc">Rank Move 6m</div>
+                <div class="vr"><span class="vb">&#9660;8</span></div>
+            </div>
+            <div class="s3r">
+                <div class="vl"><span class="vg">&#9650;5</span> <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div>
+                <div class="vc">Rank Move 3m</div>
+                <div class="vr">&rarr;0</div>
+            </div>
+            <div class="s3r">
+                <div class="vl">18W-11L <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div>
+                <div class="vc">YTD Record</div>
+                <div class="vr">10W-14L</div>
+            </div>
+        </div>
+
+        <!-- (#8, #11) ELO — centered title, consistent labels, win prob from gap -->
+        <div class="elo-box">
+            <div class="elo-title">ELO Details</div>
+            <div class="s3" style="padding:0">
+                <div class="s3h">
+                    <div class="ph" style="font-size:11px">Shapovalov</div><div class="ph pc"></div><div class="ph pr" style="font-size:11px">Molcan</div>
+                </div>
+                <div class="s3r">
+                    <div class="vl">1680 <span style="color:#888;font-size:9px">(P72)</span> <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div>
+                    <div class="vc">ELO</div>
+                    <div class="vr">1585 <span style="color:#888;font-size:9px">(P58)</span></div>
+                </div>
+                <div class="s3r">
+                    <div class="vl">1590</div>
+                    <div class="vc">Surface ELO</div>
+                    <div class="vr">1620 <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div>
+                </div>
+            </div>
+            <!-- (#11) Gap → Win Prob instead of raw mismatch number -->
+            <div class="elo-prob-row">
+                ELO Gap: 95pts &rarr; <span class="elo-prob-val vg">~64% Shapovalov</span>
+                &nbsp;&middot;&nbsp;
+                Surface Gap: 30pts &rarr; <span class="elo-prob-val vblue">~54% Molcan</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ TAB 3: DEEP STATS ═══ -->
+    <div class="tab-panel" data-tab="deep">
+        <div class="clutch-score-row">
+            <div class="clutch-player">
+                <div class="clutch-name">Shapovalov</div>
+                <div class="clutch-val vo">62</div>
+                <div class="clutch-label">Clutch Score</div>
+            </div>
+            <div class="clutch-vs">vs</div>
+            <div class="clutch-player">
+                <div class="clutch-name">Molcan</div>
+                <div class="clutch-val vblue">54</div>
+                <div class="clutch-label">Clutch Score</div>
+            </div>
+        </div>
+        <div class="bar-section">
+            <div class="bar-row">
+                <div class="bar-label"><span>BP Save Rate</span><span style="font-size:8px;color:#555">clutch serving</span></div>
+                <div class="bar-track">
+                    <div class="bar-a" style="width:55%"><span class="bar-val">65.9%</span></div>
+                    <div class="bar-b" style="width:45%"><span class="bar-val">58.2%</span></div>
+                    <div class="bar-center"></div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label"><span>BP Conversion</span><span style="font-size:8px;color:#555">clutch returning</span></div>
+                <div class="bar-track">
+                    <div class="bar-a" style="width:49%"><span class="bar-val">38.3%</span></div>
+                    <div class="bar-b" style="width:51%"><span class="bar-val">41.1%</span></div>
+                    <div class="bar-center"></div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label"><span>Tiebreak WR</span><span style="font-size:8px;color:#555">pressure sets</span></div>
+                <div class="bar-track">
+                    <div class="bar-a" style="width:47%"><span class="bar-val">47%</span></div>
+                    <div class="bar-b" style="width:53%"><span class="bar-val">52%</span></div>
+                    <div class="bar-center"></div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label"><span>Comeback Win %</span><span style="font-size:8px;color:#555">resilience</span></div>
+                <div class="bar-track">
+                    <div class="bar-a" style="width:38%"><span class="bar-val">12%</span></div>
+                    <div class="bar-b" style="width:62%"><span class="bar-val">18%</span></div>
+                    <div class="bar-center"></div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label"><span>Straight Set Win %</span><span style="font-size:8px;color:#555">dominance</span></div>
+                <div class="bar-track">
+                    <div class="bar-a" style="width:51%"><span class="bar-val">51%</span></div>
+                    <div class="bar-b" style="width:49%"><span class="bar-val">48%</span></div>
+                    <div class="bar-center"></div>
+                </div>
+            </div>
+        </div>
+        <div class="divider"></div>
+        <div class="clutch-header">Serve &amp; Return</div>
+        <div class="s3" style="padding-top:6px">
+            <div class="s3h">
+                <div class="ph" style="font-size:11px">Shapovalov</div><div class="ph pc"></div><div class="ph pr" style="font-size:11px">Molcan</div>
+            </div>
+            <div class="s3r"><div class="vl">10.1% <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div><div class="vc">Ace Rate</div><div class="vr">6.3%</div></div>
+            <div class="s3r"><div class="vl">76.2% <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div><div class="vc">1st Serve Win</div><div class="vr">71.8%</div></div>
+            <div class="s3r"><div class="vl">82.4% <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div><div class="vc">Svc Games Won</div><div class="vr">78.1%</div></div>
+            <div class="s3r"><div class="vl">34.8%</div><div class="vc">Return Pts Won</div><div class="vr">37.2% <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div></div>
+            <div class="s3r"><div class="vl">22.6% <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E" title="Advantage"></div><div class="vc">Return Svc Brk</div><div class="vr">19.3%</div></div>
+            <div class="s3r"><div class="vl">4.2%</div><div class="vc">Double Fault %</div><div class="vr">3.1% <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div></div>
+            <div class="s3r"><div class="vl">116 min</div><div class="vc">Avg Duration</div><div class="vr">102 min <img class="win-mark" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='55' cy='32' rx='22' ry='28' fill='none' stroke='%234caf50' stroke-width='5'/%3E%3Cline x1='55' y1='60' x2='38' y2='92' stroke='%234caf50' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='42' y1='32' x2='68' y2='32' stroke='%234caf5080' stroke-width='2'/%3E%3Cline x1='55' y1='10' x2='55' y2='55' stroke='%234caf5080' stroke-width='2'/%3E%3C/svg%3E"></div></div>
+        </div>
+    </div>
+
+    <!-- ═══ TAB 4: MARKET ═══ -->
+    <div class="tab-panel" data-tab="market">
+        <div class="market-section">
+            <div class="market-header">&#x1F4B0; Market Overview</div>
+            <div class="market-stat"><span class="ml">Total Volume</span><span style="color:#4caf50;font-weight:700">$583,200</span></div>
+            <div class="market-stat"><span class="ml">Liquidity</span><span>$42,100</span></div>
+            <div class="market-stat"><span class="ml">Poly Price (live)</span><span><span class="live-dot"></span>Shapovalov 42.3c &middot; Molcan 57.7c</span></div>
+            <div class="market-stat"><span class="ml">Price at Signal</span><span style="color:#888">38.5c <span class="vg">&uarr;3.8c since</span></span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- (#13) Top Dogs — centered, with dog icon -->
+        <div class="market-section">
+            <div class="topdogs-hdr">&#x1F43A; Top Dogs</div>
+            <div style="font-size:9px;color:#888;margin-bottom:6px;text-align:center">Wallets holding &gt;5% of total volume</div>
+
+            <!-- (#14) Player names aligned left/right -->
+            <div class="s3h" style="margin-bottom:4px">
+                <div class="ph" style="font-size:11px">Shapovalov</div><div class="ph pc"></div><div class="ph pr" style="font-size:11px">Molcan</div>
+            </div>
+
+            <div class="whale-row">
+                <span><span class="waddr">0x7f2b...9d41</span></span>
+                <span style="color:#4caf50;font-weight:600">$51.2K <span style="color:#ffd740">(8.8%)</span></span>
+            </div>
+            <div class="whale-row" style="justify-content:flex-end">
+                <span style="color:#4caf50;font-weight:600">$40.1K <span style="color:#ffd740">(6.9%)</span></span>
+                <span style="margin-left:6px"><span class="waddr">0xa1c3...e582</span></span>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- (#15) Top 3 Bets — centered label, players left/right -->
+        <div class="market-section">
+            <div class="topdogs-hdr" style="font-size:10px; color:#888">Top 3 Bets</div>
+            <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:0; font-size:10px">
+                <!-- Left col: Shapovalov top 3 -->
+                <div>
+                    <div style="font-size:9px;color:#888;font-weight:600;margin-bottom:3px">Shapovalov</div>
+                    <div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#aaa">&#x1F947; 0x7f2b...9d41</span><span class="vg">$51.2K</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#aaa">&#x1F948; 0xd4e8...1a73</span><span class="vg">$18.5K</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#aaa">&#x1F949; 0x6b9c...f204</span><span class="vg">$12.1K</span></div>
+                </div>
+                <!-- Center spacer -->
+                <div style="width:16px"></div>
+                <!-- Right col: Molcan top 3 -->
+                <div>
+                    <div style="font-size:9px;color:#888;font-weight:600;margin-bottom:3px;text-align:right">Molcan</div>
+                    <div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#aaa">&#x1F947; 0xa1c3...e582</span><span class="vg">$40.1K</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#aaa">&#x1F948; 0x52af...b893</span><span class="vg">$22.3K</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#aaa">&#x1F949; 0xe7d1...4c56</span><span class="vg">$8.7K</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-foot">
+        <button class="bet-btn">Place Bet</button>
+        <a href="#" class="plink"><span class="live-dot"></span>Open on Polymarket &rarr;</a>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- CARD 2: Kopp vs Zhalgasbay (LOW DATA)     -->
+<!-- ══════════════════════════════════════════ -->
+<div class="sig-card" id="card2">
+
+    <div class="card-hdr">
+        <div class="hdr-left">
+            <div class="hdr-names"><span class="pa">Sandro Kopp</span><span class="vs">vs</span><span class="pb">Damir Zhalgasbay</span></div>
+            <div class="active-tag">ACTIVE BET</div>
+        </div>
+        <div class="hdr-right">
+            <div class="hdr-tourney">Shymkent <span class="hdr-surface">| Hard</span></div>
+            <div class="hdr-date">Apr 19, 2026</div>
+            <div class="hdr-round">Round 1</div>
+        </div>
+    </div>
+
+    <div class="low-data"><span style="font-size:14px">&#9888;</span><span><strong>LOW DATA</strong> — Minimal match history. Predictions may be unreliable.</span></div>
+
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab(this,'signal')"><span class="ti">&#9889;</span>Signal</button>
+        <button class="tab-btn" onclick="switchTab(this,'matchup')"><span class="ti">&#9878;</span>Matchup</button>
+        <button class="tab-btn" onclick="switchTab(this,'deep')"><span class="ti">&#128200;</span>Deep Stats</button>
+        <button class="tab-btn" onclick="switchTab(this,'market')"><span class="ti">&#128176;</span>Market</button>
+    </div>
+
+    <div class="tab-panel active" data-tab="signal">
+        <div class="pick-area">
+            <div class="pick-top">
+                <div class="pick-left">
+                    <div class="pick-lbl">PICK</div>
+                    <div class="pick-name">Damir Zhalgasbay</div>
+                    <div class="badge-line">
+                        <span class="bdg" style="background:#1b5e20;color:#4caf50;border:1px solid #4caf5040" title="BASE 69.3% ✓ | ELO 56.9% ✓ | SURF ELO 55.6% ✓ | LSTM 61.3% ✓">4/4 AGREE</span>
+                        <span class="bdg" style="background:#1b5e20;color:#4caf50;border:1px solid #4caf5040">BEST VALUE</span>
+                        <span class="sys-wr-badge" title="System picks winners 74% of the time when model probability is 60-70%. Based on 62 resolved matches in this range.">SYS WR: 74%</span>
+                    </div>
+                </div>
+                <div class="pick-right">
+                    <div class="pbox" style="background:#1b5e20;border:1px solid #4caf50">
+                        <div class="bl" style="color:#81c784">WIN PROB</div>
+                        <div class="bv" style="color:#4caf50">61.3%</div>
+                    </div>
+                    <div class="pbox" style="background:#4a2800;border:1px solid #d4740a">
+                        <div class="bl" style="color:#ffb74d">EDGE CONF</div>
+                        <div class="bv" style="color:#d4740a">STRONG</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="nbox"><div class="ngrid g4">
+            <div class="nc"><div class="nl">Poly Price</div><div class="nv vd">7.5c</div></div>
+            <div class="nc"><div class="nl">Base Model</div><div class="nv">69.3%</div></div>
+            <div class="nc"><div class="nl">LSTM Model</div><div class="nv vblue">61.3%</div></div>
+            <div class="nc"><div class="nl">Kelly</div><div class="nv vo">14.6%</div></div>
+        </div></div>
+        <div class="nbox"><div class="ngrid g4">
+            <div class="nc"><div class="nl">Base Edge</div><div class="nv vo">+61.8%</div></div>
+            <div class="nc"><div class="nl">LSTM Edge</div><div class="nv vblue">+69.8%</div></div>
+            <div class="nc"><div class="nl">LSTM Adj</div><div class="nv vg">+8.0%</div></div>
+            <div class="nc"><div class="nl">Combined</div><div class="nv vg" style="font-weight:800">+53.8%</div></div>
+        </div></div>
+        <div class="nbox"><div class="ngrid g4">
+            <div class="nc"><div class="nl">ELO Prob</div><div class="nv vblue">56.9%</div></div>
+            <div class="nc"><div class="nl">Surf ELO</div><div class="nv vblue">55.6%</div></div>
+            <div class="nc"><div class="nl">ELO Edge</div><div class="nv vg">+49.4%</div></div>
+            <div class="nc"><div class="nl">Consensus</div><div class="nv" style="color:#e0e0e0;font-weight:800">62.6%</div></div>
+        </div></div>
+
+        <!-- PEAK POTENTIAL STRIP — low entry price = higher upside -->
+        <div class="peak-strip" title="Picks at very low entry prices (under 15c) historically see massive upside potential, but are higher risk. Based on 120 historical picks.">
+            <div class="peak-left">
+                <div class="peak-label">Peak Potential</div>
+                <div class="peak-value">+80% — +250%</div>
+                <div class="peak-sub">Expected price movement during match</div>
+            </div>
+            <div class="peak-right">
+                <div class="peak-hit-rate">97%</div>
+                <div class="peak-hit-sub">Hit 10%+ peak</div>
+                <div style="margin-top:4px">
+                    <div class="peak-bar-wrap">
+                        <div class="peak-bar-track"><div class="peak-bar-fill" style="width:97%"></div></div>
+                        <div class="peak-bar-label">120 picks</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-panel" data-tab="matchup">
+        <div class="s3">
+            <div class="s3h">
+                <div class="ph">Sandro Kopp</div><div class="ph pc"></div><div class="ph pr">Damir Zhalgasbay</div>
+            </div>
+            <div class="h2h-bar"><div class="h2h-label">H2H</div><div class="h2h-v">No H2H</div></div>
+            <div class="s3r"><div class="vl"><strong class="vo">#286</strong></div><div class="vc">Rank</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl vd">&mdash;</div><div class="vc">Surface WR</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl">0/0</div><div class="vc">Momentum</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl vd">&mdash;</div><div class="vc">Activity</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl">30d</div><div class="vc">Rest</div><div class="vr vd">&mdash;</div></div>
+        </div>
+        <div class="divider"></div>
+        <div style="padding:4px 14px 0"><div style="font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600; margin-bottom:4px">Advanced Stats</div></div>
+        <div class="s3" style="padding-top:2px">
+            <div class="s3h"><div class="ph" style="font-size:11px">Sandro Kopp</div><div class="ph pc"></div><div class="ph pr" style="font-size:11px">Damir Zhalgasbay</div></div>
+            <div class="s3r"><div class="vl vd">&mdash;</div><div class="vc">vs Top 10</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl vd">&mdash;</div><div class="vc">vs Top 20</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl vd">&mdash;</div><div class="vc">Rank Move 12m</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl vd">&mdash;</div><div class="vc">Rank Move 6m</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl vd">&mdash;</div><div class="vc">Rank Move 3m</div><div class="vr vd">&mdash;</div></div>
+            <div class="s3r"><div class="vl vd">&mdash;</div><div class="vc">YTD Record</div><div class="vr vd">&mdash;</div></div>
+        </div>
+    </div>
+
+    <div class="tab-panel" data-tab="deep">
+        <div class="clutch-score-row">
+            <div class="clutch-player"><div class="clutch-name">Kopp</div><div class="clutch-val vd" style="font-size:16px">&mdash;</div><div class="clutch-label">Clutch Score</div></div>
+            <div class="clutch-vs">vs</div>
+            <div class="clutch-player"><div class="clutch-name">Zhalgasbay</div><div class="clutch-val vd" style="font-size:16px">&mdash;</div><div class="clutch-label">Clutch Score</div></div>
+        </div>
+        <div style="padding:20px 14px;text-align:center;color:#6c757d;font-size:12px">
+            <div style="font-size:24px;margin-bottom:8px">&#128683;</div>
+            Insufficient match data to calculate serve and clutch metrics.
+        </div>
+    </div>
+
+    <div class="tab-panel" data-tab="market">
+        <div class="market-section">
+            <div class="market-header">&#x1F4B0; Market Overview</div>
+            <div class="market-stat"><span class="ml">Total Volume</span><span style="color:#4caf50;font-weight:700">$12,400</span></div>
+            <div class="market-stat"><span class="ml">Liquidity</span><span>$3,200</span></div>
+            <div class="market-stat"><span class="ml">Poly Price (live)</span><span><span class="live-dot"></span>Kopp 92.5c &middot; Zhalgasbay 7.5c</span></div>
+        </div>
+        <div class="divider"></div>
+        <div class="market-section">
+            <div class="topdogs-hdr">&#x1F43A; Top Dogs</div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:9px;color:#888">Click to load from Polymarket</span>
+                <button style="background:#2a2d37;color:#42a5f5;border:1px solid #42a5f540;padding:3px 10px;border-radius:4px;font-size:9px;cursor:pointer;font-weight:600">Load Data</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-foot">
+        <button class="bet-btn on">&#10003; Active Bet</button>
+        <a href="#" class="plink"><span class="live-dot"></span>Open on Polymarket &rarr;</a>
+    </div>
+</div>
+
+</div>
+
+<!-- CHANGELOG -->
+<div class="notes">
+    <h2>v5.1 CHANGES APPLIED</h2>
+    <ul>
+        <li><span class="tag tc">#1</span> <strong>Header:</strong> Names left. Tournament | Surface, Date, Round stacked on right.</li>
+        <li><span class="tag tc">#2</span> <strong>Badges:</strong> WIN PROB + EDGE CONF same width (100px), stacked neatly right side. SOLID + ELO PICK moved to badge line with AGREE.</li>
+        <li><span class="tag tc">#3</span> <strong>H2H:</strong> Simplified — tiny "H2H" label above, just the score below. No "X meetings".</li>
+        <li><span class="tag tc">#4</span> <strong>Stats text:</strong> Bumped to #ddd brightness, slightly larger (11.5px). Easier to read on dark bg.</li>
+        <li><span class="tag tc">#5</span> <strong>Winner indicator:</strong> Tennis racquet icon next to the winning side of each stat row. Green tone, sport-specific.</li>
+        <li><span class="tag tc">#6</span> <strong>Advanced stats:</strong> Same brightness bump as #4.</li>
+        <li><span class="tag tc">#8</span> <strong>ELO Details:</strong> Title centered.</li>
+        <li><span class="tag tc">#10</span> <strong>Consensus number:</strong> Moved to row 3 of the number grid (4th cell). SOLID + ELO PICK badges moved to badge line next to AGREE. All badges same side, uniform size.</li>
+        <li><span class="tag tc">#11</span> <strong>ELO labels:</strong> "ELO" and "Surface ELO" (consistent, no abbreviation). Paw print on higher score. Gap converted to win probability using the ELO formula (e.g. 95pts → ~64%).</li>
+        <li><span class="tag tc">#13</span> <strong>Whale section:</strong> Renamed "Top Dogs" with wolf/dog icon. Centered header.</li>
+        <li><span class="tag tc">#14</span> <strong>Player names:</strong> Left/right aligned under Top Dogs, matching the pattern above.</li>
+        <li><span class="tag tc">#15</span> <strong>Top 3:</strong> Centered "Top 3 Bets" label, player leaderboards left/right underneath.</li>
+        <li><span class="tag tn">REMOVED</span> Lightning bolt from ELO Prob — it meant nothing, just decoration. Gone.</li>
+        <li><span class="tag tn">NEW</span> <strong>SYS WR badge:</strong> Shows historical system win rate for picks in this model probability range (e.g. "SYS WR: 74%"). Computed from picks.jsonl track record, not a new model. Blue badge in the badge line.</li>
+        <li><span class="tag tn">NEW</span> <strong>Peak Potential strip:</strong> Shows expected price movement range during the match based on historical picks at similar entry prices. Includes a "hit 10%+ peak" rate bar. Appears below the number grids in the Signal tab.</li>
+        <li><span class="tag tn">NEW</span> <strong>Tennis racquet icons:</strong> Replaced paw print (&#x1F43E;) advantage markers with mini tennis racquet SVG in green. Cleaner sport-specific look.</li>
+        <li><span class="tag tn">NEW</span> <strong>Card depth:</strong> Enhanced box-shadow with layered shadows + subtle inner highlight. Gives cards more dimension.</li>
+        <li><span class="tag tn">NEW</span> <strong>Player name plaque:</strong> Names now sit on an indented plaque-style element with inset shadow. Makes the matchup title stand out.</li>
+        <li><span class="tag tn">NEW</span> <strong>Market Overview centered:</strong> Header text is now centered in the Market tab.</li>
+        <li><span class="tag tn">NEW</span> <strong>Return of serve stats:</strong> Added "Svc Games Won", "Return Pts Won", and "Return Svc Brk" to Serve &amp; Return section in Deep Stats tab.</li>
+    </ul>
+</div>
+
+<script>
+function switchTab(btn, tabName) {
+    var card = btn.closest('.sig-card');
+    card.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
+    card.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active')});
+    btn.classList.add('active');
+    card.querySelector('[data-tab="'+tabName+'"]').classList.add('active');
+}
+</script>
+
+</body>
+</html>
