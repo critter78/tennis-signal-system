@@ -62,6 +62,11 @@ def log_picks(signals, run_id=None):
         "base_prob", "lstm_adj", "base_edge", "lstm_edge",
         # ELO parallel edge
         "elo_prob", "elo_edge", "surf_elo_prob", "surf_elo_edge",
+        # Serve & return stats (from TML data)
+        "sa_aces", "sb_aces", "sa_dfs", "sb_dfs",
+        "sa_first_in", "sb_first_in", "sa_first_won", "sb_first_won",
+        "sa_second_won", "sb_second_won", "sa_bp_saved", "sb_bp_saved",
+        "sa_bp_convert", "sb_bp_convert",
     ]
 
     logged = 0
@@ -166,6 +171,14 @@ def log_picks(signals, run_id=None):
             # ELO parallel edge (independent probability stream)
             "elo_prob": s.get("elo_prob"), "elo_edge": s.get("elo_edge"),
             "surf_elo_prob": s.get("surf_elo_prob"), "surf_elo_edge": s.get("surf_elo_edge"),
+            # Serve & return stats (from TML data)
+            "sa_aces": s.get("sa_aces"), "sb_aces": s.get("sb_aces"),
+            "sa_dfs": s.get("sa_dfs"), "sb_dfs": s.get("sb_dfs"),
+            "sa_first_in": s.get("sa_first_in"), "sb_first_in": s.get("sb_first_in"),
+            "sa_first_won": s.get("sa_first_won"), "sb_first_won": s.get("sb_first_won"),
+            "sa_second_won": s.get("sa_second_won"), "sb_second_won": s.get("sb_second_won"),
+            "sa_bp_saved": s.get("sa_bp_saved"), "sb_bp_saved": s.get("sb_bp_saved"),
+            "sa_bp_convert": s.get("sa_bp_convert"), "sb_bp_convert": s.get("sb_bp_convert"),
             # Outcomes
             "outcome": None, "actual_winner": None, "resolved_at": None, "pnl": None,
             # Trade tracking (populated by 10_peak_tracker.py)
