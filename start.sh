@@ -12,7 +12,7 @@ mkdir -p cards logs data
 
 # Start gunicorn IMMEDIATELY so Render detects the port
 echo "[1/2] Starting gunicorn..."
-gunicorn server:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120 &
+gunicorn server:app --bind 0.0.0.0:$PORT --workers 2 --timeout 600 &
 GUNICORN_PID=$!
 
 # Give gunicorn a moment to bind the port

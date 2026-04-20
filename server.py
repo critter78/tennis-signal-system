@@ -738,20 +738,40 @@ async function fullRefresh() {
     const box = document.getElementById('actionResult');
     box.style.display = 'block';
     box.style.borderColor = '#6a1b9a';
-    box.textContent = 'Running full pipeline (rankings > card > dedup > dashboard)... This may take 2-3 minutes.';
+    box.textContent = 'Starting pipeline (tml_fetch > rankings > card > dedup)...';
     try {
         const res = await fetch('/admin/full-refresh', { method: 'POST' });
         const data = await res.json();
-        box.style.borderColor = data.status === 'ok' ? '#1b5e20' : '#d4740a';
-        let output = 'Pipeline ' + data.status + ' (' + (data.elapsed_seconds || '?') + 's)\\n\\n';
-        if (data.steps) {
-            for (const [step, info] of Object.entries(data.steps)) {
-                output += step.toUpperCase() + ': ' + (info.status || '?') + '\\n';
-                if (info.output) output += info.output.trim() + '\\n';
-                output += '\\n';
-            }
+        if (data.status === 'started' || data.status === 'already_running') {
+            box.textContent = 'Pipeline running in background... polling for status every 5s';
+            // Poll for completion
+            const poll = setInterval(async () => {
+                try {
+                    const sr = await fetch('/admin/pipeline-status');
+                    const sd = await sr.json();
+                    if (sd.status === 'running') {
+                        box.textContent = 'Pipeline still running... (polling every 5s)';
+                    } else {
+                        clearInterval(poll);
+                        box.style.borderColor = sd.status === 'ok' ? '#1b5e20' : '#d4740a';
+                        let output = 'Pipeline ' + sd.status + ' (' + (sd.elapsed_seconds || '?') + 's)\\n\\n';
+                        if (sd.steps) {
+                            for (const [step, info] of Object.entries(sd.steps)) {
+                                output += step.toUpperCase() + ': ' + (info.status || '?') + '\\n';
+                                if (info.output) output += info.output.trim() + '\\n';
+                                output += '\\n';
+                            }
+                        }
+                        box.textContent = output;
+                    }
+                } catch(pe) {
+                    box.textContent = 'Polling error: ' + pe.message + ' (will retry...)';
+                }
+            }, 5000);
+        } else {
+            box.style.borderColor = '#d4740a';
+            box.textContent = 'Unexpected: ' + JSON.stringify(data);
         }
-        box.textContent = output;
     } catch(e) {
         box.style.borderColor = '#f44336';
         box.textContent = 'Request failed: ' + e.message;
@@ -2484,20 +2504,18 @@ def admin_debug_rank(player_name):
         return jsonify({"error": str(e), "traceback": traceback.format_exc()})
 
 
-@app.route("/admin/full-refresh", methods=["POST"])
-@enable_cors
-def admin_full_refresh():
-    """Full pipeline refresh triggered from admin panel (uses admin cookie, no CRON_SECRET needed)."""
-    if not check_admin_cookie():
-        return jsonify({"error": "Unauthorized"}), 401
+_pipeline_status = {"running": False, "result": None}
 
-    # Delegate to the main refresh logic by setting is_admin flag
-    # We reuse the same code path as /api/refresh
+def _run_pipeline_background():
+    """Run the full pipeline in a background thread."""
     import time
+    global _pipeline_status
+    _pipeline_status["running"] = True
+    _pipeline_status["result"] = None
     t0 = time.time()
     results = {}
     logger.info("=" * 50)
-    logger.info("ADMIN FULL REFRESH: Pipeline starting")
+    logger.info("ADMIN FULL REFRESH: Pipeline starting (background)")
     logger.info("=" * 50)
 
     steps = [
@@ -2511,7 +2529,6 @@ def admin_full_refresh():
         try:
             logger.info(f"  Running {name}...")
             r = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=timeout)
-            # Include BOTH stdout and stderr in results for debugging
             out = (r.stdout or "")[-500:]
             err = (r.stderr or "")[-500:]
             combined = out
@@ -2520,7 +2537,6 @@ def admin_full_refresh():
             results[name] = {"status": "ok" if r.returncode == 0 else "error", "output": combined[-800:]}
             if r.returncode != 0:
                 logger.warning(f"  {name} failed: {r.stderr[-200:]}")
-                # Retry card gen at lower volume
                 if name == "card":
                     r2 = subprocess.run(
                         ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "100", "--skip-whales"],
@@ -2546,12 +2562,45 @@ def admin_full_refresh():
 
     elapsed = time.time() - t0
     ok_count = sum(1 for v in results.values() if v.get("status") == "ok")
-
-    return jsonify({
+    _pipeline_status["result"] = {
         "status": "ok" if ok_count == len(results) else "partial",
         "steps": results,
         "elapsed_seconds": round(elapsed, 1),
-    }), 200
+        "succeeded": ok_count,
+        "total": len(results),
+    }
+    _pipeline_status["running"] = False
+    logger.info(f"ADMIN FULL REFRESH: Done in {elapsed:.1f}s — {ok_count}/{len(results)} ok")
+
+
+@app.route("/admin/full-refresh", methods=["POST"])
+@enable_cors
+def admin_full_refresh():
+    """Full pipeline refresh — runs in background thread, returns immediately."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if _pipeline_status["running"]:
+        return jsonify({"status": "already_running", "message": "Pipeline is already running. Check /admin/pipeline-status for progress."}), 200
+
+    import threading
+    t = threading.Thread(target=_run_pipeline_background, daemon=True)
+    t.start()
+
+    return jsonify({"status": "started", "message": "Pipeline started in background. Poll /admin/pipeline-status for results."}), 200
+
+
+@app.route("/admin/pipeline-status", methods=["GET"])
+@enable_cors
+def admin_pipeline_status():
+    """Check background pipeline status."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    if _pipeline_status["running"]:
+        return jsonify({"status": "running", "message": "Pipeline is still running..."}), 200
+    if _pipeline_status["result"]:
+        return jsonify(_pipeline_status["result"]), 200
+    return jsonify({"status": "idle", "message": "No pipeline has been run yet."}), 200
 
 
 @app.route("/api/refresh", methods=["POST"])
