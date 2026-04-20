@@ -159,27 +159,27 @@
         .sig-card.is-bet { border-color: #e65100; border-width: 2px; }
         /* v5.1 Card Header */
         .card-hdr { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 14px; background: linear-gradient(135deg, #1a1d27 0%, #22252f 100%); border-bottom: 1px solid #2a2d37; }
-        .hdr-names { font-size: 15px; font-weight: 700; color: #fff; background: linear-gradient(180deg, #10121a 0%, #161922 100%); border: 1px solid #2a2d37; border-radius: 5px; padding: 6px 12px; margin-bottom: 4px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), inset 0 0 12px rgba(212,116,10,0.22), inset 0 -1px 6px rgba(212,116,10,0.15), inset 1px 0 6px rgba(212,116,10,0.10), inset -1px 0 6px rgba(212,116,10,0.10), 0 1px 0 rgba(255,255,255,0.05); display: flex; flex-direction: column; position: relative; }
+        .hdr-names { font-size: 15px; font-weight: 700; color: #fff; background: linear-gradient(180deg, #10121a 0%, #161922 100%); border: 1px solid #2a2d37; border-radius: 5px; padding: 8px 16px; margin-bottom: 4px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), inset 0 0 12px rgba(212,116,10,0.22), inset 0 -1px 6px rgba(212,116,10,0.15), inset 1px 0 6px rgba(212,116,10,0.10), inset -1px 0 6px rgba(212,116,10,0.10), 0 1px 0 rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 2px; }
         .hdr-names .pa { color: #fff; }
-        .hdr-names .vs { color: #6c757d; font-weight: 400; font-size: 10px; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
         .hdr-names .pb { color: #fff; }
-        .hdr-right { text-align: right; font-size: 10px; line-height: 1.6; }
-        .hdr-tourney { color: #e0e0e0; font-weight: 600; }
+        .hdr-right { text-align: right; font-size: 11px; line-height: 1.6; }
+        .hdr-tourney { color: #fff; font-weight: 700; letter-spacing: 0.03em; }
         .hdr-surface { font-weight: 700; }
         .hdr-date { color: #6c757d; }
         .hdr-round { color: #888; }
         .active-tag { display: inline-block; background: #d4740a; color: #fff; font-size: 8px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; margin-top: 3px; }
         /* v5.1 Tab Bar */
         .v5-tab-bar { display: flex; background: #12141c; border-bottom: 2px solid #2a2d37; padding: 0 6px; }
-        .v5-tab-btn { flex: 1; padding: 8px 4px; text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; font-family: 'IBM Plex Mono', monospace; }
+        .v5-tab-btn { flex: 1; padding: 8px 4px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; font-family: 'IBM Plex Mono', monospace; border-right: 1px solid #2a2d37; }
+        .v5-tab-btn:last-child { border-right: none; }
         .v5-tab-btn:hover { color: #aaa; }
         .v5-tab-btn.active { color: #d4740a; border-bottom-color: #d4740a; background: #1a1d2780; }
-        .v5-tab-btn .ti { font-size: 16px; display: block; margin-bottom: 2px; line-height: 1; }
-        .v5-tab-btn .ti img { width: 18px; height: 18px; display: inline-block; vertical-align: middle; }
+        .v5-tab-btn .ti { font-size: 16px; display: block; margin-bottom: 3px; line-height: 1; }
+        .v5-tab-btn .ti img { width: 22px; height: 22px; display: inline-block; vertical-align: middle; }
         @keyframes boltFlash { 0%,100% { filter: brightness(1); } 20% { filter: brightness(2.5) drop-shadow(0 0 4px #ffd600); } 40% { filter: brightness(0.8); } 60% { filter: brightness(2) drop-shadow(0 0 3px #ffd600); } 80% { filter: brightness(1); } }
         .v5-tab-btn:hover .ti-bolt img { animation: boltFlash 0.6s ease-in-out; }
         .ti-gloves { display: inline-flex !important; gap: 0; align-items: center; }
-        .ti-gloves .glove-l, .ti-gloves .glove-r { display: inline-block; width: 12px; height: 18px; transition: transform 0.15s; }
+        .ti-gloves .glove-l, .ti-gloves .glove-r { display: inline-block; width: 14px; height: 22px; transition: transform 0.15s; }
         @keyframes punchL { 0%,100% { transform: translateX(0) rotate(0); } 30% { transform: translateX(3px) rotate(5deg); } 60% { transform: translateX(-1px) rotate(-2deg); } }
         @keyframes punchR { 0%,100% { transform: translateX(0) rotate(0); } 30% { transform: translateX(-3px) rotate(-5deg); } 60% { transform: translateX(1px) rotate(2deg); } }
         .v5-tab-btn:hover .ti-gloves .glove-l { animation: punchL 0.4s ease-in-out; }
@@ -256,7 +256,7 @@
         .v5-h2h-v { font-size: 16px; font-weight: 700; color: #d4740a; }
         /* v5.1 ELO Box */
         .v5-elo-box { margin: 8px 14px; padding: 8px 10px; background: #12141c; border-radius: 6px; border: 1px solid #2a2d37; }
-        .v5-elo-title { font-size: 10px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; text-align: center; }
+        .v5-elo-title { font-size: 10px; color: #d4740a; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; text-align: center; }
         .v5-elo-prob-row { text-align: center; font-size: 10px; color: #ccc; margin-top: 6px; padding-top: 5px; border-top: 1px solid #2a2d37; }
         .v5-elo-prob-val { font-weight: 700; font-size: 12px; }
         /* v5.1 Market Tab */
@@ -276,7 +276,7 @@
         @keyframes v5pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
         /* v5.1 Deep Stats placeholder */
         .v5-deep-empty { padding: 20px 14px; text-align: center; color: #6c757d; font-size: 12px; }
-        .v5-adv-section-title { padding: 4px 14px 0; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; text-align: center; }
+        .v5-adv-section-title { padding: 6px 14px 2px; font-size: 10px; color: #d4740a; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; margin-bottom: 4px; text-align: center; border-bottom: 1px solid #2a2d37; padding-bottom: 5px; }
         /* Player hover overlay */
         .player-link { cursor: pointer; text-decoration: underline; text-decoration-color: #444; text-underline-offset: 2px; transition: color 0.15s; position: relative; }
         .player-link:hover { color: #d4740a; text-decoration-color: #d4740a; }
@@ -2239,7 +2239,7 @@ function renderSignals() {
             <!-- HEADER with plaque names -->
             <div class="card-hdr">
                 <div>
-                    <div class="hdr-names"><span class="pa player-link" data-player="${s.player_a||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_a||''}</span><span><span class="vs">vs </span><span class="pb player-link" data-player="${s.player_b||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_b||''}</span></span></div>
+                    <div class="hdr-names"><span class="pa player-link" data-player="${s.player_a||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_a||''}</span><span class="pb player-link" data-player="${s.player_b||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_b||''}</span></div>
                     ${isBet ? '<span class="active-tag">ACTIVE BET</span>' : ''}
                 </div>
                 <div class="hdr-right">
@@ -2345,7 +2345,6 @@ function renderSignals() {
                 <div class="v5-divider"></div>
                 <div class="v5-adv-section-title">Advanced Stats</div>
                 <div class="v5-s3" style="padding-top:2px">
-                    <div class="v5-s3h"><div class="ph">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr">${s.player_b||''}</div></div>
                     <div class="v5-s3r"><div class="v5-vl">${fmtVs(s.sa_vs_top10)}</div><div class="v5-vc">vs Top 10</div><div class="v5-vr">${fmtVs(s.sb_vs_top10)}</div></div>
                     <div class="v5-s3r"><div class="v5-vl">${fmtVs(s.sa_vs_top20)}</div><div class="v5-vc">vs Top 20</div><div class="v5-vr">${fmtVs(s.sb_vs_top20)}</div></div>
                     <div class="v5-s3r"><div class="v5-vl">${fmtMove(s.sa_rank_move_365d)}</div><div class="v5-vc">Rank Move 12m</div><div class="v5-vr">${fmtMove(s.sb_rank_move_365d)}</div></div>
@@ -2359,7 +2358,6 @@ function renderSignals() {
                 <div class="v5-elo-box">
                     <div class="v5-elo-title">ELO Details</div>
                     <div class="v5-s3" style="padding:0">
-                        <div class="v5-s3h"><div class="ph">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr">${s.player_b||''}</div></div>
                         <div class="v5-s3r"><div class="v5-vl">${fmtElo(eloA, eloPctA)} ${eloA && eloB && eloA > eloB ? winMark(true,'l') : ''}</div><div class="v5-vc">ELO</div><div class="v5-vr">${eloA && eloB && eloB > eloA ? winMark(true,'r') : ''} ${fmtElo(eloB, eloPctB)}</div></div>
                         <div class="v5-s3r"><div class="v5-vl">${surfEloA || '—'} ${surfEloA && surfEloB && surfEloA > surfEloB ? winMark(true,'l') : ''}</div><div class="v5-vc">Surface ELO</div><div class="v5-vr">${surfEloA && surfEloB && surfEloB > surfEloA ? winMark(true,'r') : ''} ${surfEloB || '—'}</div></div>
                     </div>
@@ -2370,9 +2368,11 @@ function renderSignals() {
             <!-- TAB 3: DEEP STATS -->
             <div class="v5-tab-panel" data-v5tab="deep">
                 ${s.sa_aces != null || s.sb_aces != null ? `
-                <div class="v5-s3" style="padding-bottom:4px">
-                    <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Serve</div>
+                <div class="v5-s3" style="padding-bottom:0">
                     <div class="v5-s3h"><div class="ph">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr">${s.player_b||''}</div></div>
+                </div>
+                <div class="v5-s3" style="padding-top:0;padding-bottom:4px">
+                    <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Serve</div>
                     <div class="v5-s3r"><div class="v5-vl">${s.sa_aces != null ? s.sa_aces.toFixed(1) : '—'} ${s.sa_aces != null && s.sb_aces != null && s.sa_aces > s.sb_aces ? winMark(true,'l') : ''}</div><div class="v5-vc">Aces/Match</div><div class="v5-vr">${s.sb_aces != null && s.sa_aces != null && s.sb_aces > s.sa_aces ? winMark(true,'r') : ''} ${s.sb_aces != null ? s.sb_aces.toFixed(1) : '—'}</div></div>
                     <div class="v5-s3r"><div class="v5-vl">${s.sa_dfs != null ? s.sa_dfs.toFixed(1) : '—'} ${s.sa_dfs != null && s.sb_dfs != null && s.sa_dfs < s.sb_dfs ? winMark(true,'l') : ''}</div><div class="v5-vc">DFs/Match</div><div class="v5-vr">${s.sb_dfs != null && s.sa_dfs != null && s.sb_dfs < s.sa_dfs ? winMark(true,'r') : ''} ${s.sb_dfs != null ? s.sb_dfs.toFixed(1) : '—'}</div></div>
                     <div class="v5-s3r"><div class="v5-vl">${s.sa_first_in != null ? s.sa_first_in.toFixed(1)+'%' : '—'} ${s.sa_first_in != null && s.sb_first_in != null && s.sa_first_in > s.sb_first_in ? winMark(true,'l') : ''}</div><div class="v5-vc">1st Serve %</div><div class="v5-vr">${s.sb_first_in != null && s.sa_first_in != null && s.sb_first_in > s.sa_first_in ? winMark(true,'r') : ''} ${s.sb_first_in != null ? s.sb_first_in.toFixed(1)+'%' : '—'}</div></div>
@@ -2382,7 +2382,6 @@ function renderSignals() {
                 <div class="v5-divider"></div>
                 <div class="v5-s3" style="padding-top:4px">
                     <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Return & Pressure</div>
-                    <div class="v5-s3h"><div class="ph">${s.player_a||''}</div><div class="ph v5-hc"></div><div class="ph pr">${s.player_b||''}</div></div>
                     <div class="v5-s3r"><div class="v5-vl">${s.sa_bp_saved != null ? s.sa_bp_saved.toFixed(1)+'%' : '—'} ${s.sa_bp_saved != null && s.sb_bp_saved != null && s.sa_bp_saved > s.sb_bp_saved ? winMark(true,'l') : ''}</div><div class="v5-vc">BP Saved %</div><div class="v5-vr">${s.sb_bp_saved != null && s.sa_bp_saved != null && s.sb_bp_saved > s.sa_bp_saved ? winMark(true,'r') : ''} ${s.sb_bp_saved != null ? s.sb_bp_saved.toFixed(1)+'%' : '—'}</div></div>
                     <div class="v5-s3r"><div class="v5-vl">${s.sa_bp_convert != null ? s.sa_bp_convert.toFixed(1)+'%' : '—'} ${s.sa_bp_convert != null && s.sb_bp_convert != null && s.sa_bp_convert > s.sb_bp_convert ? winMark(true,'l') : ''}</div><div class="v5-vc">BP Convert %</div><div class="v5-vr">${s.sb_bp_convert != null && s.sa_bp_convert != null && s.sb_bp_convert > s.sa_bp_convert ? winMark(true,'r') : ''} ${s.sb_bp_convert != null ? s.sb_bp_convert.toFixed(1)+'%' : '—'}</div></div>
                 </div>
