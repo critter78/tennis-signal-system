@@ -223,11 +223,11 @@ def _latest_rank(df: pd.DataFrame, player: str, as_of: pd.Timestamp) -> float:
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--min-prob", type=float, default=0.65,
-                    help="Minimum model_prob to include as a pick (default 0.65)")
-    ap.add_argument("--max-poly", type=float, default=0.85,
-                    help="Skip markets where poly already prices >= this (default 0.85)")
-    ap.add_argument("--min-volume", type=float, default=2000)
+    ap.add_argument("--min-prob", type=float, default=0.60,
+                    help="Minimum model_prob to include as a pick (default 0.60)")
+    ap.add_argument("--max-poly", type=float, default=0.90,
+                    help="Skip markets where poly already prices >= this (default 0.90)")
+    ap.add_argument("--min-volume", type=float, default=1000)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
