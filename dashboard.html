@@ -115,8 +115,7 @@
             #panel-signals > div:first-child { flex-direction: column !important; gap: 6px; }
             #dateTimeClock { font-size: 11px !important; }
 
-            /* Data freshness + buttons */
-            #dataFreshness { font-size: 9px !important; }
+            /* Buttons */
         }
 
         /* ── TABLET (601-900px) ── */
@@ -224,8 +223,16 @@
         .v5-vc { text-align: center; font-size: 10px; color: #888; min-width: 100px; padding: 0 6px; font-weight: 500; }
         .v5-win-mark { display: inline-block; width: 18px; height: 18px; vertical-align: middle; margin: 0 2px; opacity: 1; }
         .v5-win-mark-r { transform: scaleX(-1); }
-        @keyframes freshPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
-        .fresh-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4caf50; margin-right: 5px; animation: freshPulse 2.5s ease-in-out infinite; }
+        @keyframes freshDotCycle {
+            0%   { background: #4caf50; opacity: 0.25; }
+            15%  { background: #4caf50; opacity: 1; }
+            33%  { background: #ffc107; opacity: 0.25; }
+            48%  { background: #ffc107; opacity: 1; }
+            66%  { background: #ff9800; opacity: 0.25; }
+            81%  { background: #ff9800; opacity: 1; }
+            100% { background: #4caf50; opacity: 0.25; }
+        }
+        .fresh-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; animation: freshDotCycle 6s ease-in-out infinite; }
         .vg { color: #4caf50; } .vb { color: #f44336; } .vo { color: #d4740a; font-weight: 700; } .vd { color: #555; } .vblue { color: #42a5f5; }
         /* v5.1 H2H */
         .v5-h2h-bar { text-align: center; padding: 5px 0; margin: 2px 0; border-top: 1px solid #2a2d37; border-bottom: 1px solid #2a2d37; }
@@ -399,7 +406,6 @@ window.PICKS_DATA = [];
         </div>
     </div>
     <div style="text-align:right; flex-shrink:0">
-        <div id="dataFreshness" style="font-size:10px; color:#4caf50; margin-bottom:6px"></div>
         <div style="display:flex; gap:8px; justify-content:flex-end">
             <a href="/admin" style="font-size:10px; color:#d4740a; text-decoration:none; padding:4px 10px; border:1px solid #2d3139; letter-spacing:0.04em">ADMIN</a>
             <a href="/logout" style="font-size:10px; color:#f44336; text-decoration:none; padding:4px 10px; border:1px solid #2d3139; letter-spacing:0.04em">LOGOUT</a>
@@ -422,7 +428,10 @@ window.PICKS_DATA = [];
 <div class="panel active" id="panel-signals">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
         <div style="font-size:13px; font-weight:600; color:#e0e0e0">Today's Signals</div>
-        <div id="dateTimeClock" style="font-size:13px; font-weight:600; color:#d4740a; display:flex; align-items:center; gap:6px"></div>
+        <div style="display:flex; align-items:center; gap:10px">
+            <div id="dateTimeClock" style="font-size:13px; font-weight:600; color:#d4740a; display:flex; align-items:center; gap:6px"></div>
+            <span id="freshBadge"></span>
+        </div>
     </div>
     <div class="filters">
         <label>Filter:</label>
@@ -2566,13 +2575,6 @@ renderSignals();
             if (updated > 0) {
                 console.log('[live-prices] Updated ' + updated + ' markets with fresh Polymarket prices');
                 renderSignals();
-                // Update freshness indicator with FRESH DATA + pulsing green dot
-                var el = document.getElementById('dataFreshness');
-                if (el) {
-                    var pct = Math.min(99, Math.max(5, Math.round(updated / Math.max(picks.length, 1) * 100)));
-                    var existing = el.innerHTML;
-                    el.innerHTML = existing + ' <span style="font-size:10px;color:#aaa">|</span> <span class="fresh-dot"></span><span style="color:#66ff66; font-size:10px; font-weight:600; letter-spacing:0.5px">FRESH DATA ' + pct + '%</span>';
-                }
             }
         })
         .catch(function(e) { console.log('[live-prices] Refresh failed:', e); });
@@ -2591,28 +2593,25 @@ function updateClock() {
 updateClock();
 setInterval(updateClock, 30000);
 
-// ─── DATA FRESHNESS INDICATOR ───
+// ─── DATA FRESHNESS INDICATOR (next to clock) ───
 (function() {
-    const el = document.getElementById('dataFreshness');
-    if (!el || picks.length === 0) { if (el) el.textContent = 'No data loaded'; return; }
+    const el = document.getElementById('freshBadge');
+    if (!el || picks.length === 0) return;
 
-    // Find most recent pick timestamp
     const timestamps = picks.map(p => p.logged_at || p.run_ts || '').filter(Boolean).sort();
     const latest = timestamps.length > 0 ? timestamps[timestamps.length - 1] : null;
-
-    if (!latest) { el.textContent = 'Data loaded'; return; }
+    if (!latest) return;
 
     const latestDate = new Date(latest);
     const now = new Date();
     const diffHrs = (now - latestDate) / 3600000;
 
-    let color, label;
-    if (diffHrs < 6) { color = '#4caf50'; label = 'FRESH'; }
-    else if (diffHrs < 24) { color = '#d4740a'; label = 'TODAY'; }
-    else { color = '#f44336'; label = 'STALE'; }
+    let label;
+    if (diffHrs < 6) { label = 'FRESH DATA'; }
+    else if (diffHrs < 24) { label = 'TODAY'; }
+    else { label = 'STALE'; }
 
-    const timeStr = latestDate.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:true });
-    el.innerHTML = `<span style="color:${color}">&#9679; ${label}</span> <span style="color:#6c757d">Data: ${timeStr}</span>`;
+    el.innerHTML = '<span class="fresh-dot"></span><span style="font-size:10px; color:#6c757d; font-weight:600; letter-spacing:0.3px">' + label + '</span>';
 })();
 
 // ─── PLAYER CARDS ───
