@@ -222,6 +222,192 @@ def load_picks_jsonl():
                             continue
     except Exception as e:
         logger.error(f"Error loading picks: {e}")
+    # Enrich picks missing serve data from parquet files
+    if picks:
+        picks = _enrich_serve_data(picks)
+    return picks
+
+
+# ── Serve data enrichment cache ──
+_serve_cache = {}  # player_name -> serve stats dict
+_serve_df = None   # lazy-loaded historical dataframe
+
+def _load_hist_df():
+    """Lazy-load and merge historical data for serve stats."""
+    global _serve_df
+    if _serve_df is not None:
+        return _serve_df
+    try:
+        import pandas as pd
+        frames = []
+        sack_path = BASE_DIR / "data" / "raw" / "matches_combined.parquet"
+        tml_path = BASE_DIR / "data" / "tml_history_10y.parquet"
+        if sack_path.exists():
+            df_s = pd.read_parquet(sack_path)
+            df_s["date"] = pd.to_datetime(df_s["date"], errors="coerce")
+            frames.append(df_s)
+        if tml_path.exists():
+            df_t = pd.read_parquet(tml_path)
+            rename = {"winner_name": "winner", "loser_name": "loser", "tourney_name": "tournament"}
+            df_t = df_t.rename(columns={k: v for k, v in rename.items() if k in df_t.columns})
+            if "match_date" in df_t.columns:
+                df_t["date"] = pd.to_datetime(df_t["match_date"], errors="coerce")
+            elif "tourney_date" in df_t.columns:
+                df_t["date"] = pd.to_datetime(df_t["tourney_date"].astype(str), format="%Y%m%d", errors="coerce")
+            frames.append(df_t)
+        if frames:
+            _serve_df = pd.concat(frames, ignore_index=True)
+            _serve_df["date"] = pd.to_datetime(_serve_df["date"], errors="coerce")
+            logger.info(f"[SERVE] Loaded {len(_serve_df):,} matches for serve enrichment")
+        else:
+            _serve_df = pd.DataFrame()
+            logger.warning("[SERVE] No historical data found for serve enrichment")
+    except Exception as e:
+        logger.error(f"[SERVE] Error loading hist data: {e}")
+        _serve_df = pd.DataFrame()
+    return _serve_df
+
+
+def _compute_serve_for_player(df, player):
+    """Compute serve stats for a player from historical data."""
+    global _serve_cache
+    if player in _serve_cache:
+        return _serve_cache[player]
+
+    from datetime import timedelta
+    import pandas as pd
+
+    if df is None or df.empty or "w_ace" not in df.columns:
+        _serve_cache[player] = {}
+        return {}
+
+    wins = df[df["winner"] == player]
+    losses = df[df["loser"] == player]
+
+    # Use player's most recent 365 days of data
+    all_dates = pd.concat([wins["date"], losses["date"]]).dropna()
+    if len(all_dates) == 0:
+        _serve_cache[player] = {}
+        return {}
+
+    max_date = all_dates.max()
+    since = max_date - timedelta(days=365)
+    wins = wins[wins["date"] >= since]
+    losses = losses[losses["date"] >= since]
+
+    if len(wins) + len(losses) == 0:
+        _serve_cache[player] = {}
+        return {}
+
+    def _avg(series):
+        s = series.dropna()
+        return round(float(s.mean()), 1) if len(s) > 0 else None
+
+    def _ratio(num, denom):
+        n, d = num.dropna(), denom.dropna()
+        if len(n) == 0 or len(d) == 0:
+            return None
+        return round(float(n.sum() / d.sum() * 100), 1) if d.sum() > 0 else None
+
+    # Aces/match
+    vals = [v for v in [_avg(wins["w_ace"]) if "w_ace" in wins.columns else None,
+                         _avg(losses["l_ace"]) if "l_ace" in losses.columns else None] if v is not None]
+    aces = round(sum(vals) / len(vals), 1) if vals else None
+
+    # DFs/match
+    vals = [v for v in [_avg(wins["w_df"]) if "w_df" in wins.columns else None,
+                         _avg(losses["l_df"]) if "l_df" in losses.columns else None] if v is not None]
+    dfs = round(sum(vals) / len(vals), 1) if vals else None
+
+    # 1st serve %
+    first_in = None
+    if "w_1stIn" in df.columns and "w_svpt" in df.columns:
+        first_in = _ratio(pd.concat([wins.get("w_1stIn", pd.Series()), losses.get("l_1stIn", pd.Series())]),
+                          pd.concat([wins.get("w_svpt", pd.Series()), losses.get("l_svpt", pd.Series())]))
+
+    # 1st serve win %
+    first_won = None
+    if "w_1stWon" in df.columns and "w_1stIn" in df.columns:
+        first_won = _ratio(pd.concat([wins.get("w_1stWon", pd.Series()), losses.get("l_1stWon", pd.Series())]),
+                           pd.concat([wins.get("w_1stIn", pd.Series()), losses.get("l_1stIn", pd.Series())]))
+
+    # 2nd serve win %
+    second_won = None
+    if "w_2ndWon" in df.columns and "w_svpt" in df.columns and "w_1stIn" in df.columns:
+        all_2nd = pd.concat([wins.get("w_2ndWon", pd.Series()), losses.get("l_2ndWon", pd.Series())])
+        all_2nd_att = pd.concat([wins.get("w_svpt", pd.Series()) - wins.get("w_1stIn", pd.Series()),
+                                  losses.get("l_svpt", pd.Series()) - losses.get("l_1stIn", pd.Series())])
+        second_won = _ratio(all_2nd, all_2nd_att)
+
+    # BP saved %
+    bp_saved = None
+    if "w_bpSaved" in df.columns and "w_bpFaced" in df.columns:
+        bp_saved = _ratio(pd.concat([wins.get("w_bpSaved", pd.Series()), losses.get("l_bpSaved", pd.Series())]),
+                          pd.concat([wins.get("w_bpFaced", pd.Series()), losses.get("l_bpFaced", pd.Series())]))
+
+    # BP convert % (opponent's bpSaved / bpFaced, inverted)
+    bp_convert = None
+    if "w_bpFaced" in df.columns and "w_bpSaved" in df.columns:
+        # When this player wins: opponent is loser → l_bpFaced, l_bpSaved
+        # When this player loses: opponent is winner → w_bpFaced, w_bpSaved
+        opp_faced = pd.concat([wins.get("l_bpFaced", pd.Series()), losses.get("w_bpFaced", pd.Series())])
+        opp_saved = pd.concat([wins.get("l_bpSaved", pd.Series()), losses.get("w_bpSaved", pd.Series())])
+        opp_faced_clean = opp_faced.dropna()
+        opp_saved_clean = opp_saved.dropna()
+        if len(opp_faced_clean) > 0 and opp_faced_clean.sum() > 0:
+            bp_convert = round(float((opp_faced_clean.sum() - opp_saved_clean.sum()) / opp_faced_clean.sum() * 100), 1)
+
+    result = {
+        "aces": aces, "dfs": dfs, "first_in": first_in,
+        "first_won": first_won, "second_won": second_won,
+        "bp_saved": bp_saved, "bp_convert": bp_convert,
+    }
+    _serve_cache[player] = result
+    return result
+
+
+def _enrich_serve_data(picks):
+    """Backfill serve stats into picks that are missing them."""
+    # Quick check: if most picks already have serve data, skip
+    missing_count = sum(1 for p in picks if p.get("sa_aces") is None and p.get("sb_aces") is None
+                        and p.get("market_type") == "h2h")
+    if missing_count == 0:
+        return picks
+
+    df = _load_hist_df()
+    if df is None or df.empty:
+        return picks
+
+    enriched = 0
+    for p in picks:
+        if p.get("sa_aces") is not None or p.get("sb_aces") is not None:
+            continue
+        pa = p.get("player_a", "")
+        pb = p.get("player_b", "")
+        if not pa or not pb or p.get("market_type") != "h2h":
+            continue
+
+        sa = _compute_serve_for_player(df, pa)
+        sb = _compute_serve_for_player(df, pb)
+        if sa or sb:
+            p["sa_aces"] = sa.get("aces")
+            p["sb_aces"] = sb.get("aces")
+            p["sa_dfs"] = sa.get("dfs")
+            p["sb_dfs"] = sb.get("dfs")
+            p["sa_first_in"] = sa.get("first_in")
+            p["sb_first_in"] = sb.get("first_in")
+            p["sa_first_won"] = sa.get("first_won")
+            p["sb_first_won"] = sb.get("first_won")
+            p["sa_second_won"] = sa.get("second_won")
+            p["sb_second_won"] = sb.get("second_won")
+            p["sa_bp_saved"] = sa.get("bp_saved")
+            p["sb_bp_saved"] = sb.get("bp_saved")
+            p["sa_bp_convert"] = sa.get("bp_convert")
+            p["sb_bp_convert"] = sb.get("bp_convert")
+            enriched += 1
+
+    if enriched > 0:
+        logger.info(f"[SERVE] Enriched {enriched} picks with serve data from parquet")
     return picks
 
 
@@ -2608,6 +2794,10 @@ def _run_pipeline_background():
     global _pipeline_status
     _pipeline_status["running"] = True
     _pipeline_status["result"] = None
+    # Clear serve cache so fresh data is computed after pipeline
+    global _serve_cache, _serve_df
+    _serve_cache = {}
+    _serve_df = None
     t0 = time.time()
     results = {}
     logger.info("=" * 50)
