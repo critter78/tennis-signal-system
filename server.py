@@ -386,15 +386,21 @@ def serve_dashboard(is_shared=False, share_expires=None):
                 content = content.replace("<body>", f"<body>\n{expiry_banner}\n<div style='margin-top:40px'>", 1)
                 content = content.replace("</body>", "</div>\n</body>", 1)
 
-                # For shared view: only include today's unresolved signals, strip sensitive fields
+                # For shared view: include today's signals + resolved history (for SYS WR buckets)
                 from datetime import date
                 today_str = date.today().isoformat()
+                sensitive_keys = ("myOutcome", "myStake", "myOdds", "actual_shares")
                 shared_picks = []
                 for p in picks_data:
                     logged = p.get("logged_at", "")
-                    if logged.startswith(today_str):
-                        clean = {k: v for k, v in p.items()
-                                 if k not in ("outcome", "pnl", "actual_winner", "resolved_at", "myOutcome", "myStake", "myOdds")}
+                    is_today = logged.startswith(today_str)
+                    is_resolved = p.get("outcome") is not None
+                    if is_today or is_resolved:
+                        clean = {k: v for k, v in p.items() if k not in sensitive_keys}
+                        # For resolved historical (not today): only keep fields needed for SYS WR calc
+                        if not is_today and is_resolved:
+                            clean = {"model_prob": p.get("model_prob"), "outcome": p.get("outcome"),
+                                     "logged_at": logged}
                         shared_picks.append(clean)
                 shared_json = json.dumps(shared_picks, separators=(',', ':'))
                 # Simple string replace on the raw template (has empty PICKS_DATA)
