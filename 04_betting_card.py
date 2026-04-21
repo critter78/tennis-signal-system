@@ -1038,11 +1038,13 @@ def get_player_stats(df, player, as_of, surface, window_days=365):
     cutoff = pd.Timestamp(as_of)
     since  = cutoff - timedelta(days=window_days)
 
-    # If the data doesn't reach into our window, use the last 365 days OF DATA instead
-    max_date = df["date"].max()
-    if max_date < since:
-        cutoff = max_date + timedelta(days=1)
-        since  = cutoff - timedelta(days=window_days)
+    # If THIS PLAYER's data doesn't reach into our window, use their last 365 days instead
+    player_matches = df[(df["winner"] == player) | (df["loser"] == player)]
+    if len(player_matches) > 0:
+        player_max = player_matches["date"].max()
+        if player_max < since:
+            cutoff = player_max + timedelta(days=1)
+            since  = cutoff - timedelta(days=window_days)
 
     wins   = df[(df["winner"] == player) & (df["date"] < cutoff) & (df["date"] >= since)]
     losses = df[(df["loser"]  == player) & (df["date"] < cutoff) & (df["date"] >= since)]
