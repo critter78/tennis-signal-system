@@ -288,7 +288,8 @@
         .v5-bet-selector .bet-option { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 7px 6px; cursor: pointer; border: 2px solid #2a2d37; background: #1a1d24; transition: all 0.2s; position: relative; border-radius: 6px; }
         .v5-bet-selector .bet-option .bo-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; margin-bottom: 1px; font-weight: 600; }
         .v5-bet-selector .bet-option .bo-name { font-size: 11px; font-weight: 700; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-        .v5-bet-selector .bet-option .bo-prob { font-size: 9px; color: #888; margin-top: 1px; }
+        .v5-bet-selector .bet-option .bo-prob { font-size: 9px; color: #888; margin-top: 1px; display: flex; align-items: center; gap: 3px; }
+        .v5-bet-selector .bet-option .bo-gap { font-size: 8px; font-weight: 700; padding: 0 3px; border-radius: 2px; }
         .v5-bet-selector .bet-option.edge-pick { border-color: #d4740a50; background: #1f1a12; }
         .v5-bet-selector .bet-option.edge-pick .bo-label { color: #d4740a; }
         .v5-bet-selector .bet-option.winner-pick { border-color: #4caf5060; background: #122b12; }
@@ -2612,16 +2613,23 @@ function renderSignals() {
                     const labelB = (!isResolved && isBetB) ? '✓ ACTIVE' : roleB;
                     const classA = wonA ? 'winner-pick' : (isEdgeA ? 'edge-pick' : '');
                     const classB = wonB ? 'winner-pick' : (isEdgeB ? 'edge-pick' : '');
+                    // Gap = model_prob - poly_price (positive = model more confident than market)
+                    const gapA = probA - priceA;
+                    const gapB = probB - priceB;
+                    const gapColorA = gapA >= 10 ? '#4caf50' : gapA >= 0 ? '#81c784' : '#f44336';
+                    const gapColorB = gapB >= 10 ? '#4caf50' : gapB >= 0 ? '#81c784' : '#f44336';
+                    const gapBgA = gapA >= 10 ? '#4caf5025' : gapA >= 0 ? '#81c78415' : '#f4433615';
+                    const gapBgB = gapB >= 10 ? '#4caf5025' : gapB >= 0 ? '#81c78415' : '#f4433615';
                     return `<div class="v5-bet-selector">
                         <div class="bet-option ${classA} ${isBetA ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pAe}', ${priceA}, ${probA}, ${edgeA}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
                             <span class="bo-label">${labelA}</span>
                             <span class="bo-name">${nameA}</span>
-                            <span class="bo-prob">${probA.toFixed(0)}% · ${priceA.toFixed(0)}c</span>
+                            <span class="bo-prob"><span>${probA.toFixed(0)}%</span><span class="bo-gap" style="color:${gapColorA};background:${gapBgA}">${gapA >= 0 ? '+' : ''}${gapA.toFixed(0)}</span><span>${priceA.toFixed(0)}c</span></span>
                         </div>
                         <div class="bet-option ${classB} ${isBetB ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pBe}', ${priceB}, ${probB}, ${edgeB}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
                             <span class="bo-label">${labelB}</span>
                             <span class="bo-name">${nameB}</span>
-                            <span class="bo-prob">${probB.toFixed(0)}% · ${priceB.toFixed(0)}c</span>
+                            <span class="bo-prob"><span>${probB.toFixed(0)}%</span><span class="bo-gap" style="color:${gapColorB};background:${gapBgB}">${gapB >= 0 ? '+' : ''}${gapB.toFixed(0)}</span><span>${priceB.toFixed(0)}c</span></span>
                         </div>
                     </div>`;
                 })() : `<button class="v5-bet-btn ${isBet ? 'on' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}', '${(polyLink||'').replace(/'/g,"\\'")}')">${isBet ? '✓ Active Bet' : 'Place Bet'}</button>`}
