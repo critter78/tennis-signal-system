@@ -284,21 +284,20 @@
         .v5-bet-btn:hover { background: #e8943a; }
         .v5-bet-btn.on { background: #4caf50; }
         /* Dual-player bet selector */
-        .v5-bet-selector { display: flex; gap: 2px; border-radius: 8px; overflow: hidden; flex: 1; }
-        .v5-bet-selector .bet-option { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 6px; cursor: pointer; border: 2px solid #2a2d37; background: #1a1d24; transition: all 0.2s; position: relative; border-radius: 8px; }
-        .v5-bet-selector .bet-option .bo-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; margin-bottom: 2px; font-weight: 600; }
+        .v5-bet-selector { display: flex; gap: 6px; border-radius: 6px; flex: 1; }
+        .v5-bet-selector .bet-option { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 7px 6px; cursor: pointer; border: 2px solid #2a2d37; background: #1a1d24; transition: all 0.2s; position: relative; border-radius: 6px; }
+        .v5-bet-selector .bet-option .bo-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; margin-bottom: 1px; font-weight: 600; }
         .v5-bet-selector .bet-option .bo-name { font-size: 11px; font-weight: 700; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-        .v5-bet-selector .bet-option .bo-prob { font-size: 9px; color: #81c784; margin-top: 2px; }
-        .v5-bet-selector .bet-option.edge-pick { border-color: #d4740a60; background: #1f1a12; }
+        .v5-bet-selector .bet-option .bo-prob { font-size: 9px; color: #888; margin-top: 1px; }
+        .v5-bet-selector .bet-option.edge-pick { border-color: #d4740a50; background: #1f1a12; }
         .v5-bet-selector .bet-option.edge-pick .bo-label { color: #d4740a; }
-        .v5-bet-selector .bet-option.winner-pick { border-color: #42a5f560; background: #111a2a; }
+        .v5-bet-selector .bet-option.winner-pick { border-color: #42a5f540; background: #111a2a; }
         .v5-bet-selector .bet-option.winner-pick .bo-label { color: #42a5f5; }
-        .v5-bet-selector .bet-option:hover { background: #252830; border-color: #4caf5080; }
-        .v5-bet-selector .bet-option.active-bet { border-color: #4caf50 !important; background: linear-gradient(180deg, #1a3a1a 0%, #0d260d 100%) !important; box-shadow: 0 0 12px #4caf5040, inset 0 0 8px #4caf5015; }
-        .v5-bet-selector .bet-option.active-bet .bo-label { color: #4caf50 !important; font-weight: 700; }
-        .v5-bet-selector .bet-option.active-bet .bo-name { color: #4caf50; font-size: 12px; }
-        .v5-bet-selector .bet-option.active-bet .bo-prob { color: #81c784; font-weight: 600; }
-        .v5-bet-selector .bet-option.active-bet::before { content: '✓ YOUR BET'; position: absolute; top: -1px; left: 50%; transform: translateX(-50%); background: #4caf50; color: #000; font-size: 7px; font-weight: 800; padding: 1px 6px; border-radius: 0 0 4px 4px; letter-spacing: 0.5px; }
+        .v5-bet-selector .bet-option:hover { background: #252830; }
+        .v5-bet-selector .bet-option.active-bet { border-color: #4caf50 !important; background: #122b12 !important; box-shadow: 0 0 8px #4caf5030; }
+        .v5-bet-selector .bet-option.active-bet .bo-label { color: #4caf50 !important; }
+        .v5-bet-selector .bet-option.active-bet .bo-name { color: #4caf50; }
+        .v5-bet-selector .bet-option.active-bet .bo-prob { color: #66bb6a; }
         .v5-plink { color: #42a5f5; font-size: 11px; text-decoration: none; }
         .v5-plink:hover { text-decoration: underline; }
         .live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; margin-right: 4px; animation: v5pulse 2s infinite; }
@@ -2469,23 +2468,25 @@ function renderSignals() {
                     // Short last names for display
                     const nameA = pA.split(' ').pop();
                     const nameB = pB.split(' ').pop();
-                    // Labels: EDGE PICK for the edge player, WINNER for predicted winner (if different), opponent just blank
+                    // Labels: active bet overrides to "✓ ACTIVE", else EDGE PICK / WINNER / BET
                     const isEdgeA = edgePick === pA;
                     const isEdgeB = edgePick === pB;
                     const isWinA = winPick === pA;
                     const isWinB = winPick === pB;
-                    const labelA = isEdgeA ? (isWinA ? 'EDGE · WINNER' : 'EDGE PICK') : (isWinA ? 'WINNER' : '');
-                    const labelB = isEdgeB ? (isWinB ? 'EDGE · WINNER' : 'EDGE PICK') : (isWinB ? 'WINNER' : '');
+                    const roleA = isEdgeA ? 'EDGE PICK' : (isWinA ? 'WINNER' : 'BET');
+                    const roleB = isEdgeB ? 'EDGE PICK' : (isWinB ? 'WINNER' : 'BET');
+                    const labelA = isBetA ? '✓ ACTIVE' : roleA;
+                    const labelB = isBetB ? '✓ ACTIVE' : roleB;
                     const classA = isEdgeA ? 'edge-pick' : (isWinA ? 'winner-pick' : '');
                     const classB = isEdgeB ? 'edge-pick' : (isWinB ? 'winner-pick' : '');
                     return `<div class="v5-bet-selector">
                         <div class="bet-option ${classA} ${isBetA ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pAe}', ${priceA}, ${probA}, ${edgeA}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
-                            <span class="bo-label">${labelA || 'BET'}</span>
+                            <span class="bo-label">${labelA}</span>
                             <span class="bo-name">${nameA}</span>
                             <span class="bo-prob">${probA.toFixed(0)}% · ${priceA.toFixed(0)}c</span>
                         </div>
                         <div class="bet-option ${classB} ${isBetB ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pBe}', ${priceB}, ${probB}, ${edgeB}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
-                            <span class="bo-label">${labelB || 'BET'}</span>
+                            <span class="bo-label">${labelB}</span>
                             <span class="bo-name">${nameB}</span>
                             <span class="bo-prob">${probB.toFixed(0)}% · ${priceB.toFixed(0)}c</span>
                         </div>
