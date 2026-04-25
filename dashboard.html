@@ -283,6 +283,22 @@
         .v5-bet-btn { background: #d4740a; color: #fff; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; transition: all 0.2s; }
         .v5-bet-btn:hover { background: #e8943a; }
         .v5-bet-btn.on { background: #4caf50; }
+        /* Dual-player bet selector */
+        .v5-bet-selector { display: flex; gap: 0; border-radius: 6px; overflow: hidden; flex: 1; }
+        .v5-bet-selector .bet-option { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 4px; cursor: pointer; border: 1px solid #2a2d37; background: #1a1d24; transition: all 0.2s; position: relative; }
+        .v5-bet-selector .bet-option:first-child { border-radius: 6px 0 0 6px; border-right: none; }
+        .v5-bet-selector .bet-option:last-child { border-radius: 0 6px 6px 0; }
+        .v5-bet-selector .bet-option .bo-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; margin-bottom: 2px; }
+        .v5-bet-selector .bet-option .bo-name { font-size: 10px; font-weight: 700; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .v5-bet-selector .bet-option .bo-prob { font-size: 9px; color: #81c784; margin-top: 1px; }
+        .v5-bet-selector .bet-option.edge-pick { border-color: #d4740a40; background: #1f1a12; }
+        .v5-bet-selector .bet-option.edge-pick .bo-label { color: #d4740a; }
+        .v5-bet-selector .bet-option.winner-pick { border-color: #42a5f540; background: #111a2a; }
+        .v5-bet-selector .bet-option.winner-pick .bo-label { color: #42a5f5; }
+        .v5-bet-selector .bet-option:hover { background: #252830; }
+        .v5-bet-selector .bet-option.active-bet { border-color: #4caf50 !important; background: #1a2e1a !important; }
+        .v5-bet-selector .bet-option.active-bet .bo-name { color: #4caf50; }
+        .v5-bet-selector .bet-option.active-bet::after { content: '✓'; position: absolute; top: 3px; right: 5px; color: #4caf50; font-size: 10px; font-weight: 700; }
         .v5-plink { color: #42a5f5; font-size: 11px; text-decoration: none; }
         .v5-plink:hover { text-decoration: underline; }
         .live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; margin-right: 4px; animation: v5pulse 2s infinite; }
@@ -476,7 +492,7 @@ window.PICKS_DATA = [];
         <select id="sigSort" onchange="renderSignals()">
             <option value="edge">Sort: Highest Edge</option>
             <option value="confidence">Sort: Confidence</option>
-            <option value="winprob">Sort: Win Prob</option>
+            <option value="winprob">Sort: Model Prob</option>
             <option value="volume">Sort: Volume</option>
         </select>
     </div>
@@ -2113,7 +2129,7 @@ function renderSignals() {
 
     latest.forEach(s => {
         const edge = Math.abs(s.edge || 0);
-        const isBet = myBets.some(b => b.match === s.match && b.bet_on === (s.bet_on || s.predicted_winner));
+        const isBet = myBets.some(b => b.match === s.match);
 
         // Edge tier badge
         let tierBadge = '';
@@ -2290,7 +2306,7 @@ function renderSignals() {
                         <div class="v5-pick-right">
                             ${sysWR != null ? '<div class="v5-pbox" style="background:#0a2a5c;border:1px solid #2196f3" title="' + sysWrTooltip + '"><div class="bl">SYS WIN RATE</div><div class="bv">' + sysWR + '%</div></div>' : ''}
                             <div class="v5-pbox" style="background:${confBg};border:1px solid ${confBorder}">
-                                <div class="bl">WIN PROB</div>
+                                <div class="bl">MODEL PROB</div>
                                 <div class="bv">${modelP.toFixed(1)}%</div>
                             </div>
                             <div class="v5-pbox" style="background:#4a2800;border:1px solid #d4740a">
@@ -2431,7 +2447,44 @@ function renderSignals() {
 
             <!-- FOOTER -->
             <div class="v5-card-foot">
-                <button class="v5-bet-btn ${isBet ? 'on' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}', '${(polyLink||'').replace(/'/g,"\\'")}')">${isBet ? '✓ Active Bet' : 'Place Bet'}</button>
+                ${s.market_type === 'h2h' && s.player_a && s.player_b ? (() => {
+                    const pA = s.player_a;
+                    const pB = s.player_b;
+                    const edgePick = betOn;
+                    const winPick = s.predicted_winner || betOn;
+                    const probA = s.model_prob_a || 0;
+                    const probB = s.model_prob_b || 0;
+                    const priceA = s.poly_price_a || 0;
+                    const priceB = s.poly_price_b || 0;
+                    const edgeA = (probA - priceA).toFixed(1);
+                    const edgeB = (probB - priceB).toFixed(1);
+                    const isBetA = myBets.some(b => b.match === s.match && b.bet_on === pA);
+                    const isBetB = myBets.some(b => b.match === s.match && b.bet_on === pB);
+                    const matchE = s.match.replace(/'/g,"\\'");
+                    const pAe = pA.replace(/'/g,"\\'");
+                    const pBe = pB.replace(/'/g,"\\'");
+                    const tournE = (s.tournament||'').replace(/'/g,"\\'");
+                    const linkE = (polyLink||'').replace(/'/g,"\\'");
+                    // Short last names for display
+                    const nameA = pA.split(' ').pop();
+                    const nameB = pB.split(' ').pop();
+                    const labelA = edgePick === pA ? 'EDGE PICK' : (winPick === pA ? 'WINNER' : '');
+                    const labelB = edgePick === pB ? 'EDGE PICK' : (winPick === pB ? 'WINNER' : '');
+                    const classA = edgePick === pA ? 'edge-pick' : (winPick === pA ? 'winner-pick' : '');
+                    const classB = edgePick === pB ? 'edge-pick' : (winPick === pB ? 'winner-pick' : '');
+                    return `<div class="v5-bet-selector">
+                        <div class="bet-option ${classA} ${isBetA ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pAe}', ${priceA}, ${probA}, ${edgeA}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
+                            <span class="bo-label">${labelA || 'BET'}</span>
+                            <span class="bo-name">${nameA}</span>
+                            <span class="bo-prob">${probA.toFixed(0)}% · ${priceA.toFixed(0)}c</span>
+                        </div>
+                        <div class="bet-option ${classB} ${isBetB ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pBe}', ${priceB}, ${probB}, ${edgeB}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
+                            <span class="bo-label">${labelB || 'BET'}</span>
+                            <span class="bo-name">${nameB}</span>
+                            <span class="bo-prob">${probB.toFixed(0)}% · ${priceB.toFixed(0)}c</span>
+                        </div>
+                    </div>`;
+                })() : `<button class="v5-bet-btn ${isBet ? 'on' : ''}" onclick="toggleSigBet(this, '${s.match.replace(/'/g,"\\'")}', '${betOn.replace(/'/g,"\\'")}', ${polyP}, ${modelP}, ${s.edge||0}, ${s.kelly_stake||0}, '${s.market_type||''}', '${(s.tournament||'').replace(/'/g,"\\'")}', '${s.surface||''}', '${(polyLink||'').replace(/'/g,"\\'")}')">${isBet ? '✓ Active Bet' : 'Place Bet'}</button>`}
                 <a href="${polyLink}" target="_blank" class="v5-plink"><span class="live-dot"></span>Open on Polymarket →</a>
             </div>
         </div>`;
@@ -2441,7 +2494,7 @@ function renderSignals() {
     grid.innerHTML = html;
 }
 
-function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, marketType, tournament, surface, polyLink) {
+function toggleSigBet(el, match, betOn, polyPrice, modelProb, edge, kelly, marketType, tournament, surface, polyLink) {
     const data = {
         match, bet_on: betOn, poly_price: polyPrice, model_prob: modelProb,
         edge, kelly, market_type: marketType, tournament, surface,
@@ -2450,20 +2503,35 @@ function toggleSigBet(btn, match, betOn, polyPrice, modelProb, edge, kelly, mark
         card_date: new Date().toISOString().slice(0, 10),
     };
 
+    const card = el.closest('.sig-card');
+    const isBetOption = el.classList.contains('bet-option');
     const idx = myBets.findIndex(b => b.match === match && b.bet_on === betOn);
+
     if (idx >= 0) {
+        // Remove this bet
         myBets.splice(idx, 1);
-        btn.classList.remove('active');
-        btn.textContent = 'Place Bet';
-        btn.closest('.sig-card').classList.remove('is-bet');
-        btn.classList.remove('on');
+        if (isBetOption) {
+            el.classList.remove('active-bet');
+        } else {
+            el.classList.remove('active', 'on');
+            el.textContent = 'Place Bet';
+        }
     } else {
+        // Add this bet
         myBets.push(data);
-        btn.classList.add('active');
-        btn.classList.add('on');
-        btn.textContent = '✓ Active Bet';
-        btn.closest('.sig-card').classList.add('is-bet');
+        if (isBetOption) {
+            el.classList.add('active-bet');
+        } else {
+            el.classList.add('active', 'on');
+            el.textContent = '✓ Active Bet';
+        }
     }
+
+    // Update card is-bet class based on whether ANY bet exists for this match
+    const hasAnyBet = myBets.some(b => b.match === match);
+    if (hasAnyBet) card.classList.add('is-bet');
+    else card.classList.remove('is-bet');
+
     localStorage.setItem('tennis_all_bets', JSON.stringify(myBets));
     renderMyBets();
     renderActiveBetCards();
