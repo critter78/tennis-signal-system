@@ -2822,6 +2822,8 @@ def _run_pipeline_background():
             combined = out
             if err:
                 combined += "\n--- STDERR ---\n" + err
+            if r.returncode != 0 and not combined.strip():
+                combined = f"[Process exited with code {r.returncode}, no output captured — possible segfault or OOM]"
             results[name] = {"status": "ok" if r.returncode == 0 else "error", "output": combined[-4500:]}
             if r.returncode != 0:
                 logger.warning(f"  {name} failed: {r.stderr[-200:]}")
@@ -2902,6 +2904,28 @@ def admin_pipeline_status():
     if _pipeline_status["result"]:
         return jsonify(_pipeline_status["result"]), 200
     return jsonify({"status": "idle", "message": "No pipeline has been run yet."}), 200
+
+
+@app.route("/admin/diag-card", methods=["POST"])
+@enable_cors
+def admin_diag_card():
+    """Diagnostic: try running 04_betting_card.py and capture full output."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        r = subprocess.run(
+            ["python3", str(BASE_DIR / "04_betting_card.py"), "--min-volume", "500", "--skip-whales"],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=120
+        )
+        return jsonify({
+            "returncode": r.returncode,
+            "stdout_last_2000": (r.stdout or "")[-2000:],
+            "stderr_last_2000": (r.stderr or "")[-2000:],
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Timeout after 120s"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 
 @app.route("/api/refresh", methods=["POST"])
