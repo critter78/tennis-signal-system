@@ -802,50 +802,72 @@ Chart.defaults.font.size = 10;
 
     const barPct = Math.min((resolvedCount / barMax) * 100, 100);
 
-    // Phase dots
-    const phaseDotsHtml = phases.map((p, i) => {
+    // Phase cards (3x2 grid)
+    const phaseCardsHtml = phases.map((p, i) => {
         const active = p === currentPhase;
         const done = resolvedCount >= p.max;
-        const dotColor = done ? '#4caf50' : active ? p.color : '#2d3139';
-        const borderColor = active ? p.color : 'transparent';
-        const statusTag = done
-            ? ' <span style="color:#4caf50; font-weight:600">✓</span>'
-            : active
-            ? ' <span style="color:' + p.color + '; font-weight:600">' + phaseProgress + '%</span>'
-            : '';
-        return `<div style="display:flex; align-items:center; gap:6px; padding:4px 0">
-            <div style="width:10px; height:10px; border-radius:50%; background:${dotColor}; border:2px solid ${borderColor}; flex-shrink:0"></div>
-            <span style="font-size:9px; color:${active ? '#e0e0e0' : done ? '#81c784' : '#6c757d'}; font-weight:${active ? '700' : '400'}">${p.label}${statusTag}</span>
-        </div>`;
+        if (active) {
+            return `<div style="background:#1f1510;border:2px solid ${p.color};border-radius:6px;padding:8px 10px;box-shadow:0 0 12px ${p.color}30">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                    <div style="width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0;box-shadow:0 0 6px ${p.color}"></div>
+                    <span style="font-size:10px;color:#e0e0e0;font-weight:700">${p.label}</span>
+                    <span style="font-size:9px;color:${p.color};font-weight:700;margin-left:auto">${phaseProgress}%</span>
+                </div>
+                <div style="font-size:8px;color:#aaa">${p.min} — ${p.max} outcomes</div>
+                <div style="height:3px;background:#2d3139;border-radius:2px;margin-top:6px;overflow:hidden">
+                    <div style="height:100%;width:${phaseProgress}%;background:${p.color};border-radius:2px"></div>
+                </div>
+            </div>`;
+        } else if (done) {
+            return `<div style="background:#0f1117;border:1px solid #4caf5060;border-radius:6px;padding:8px 10px">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                    <div style="width:10px;height:10px;border-radius:50%;background:#4caf50;flex-shrink:0"></div>
+                    <span style="font-size:9px;color:#81c784;font-weight:600">${p.label}</span>
+                    <span style="font-size:8px;color:#4caf50;font-weight:700;margin-left:auto">Done</span>
+                </div>
+                <div style="font-size:8px;color:#6c757d">${p.min} — ${p.max} outcomes</div>
+            </div>`;
+        } else {
+            return `<div style="background:#0f1117;border:1px solid #2d3139;border-radius:6px;padding:8px 10px;opacity:0.5">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                    <div style="width:10px;height:10px;border-radius:50%;background:#2d3139;flex-shrink:0"></div>
+                    <span style="font-size:9px;color:#6c757d;font-weight:600">${p.label}</span>
+                </div>
+                <div style="font-size:8px;color:#6c757d">${p.min} — ${p.max} outcomes</div>
+            </div>`;
+        }
     }).join('');
 
     el.innerHTML = `
         <h3>LSTM SEQUENTIAL LEARNER — TRAINING PROGRESS</h3>
-        <div style="display:grid; grid-template-columns:1fr 160px; gap:20px; margin-bottom:12px">
+        <div style="display:grid; grid-template-columns:1fr 200px; gap:16px; margin-bottom:16px">
             <div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:6px">
                     <span style="font-size:11px; color:#e0e0e0; font-weight:700">${resolvedCount} / ${accuracyTarget} resolved outcomes</span>
                     <span style="font-size:11px; color:${currentPhase.color}; font-weight:600">${currentPhase.label}</span>
                 </div>
-                <div style="height:24px; background:#0f1117; border:1px solid #2d3139; position:relative; overflow:hidden">
-                    <div style="height:100%; width:${barPct}%; background:linear-gradient(90deg, ${currentPhase.color}80, ${currentPhase.color}); transition:width 0.5s"></div>
+                <div style="height:24px; background:#0f1117; border:1px solid #2d3139; position:relative; overflow:hidden; border-radius:3px">
+                    <div style="height:100%; width:${barPct}%; background:linear-gradient(90deg, ${currentPhase.color}80, ${currentPhase.color}); border-radius:3px; transition:width 0.5s"></div>
                 </div>
                 <div style="position:relative; height:36px; margin-top:4px">
                     ${milestonesHtml}
                 </div>
                 <div style="font-size:10px; color:#6c757d; margin-top:4px">${currentPhase.desc}</div>
             </div>
-            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px; text-align:center">
-                <div style="font-size:8px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px">Accuracy Readiness</div>
-                <div style="font-size:28px; font-weight:800; color:${accuracyColor}">${accuracyPct}%</div>
-                <div style="font-size:8px; color:#6c757d; margin-top:4px">${accuracyPct >= 100 ? 'LSTM adjustments reliable' : (accuracyTarget - resolvedCount) + ' more picks needed'}</div>
+            <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:14px; text-align:center">
+                <div style="font-size:8px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px">System Reliability</div>
+                <div style="font-size:32px; font-weight:800; color:${accuracyColor}">${accuracyPct}%</div>
+                <div style="font-size:10px; color:${currentPhase.color}; font-weight:600; margin:4px 0">${currentPhase.label}</div>
+                <div style="font-size:8px; color:#6c757d">${accuracyPct >= 100 ? 'LSTM adjustments reliable' : (accuracyTarget - resolvedCount) + ' more picks needed'}</div>
             </div>
         </div>
-        <div style="border-top:1px solid #2d3139; padding-top:10px">
-            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px">Learning Phases</div>
-            ${phaseDotsHtml}
+        <div style="border-top:1px solid #2d3139; padding-top:12px">
+            <div style="font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; font-weight:600">Learning Phases</div>
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px">
+                ${phaseCardsHtml}
+            </div>
         </div>
-        ${resolvedCount > 0 ? '<div style="border-top:1px solid #2d3139; padding-top:8px; margin-top:8px; font-size:10px; color:#aaa">Win rate: <strong style="color:' + (wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336') + '">' + (wins.length/resolved.length*100).toFixed(1) + '%</strong> (' + wins.length + 'W-' + losses.length + 'L) | PnL: <strong style="color:' + (totalPnl >= 0 ? '#4caf50' : '#f44336') + '">$' + totalPnl.toFixed(0) + '</strong></div>' : ''}
+        ${resolvedCount > 0 ? '<div style="border-top:1px solid #2d3139; padding-top:8px; margin-top:12px; font-size:10px; color:#aaa">Win rate: <strong style="color:' + (wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336') + '">' + (wins.length/resolved.length*100).toFixed(1) + '%</strong> (' + wins.length + 'W-' + losses.length + 'L) | PnL: <strong style="color:' + (totalPnl >= 0 ? '#4caf50' : '#f44336') + '">$' + totalPnl.toFixed(0) + '</strong></div>' : ''}
     `;
 })();
 
@@ -893,14 +915,16 @@ Chart.defaults.font.size = 10;
     const noEdgeWinRate = noEdgePicks.length > 0 ? (noEdgePicks.filter(p => p.outcome === 'win').length / noEdgePicks.length * 100) : 0;
     const edgeLift = edgeWinRate - noEdgeWinRate;
 
-    // ── Brier score (probability accuracy) ──
-    let brierSum = 0;
-    resolved.forEach(p => {
-        const predicted = (p.model_prob || 50) / 100;
-        const actual = p.outcome === 'win' ? 1 : 0;
-        brierSum += Math.pow(predicted - actual, 2);
-    });
-    const brierScore = (brierSum / resolved.length).toFixed(4);
+    // ── Winner ID accuracy: how often predicted_winner actually wins ──
+    const withWinner = resolved.filter(p => p.predicted_winner && p.actual_winner);
+    const winnerCorrect = withWinner.filter(p => {
+        const predLast = (p.predicted_winner || '').split(' ').pop().toLowerCase();
+        const actualLast = (p.actual_winner || '').split(' ').pop().toLowerCase();
+        return predLast === actualLast;
+    }).length;
+    const winnerIdRate = withWinner.length > 0 ? (winnerCorrect / withWinner.length * 100).toFixed(1) : '—';
+    const winnerIdColor = parseFloat(winnerIdRate) >= 65 ? '#4caf50' : parseFloat(winnerIdRate) >= 55 ? '#d4740a' : '#f44336';
+    const winnerIdLabel = parseFloat(winnerIdRate) >= 65 ? 'Strong signal' : parseFloat(winnerIdRate) >= 55 ? 'Moderate signal' : 'Weak signal';
 
     // ── Strong edge (>=10%) performance ──
     const strongEdge = resolved.filter(p => Math.abs(p.edge || 0) >= 10);
@@ -921,49 +945,49 @@ Chart.defaults.font.size = 10;
     const driftLabel = drift > 2 ? 'Improving' : drift < -2 ? 'Declining' : 'Stable';
 
     el.innerHTML = `
-        <h3>MODEL INTELLIGENCE — DRIFT & LEARNING METRICS</h3>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px">
-            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+        <h3>MODEL INTELLIGENCE — SIGNAL QUALITY METRICS</h3>
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:16px">
+            <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:12px">
                 <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Model Drift</div>
-                <div style="font-size:20px; font-weight:700; color:${driftColor}">${driftDir} ${Math.abs(drift).toFixed(1)}%</div>
+                <div style="font-size:22px; font-weight:700; color:${driftColor}">${driftDir} ${Math.abs(drift).toFixed(1)}%</div>
                 <div style="font-size:9px; color:${driftColor}; margin-top:2px">${driftLabel}</div>
                 <div style="font-size:8px; color:#6c757d; margin-top:4px">Recent ${recentCount} vs prior ${older.length} picks</div>
             </div>
-            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+            <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:12px">
                 <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Calibration Error</div>
-                <div style="font-size:20px; font-weight:700; color:${parseFloat(avgCalibError) < 10 ? '#4caf50' : parseFloat(avgCalibError) < 20 ? '#d4740a' : '#f44336'}">${avgCalibError}%</div>
+                <div style="font-size:22px; font-weight:700; color:${parseFloat(avgCalibError) < 10 ? '#4caf50' : parseFloat(avgCalibError) < 20 ? '#d4740a' : '#f44336'}">${avgCalibError}%</div>
                 <div style="font-size:9px; color:#aaa; margin-top:2px">${parseFloat(avgCalibError) < 10 ? 'Well calibrated' : parseFloat(avgCalibError) < 20 ? 'Moderate drift' : 'Needs retraining'}</div>
-                <div style="font-size:8px; color:#6c757d; margin-top:4px">Avg |predicted - actual| per bucket</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">Avg |predicted - actual|</div>
             </div>
-            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
-                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Brier Score</div>
-                <div style="font-size:20px; font-weight:700; color:${parseFloat(brierScore) < 0.22 ? '#4caf50' : parseFloat(brierScore) < 0.25 ? '#d4740a' : '#f44336'}">${brierScore}</div>
-                <div style="font-size:9px; color:#aaa; margin-top:2px">${parseFloat(brierScore) < 0.22 ? 'Strong accuracy' : parseFloat(brierScore) < 0.25 ? 'Market-level' : 'Below market'}</div>
-                <div style="font-size:8px; color:#6c757d; margin-top:4px">Lower is better (0.25 = coin flip)</div>
+            <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Winner ID Accuracy</div>
+                <div style="font-size:22px; font-weight:700; color:${winnerIdColor}">${winnerIdRate}%</div>
+                <div style="font-size:9px; color:${winnerIdColor}; margin-top:2px">${winnerIdLabel}</div>
+                <div style="font-size:8px; color:#6c757d; margin-top:4px">${winnerCorrect}/${withWinner.length} predicted winner wins</div>
             </div>
-            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
-                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Edge Lift</div>
-                <div style="font-size:20px; font-weight:700; color:${edgeLift > 0 ? '#4caf50' : '#f44336'}">${edgeLift > 0 ? '+' : ''}${edgeLift.toFixed(1)}%</div>
-                <div style="font-size:9px; color:#aaa; margin-top:2px">Edge picks: ${edgeWinRate.toFixed(1)}% vs No-edge: ${noEdgeWinRate.toFixed(1)}%</div>
+            <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Edge Pick WR</div>
+                <div style="font-size:22px; font-weight:700; color:${edgeLift > 0 ? '#4caf50' : '#f44336'}">${edgeWinRate.toFixed(1)}%</div>
+                <div style="font-size:9px; color:#aaa; margin-top:2px">vs No-edge: ${noEdgeWinRate.toFixed(1)}% (+${edgeLift.toFixed(1)}% lift)</div>
                 <div style="font-size:8px; color:#6c757d; margin-top:4px">${edgePicks.length} edge / ${noEdgePicks.length} no-edge picks</div>
             </div>
-            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
-                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Strong Edge (>=10%)</div>
-                <div style="font-size:20px; font-weight:700; color:${parseFloat(strongWinRate) >= 60 ? '#4caf50' : '#d4740a'}">${strongWinRate}%</div>
-                <div style="font-size:9px; color:#aaa; margin-top:2px">${strongWins}W-${strongEdge.length - strongWins}L | PnL: $${strongPnl >= 0 ? '+' : ''}${strongPnl.toFixed(0)}</div>
+            <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:12px">
+                <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">Strong Edge (10%+)</div>
+                <div style="font-size:22px; font-weight:700; color:${parseFloat(strongWinRate) >= 60 ? '#4caf50' : '#d4740a'}">${strongWinRate}%</div>
+                <div style="font-size:9px; color:#aaa; margin-top:2px">${strongWins}W-${strongEdge.length - strongWins}L | P&L: $${strongPnl >= 0 ? '+' : ''}${strongPnl.toFixed(0)}</div>
                 <div style="font-size:8px; color:#6c757d; margin-top:4px">${strongEdge.length} strong-edge picks</div>
             </div>
-            <div style="background:#0f1117; border:1px solid #2d3139; padding:12px">
+            <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:12px">
                 <div style="font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px">7-Day Win Rate</div>
-                <div style="font-size:20px; font-weight:700; color:${parseFloat(last7dWr) >= 60 ? '#4caf50' : parseFloat(last7dWr) >= 50 ? '#d4740a' : '#f44336'}">${last7dWr}%</div>
+                <div style="font-size:22px; font-weight:700; color:${parseFloat(last7dWr) >= 60 ? '#4caf50' : parseFloat(last7dWr) >= 50 ? '#d4740a' : '#f44336'}">${last7dWr}%</div>
                 <div style="font-size:9px; color:#aaa; margin-top:2px">${last7d.length} picks in last 7 days</div>
                 <div style="font-size:8px; color:#6c757d; margin-top:4px">vs overall: ${overallWinRate.toFixed(1)}%</div>
             </div>
         </div>
-        <div style="font-size:9px; color:#6c757d; border-top:1px solid #2d3139; padding-top:10px">
-            <strong style="color:#d4740a">Base Model:</strong> HistGradientBoosting (AUC 0.695, ${(36303).toLocaleString()} training samples) &nbsp;|&nbsp;
-            <strong style="color:#d4740a">LSTM Adjuster:</strong> ${resolved.length >= 50 ? 'Active — adjusting base model probabilities using sequential patterns from ' + resolved.length + ' resolved outcomes' : 'Pending — needs ' + (50 - resolved.length) + ' more resolved outcomes to activate'} &nbsp;|&nbsp;
-            <strong style="color:#d4740a">Learning:</strong> Each resolved bet improves future edge detection through outcome-weighted pattern recalibration
+        <div style="font-size:9px; color:#6c757d; border-top:1px solid #2d3139; padding-top:10px; line-height:1.6">
+            <strong style="color:#d4740a">Base Model:</strong> HistGradientBoosting (AUC 0.695, ${(36303).toLocaleString()} samples) &nbsp;|&nbsp;
+            <strong style="color:#d4740a">LSTM:</strong> ${resolved.length >= 50 ? 'Active — ' + resolved.length + ' resolved outcomes' : 'Pending — needs ' + (50 - resolved.length) + ' more outcomes'} &nbsp;|&nbsp;
+            <strong style="color:#d4740a">Core signal:</strong> Winner identification (${winnerIdRate}% accuracy)
         </div>
     `;
 })();
@@ -1589,85 +1613,114 @@ function renderMyBets() {
     const tradeOpen = enriched.filter(b => !b.trade_result || b.trade_result === 'open').length;
     const totalTradePnl = withTradeResult.reduce((s, b) => s + (b.trade_pnl || 0), 0);
 
-    let html = `<div style="margin-bottom:12px; font-size:11px; color:#6c757d; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">
-        <div>`;
+    // ── Stats: only count RESOLVED bets for record/WR/P&L ──
+    const resolvedBets = visible.filter(b => b.outcome === 'win' || b.outcome === 'loss');
+    const resolvedPnl = resolvedBets.reduce((s, b) => {
+        if (b._hasTradeData && b.trade_pnl != null) return s + b.trade_pnl;
+        return s + (b.pnl || 0);
+    }, 0);
+    const resolvedStaked = resolvedBets.reduce((s, b) => s + (b._hasTradeData ? (b.actual_stake || 0) : 100), 0);
+    const resolvedRoi = resolvedStaked > 0 ? (resolvedPnl / resolvedStaked * 100) : 0;
 
-    const hiddenNote = '';
-
-    if (hasAnyTradeData) {
-        html += `<strong style="color:#e0e0e0">${visible.length}</strong> bets${hiddenNote} |
-            Trade: <strong style="color:#4caf50">${tradeWins}W</strong> -
-            <strong style="color:#f44336">${tradeLosses}L</strong>${tradeVoid ? ` - <strong style="color:#888">${tradeVoid}V</strong>` : ''}${tradePartial ? ` - <strong style="color:#d4740a">${tradePartial}P</strong>` : ''} -
-            <strong style="color:#6c757d">${tradeOpen} open</strong> |
-            Trade P&L: <strong style="color:${totalTradePnl >= 0 ? '#4caf50' : '#f44336'}">${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)}</strong> |
-            Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>${(tradeWins + tradeLosses) > 0 ? ` | Win Rate: <strong style="color:${tradeWins/(tradeWins+tradeLosses) >= 0.5 ? '#4caf50' : '#f44336'}">${(tradeWins/(tradeWins+tradeLosses)*100).toFixed(0)}%</strong>` : ''}`;
-    } else {
-        const bPnl = visible.reduce((s, b) => s + (b.pnl || 0), 0);
-        html += `<strong style="color:#e0e0e0">${visible.length}</strong> bets${hiddenNote} |
-            Match: <strong style="color:#4caf50">${bWins}W</strong> -
-            <strong style="color:#f44336">${bLosses}L</strong>${bVoid ? ` - <strong style="color:#888">${bVoid}V</strong>` : ''} -
-            <strong style="color:#6c757d">${bPending} pending</strong> |
-            P&L: <strong style="color:${bPnl >= 0 ? '#4caf50' : '#f44336'}">${bPnl >= 0 ? '+' : ''}$${bPnl.toFixed(2)}</strong> |
-            Staked: <strong style="color:#d4740a">$${totalStaked.toFixed(2)}</strong>${(bWins + bLosses) > 0 ? ` | Win Rate: <strong style="color:${bWins/(bWins+bLosses) >= 0.5 ? '#4caf50' : '#f44336'}">${(bWins/(bWins+bLosses)*100).toFixed(0)}%</strong>` : ''}`;
-    }
-
-    html += `</div>
-        <button id="syncTradesBtn" onclick="syncPolyTrades()" style="background:#1b5e20; color:white; border:none; padding:5px 12px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.04em;">Sync Polymarket Trades</button>
+    let html = `<div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap">
+        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
+            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">RESOLVED</div>
+            <div style="font-weight:700; color:#e0e0e0; font-size:15px">${resolvedBets.length}</div>
+        </div>
+        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
+            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">RECORD</div>
+            <div style="font-weight:700; font-size:13px"><span style="color:#4caf50">${bWins}W</span> <span style="color:#6c757d">-</span> <span style="color:#f44336">${bLosses}L</span></div>
+        </div>
+        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
+            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">WIN RATE</div>
+            <div style="font-weight:700; color:${resolvedBets.length > 0 && bWins/resolvedBets.length >= 0.5 ? '#4caf50' : '#f44336'}; font-size:15px">${resolvedBets.length > 0 ? (bWins/resolvedBets.length*100).toFixed(1) : '—'}%</div>
+        </div>
+        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
+            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">P&L</div>
+            <div style="font-weight:700; color:${resolvedPnl >= 0 ? '#4caf50' : '#f44336'}; font-size:15px">${resolvedPnl >= 0 ? '+' : ''}$${resolvedPnl.toFixed(2)}</div>
+        </div>
+        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
+            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">STAKED</div>
+            <div style="font-weight:700; color:#d4740a; font-size:15px">$${resolvedStaked.toFixed(2)}</div>
+        </div>
+        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
+            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">ROI</div>
+            <div style="font-weight:700; color:${resolvedRoi >= 0 ? '#4caf50' : '#f44336'}; font-size:15px">${resolvedBets.length > 0 ? (resolvedRoi >= 0 ? '+' : '') + resolvedRoi.toFixed(1) + '%' : '—'}</div>
+        </div>
+        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
+            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">PENDING</div>
+            <div style="font-weight:700; color:#6c757d; font-size:15px">${bPending}</div>
+        </div>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        <div style="font-size:9px; color:#6c757d">Stats show <strong style="color:#e0e0e0">resolved bets only</strong> (excludes ${bPending} pending${bVoid ? ', ' + bVoid + ' void' : ''}). P&L uses actual wallet data where available, $100 notional otherwise.</div>
+        <button id="syncTradesBtn" onclick="syncPolyTrades()" style="background:#1b5e20; color:white; border:none; padding:5px 12px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.04em;">Sync Trades</button>
     </div>`;
 
     html += `<table><thead><tr>
-        <th>Date</th><th>Match</th><th>Pick</th>
-        <th>Buy</th><th>Sell</th><th>Stake</th>
-        <th>Trade</th><th>Trade P&L</th>
-        <th>Match</th><th>ROI</th><th>Edge</th>
+        <th>Date</th><th>Match</th><th>Pick</th><th>Type</th>
+        <th>Buy</th><th>Model</th><th>Edge</th><th>Stake</th>
+        <th>Result</th><th>P&L</th><th>ROI</th>
     </tr></thead><tbody>`;
 
     visible.forEach(b => {
-        const date = (b.timestamp || b.card_date || '').slice(0, 10);
+        const date = (b.timestamp || b.card_date || '').slice(0, 10).slice(5); // MM-DD
 
-        // Match outcome column
-        const matchRes = b.outcome === 'win' ? '<span class="w">W</span>' : b.outcome === 'loss' ? '<span class="l">L</span>' : b.outcome === 'void' ? '<span style="color:#888">V</span>' : '<span class="p">...</span>';
+        // Result badge
+        const resultBadge = b.outcome === 'win' ? '<span style="background:#4caf50;color:#fff;font-size:8px;font-weight:800;padding:1px 6px;border-radius:2px">W</span>'
+            : b.outcome === 'loss' ? '<span style="background:#f44336;color:#fff;font-size:8px;font-weight:800;padding:1px 6px;border-radius:2px">L</span>'
+            : b.outcome === 'void' ? '<span style="color:#888">V</span>'
+            : '<span style="color:#6c757d">...</span>';
 
-        // Trade result column — based on actual P&L from wallet
-        let tradeRes = '<span class="p">—</span>';
-        if (b.trade_result === 'win') tradeRes = `<span class="w">W</span><span style="color:#4caf50;font-size:9px"> +${(b.trade_return||0).toFixed(0)}%</span>`;
-        else if (b.trade_result === 'loss') tradeRes = `<span class="l">L</span><span style="color:#f44336;font-size:9px"> ${(b.trade_return||0).toFixed(0)}%</span>`;
-        else if (b.trade_result === 'partial') tradeRes = `<span style="color:#d4740a">P</span><span style="color:#d4740a;font-size:9px"> +${(b.trade_return||0).toFixed(0)}%</span>`;
-        else if (b.trade_result === 'void') tradeRes = '<span style="color:#888">V</span>';
-        else if (b.trade_result === 'open') tradeRes = '<span style="color:#6c757d">OPEN</span>';
+        // Bet type: detect if this was an edge pick or winner pick
+        // If bet_on matches the card's bet_on (edge pick), it's "Edge". Otherwise "Winner"
+        const betType = b._isWinnerBet ? '<span style="color:#42a5f5;font-weight:600">Winner</span>' : '<span style="color:#d4740a;font-weight:600">Edge</span>';
 
-        // Trade P&L
-        const tradePnl = b.trade_pnl != null ? `<span class="${b.trade_pnl >= 0 ? 'w' : 'l'}">${b.trade_pnl >= 0 ? '+' : ''}$${b.trade_pnl.toFixed(2)}</span>` : '—';
-
-        // Buy/Sell prices
+        // Buy price
         const buyPrice = b._hasTradeData
             ? `<span style="color:#4caf50">${b.actual_buy_price}c</span>`
-            : `<span style="color:#6c757d">${b.poly_price}c</span>`;
-        const sellPrice = b.actual_sell_price && b.actual_sell_price > 0
-            ? `<span style="color:#d4740a">${b.actual_sell_price}c</span>`
-            : '<span style="color:#6c757d">—</span>';
+            : `<span style="color:#e0e0e0">${b.poly_price || '—'}c</span>`;
+
+        // Model prob
+        const modelP = b.model_prob ? `<span style="color:#81c784">${parseFloat(b.model_prob).toFixed(1)}%</span>` : '—';
+
+        // Edge
+        const edgeVal = b.edge || 0;
+        const edgeColor = edgeVal >= 10 ? '#4caf50' : edgeVal > 0 ? '#d4740a' : '#f44336';
+
+        // Stake
         const stake = b._hasTradeData
             ? `<span style="color:#4caf50">$${b.actual_stake.toFixed(2)}</span>`
             : `<span style="color:#6c757d">$100*</span>`;
 
-        html += `<tr>
-            <td>${date}</td>
-            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${b.match} | ${b.tournament||''}">${b.match}</td>
+        // P&L — prefer trade_pnl, then pnl
+        const bestPnl = b.trade_pnl != null ? b.trade_pnl : b.pnl;
+        const pnlStr = bestPnl != null && b.outcome ? `<span style="color:${bestPnl >= 0 ? '#4caf50' : '#f44336'};font-weight:700">${bestPnl >= 0 ? '+' : ''}$${bestPnl.toFixed(2)}</span>` : '—';
+
+        // ROI
+        const stakeVal = b._hasTradeData ? b.actual_stake : 100;
+        const roiStr = bestPnl != null && b.outcome && stakeVal > 0
+            ? `<span style="color:${bestPnl >= 0 ? '#4caf50' : '#f44336'};font-weight:700">${(bestPnl/stakeVal*100).toFixed(0)}%</span>`
+            : '—';
+
+        html += `<tr${b.outcome === 'loss' ? ' style="opacity:0.75"' : ''}>
+            <td style="color:#d4740a">${date}</td>
+            <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${b.match} | ${b.tournament||''}">${b.match}</td>
             <td style="font-weight:700">${(b.bet_on || '').split(' ').pop()}</td>
+            <td>${betType}</td>
             <td>${buyPrice}</td>
-            <td>${sellPrice}</td>
+            <td>${modelP}</td>
+            <td style="color:${edgeColor}">${edgeVal > 0 ? '+' : ''}${edgeVal.toFixed ? edgeVal.toFixed(1) : edgeVal}%</td>
             <td>${stake}</td>
-            <td>${tradeRes}</td>
-            <td>${tradePnl}</td>
-            <td>${matchRes}</td>
-            <td style="color:${(() => { const s = b._hasTradeData ? b.actual_stake : 100; const pnl = b.trade_pnl != null ? b.trade_pnl : b.pnl; if (!b.outcome || pnl == null || !s) return '#6c757d'; return pnl >= 0 ? '#4caf50' : '#f44336'; })()}">${(() => { const s = b._hasTradeData ? b.actual_stake : 100; const pnl = b.trade_pnl != null ? b.trade_pnl : b.pnl; if (!b.outcome || pnl == null || !s) return '—'; return (pnl / s * 100).toFixed(0) + '%'; })()}</td>
-            <td style="color:${Math.abs(b.edge||0) >= 10 ? '#f44336' : '#d4740a'}">${(b.edge||0) > 0 ? '+' : ''}${(b.edge||0).toFixed(1)}%</td>
+            <td>${resultBadge}</td>
+            <td>${pnlStr}</td>
+            <td>${roiStr}</td>
         </tr>`;
     });
 
     html += '</tbody></table>';
     if (!hasAnyTradeData) {
-        html += '<div style="margin-top:6px; font-size:9px; color:#6c757d">* $100 notional — click "Sync Polymarket Trades" to pull actual amounts from your wallet</div>';
+        html += '<div style="margin-top:6px; font-size:9px; color:#6c757d">* $100 notional — click "Sync Trades" to pull actual amounts from your wallet</div>';
     }
     wrap.innerHTML = html;
 }
@@ -1915,6 +1968,128 @@ renderMyBets();
 })();
 
 // ─── ACTIVE BET CARDS (mini cards for pending bets) ───
+function buildActiveBetCard(bet, picks, status) {
+    // Find matching signal
+    let sig = picks.filter(p => p.match === bet.match).sort((a,b) => (b.logged_at||'').localeCompare(a.logged_at||''))[0];
+    if (!sig) {
+        const parts = (bet.match||'').toLowerCase().split(/\s+vs\.?\s+/);
+        if (parts.length === 2) {
+            const la = parts[0].trim().split(' ').pop();
+            const lb = parts[1].trim().split(' ').pop();
+            sig = picks.filter(p => { const pm = (p.match||'').toLowerCase(); return pm.includes(la) && pm.includes(lb); }).sort((a,b) => (b.logged_at||'').localeCompare(a.logged_at||''))[0];
+        }
+    }
+    const s = sig || bet;
+
+    const matchName = bet.match || '—';
+    const edge = (s.edge||bet.edge||0);
+    const edgeSign = edge > 0 ? '+' : '';
+    const modelP = (s.model_prob||bet.model_prob||0);
+    const polyP = (s.poly_price||bet.poly_price||0);
+    const tourney = [s.tournament, s.surface].filter(Boolean).join(' · ');
+    const hasTradeData = bet.actual_stake && bet.actual_stake > 0;
+    const stakeVal = hasTradeData ? bet.actual_stake : 100;
+    const stakeStr = hasTradeData ? '$' + bet.actual_stake.toFixed(2) : '$100*';
+    const buyStr = hasTradeData ? bet.actual_buy_price + 'c' : polyP + 'c';
+
+    // Bet type: edge vs winner
+    const edgePick = s.bet_on || s.predicted_winner || '';
+    const isEdgeBet = (bet.bet_on || '').toLowerCase() === edgePick.toLowerCase();
+    const betTypeBadge = isEdgeBet
+        ? '<span style="background:#d4740a;color:#000;font-size:8px;font-weight:800;padding:2px 6px;border-radius:3px;margin-left:8px;letter-spacing:0.3px">EDGE</span>'
+        : '<span style="background:#42a5f5;color:#000;font-size:8px;font-weight:800;padding:2px 6px;border-radius:3px;margin-left:8px;letter-spacing:0.3px">WINNER</span>';
+    const leftBorderColor = isEdgeBet ? '#d4740a' : '#42a5f5';
+
+    // Outcome badge + styling for resolved
+    let outcomeBadge = '';
+    let borderColor = leftBorderColor + '40';
+    let opacity = '1';
+    if (status === 'resolved') {
+        if (bet.outcome === 'win') {
+            outcomeBadge = '<span style="background:#4caf50;color:#fff;font-size:8px;font-weight:800;padding:2px 8px;border-radius:3px;margin-left:6px">WIN</span>';
+            borderColor = '#4caf5060';
+        } else if (bet.outcome === 'loss') {
+            outcomeBadge = '<span style="background:#f44336;color:#fff;font-size:8px;font-weight:800;padding:2px 8px;border-radius:3px;margin-left:6px">LOSS</span>';
+            borderColor = '#f4433660';
+            opacity = '0.75';
+        } else if (bet.outcome === 'void') {
+            outcomeBadge = '<span style="background:#888;color:#fff;font-size:8px;font-weight:800;padding:2px 8px;border-radius:3px;margin-left:6px">VOID</span>';
+            borderColor = '#88888860';
+            opacity = '0.6';
+        }
+    }
+
+    // P&L and ROI
+    const bestPnl = bet.trade_pnl != null ? bet.trade_pnl : bet.pnl;
+    let pnlLabel, pnlStr, roiStr;
+    if (status === 'resolved' && bestPnl != null) {
+        pnlLabel = 'P&L';
+        pnlStr = `<div style="font-weight:700;color:${bestPnl >= 0 ? '#4caf50' : '#f44336'};font-size:11px">${bestPnl >= 0 ? '+' : ''}$${bestPnl.toFixed(2)}</div>`;
+        const roi = stakeVal > 0 ? (bestPnl / stakeVal * 100) : 0;
+        roiStr = `<div style="font-weight:700;color:${roi >= 0 ? '#4caf50' : '#f44336'};font-size:11px">${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%</div>`;
+    } else {
+        pnlLabel = 'UNRL P&L';
+        pnlStr = '<div style="font-weight:600;color:#6c757d;font-size:11px">—</div>';
+        roiStr = '<div style="font-weight:600;color:#6c757d;font-size:11px">—</div>';
+    }
+
+    // Settled/Now column
+    const settledLabel = status === 'resolved' ? 'SETTLED' : 'NOW';
+    const settledVal = status === 'resolved'
+        ? (bet.outcome === 'win' ? '<div style="font-weight:600;color:#4caf50;font-size:11px">100c</div>' : bet.outcome === 'loss' ? '<div style="font-weight:600;color:#f44336;font-size:11px">0c</div>' : '<div style="font-weight:600;color:#888;font-size:11px">—</div>')
+        : '<div style="font-weight:600;color:#6c757d;font-size:11px">—</div>';
+
+    // Winner column for resolved
+    const winnerCol = status === 'resolved' && bet.actual_winner
+        ? `<div style="text-align:center;flex:1;padding:5px 4px;border-right:1px solid #2d3139">
+            <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">WINNER</div>
+            <div style="font-weight:700;color:#4caf50;font-size:11px">${(bet.actual_winner||'').split(' ').pop()}</div>
+        </div>`
+        : '';
+
+    return `<div style="background:#1a1d27;border:1px solid ${borderColor};border-left:3px solid ${status === 'resolved' ? (bet.outcome === 'win' ? '#4caf50' : bet.outcome === 'loss' ? '#f44336' : '#888') : leftBorderColor};border-radius:6px;padding:10px 14px;opacity:${opacity}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div><span style="font-weight:700;color:#e0e0e0;font-size:13px">${matchName}</span>${betTypeBadge}${outcomeBadge}</div>
+            <span style="font-size:9px;color:#6c757d">${tourney}</span>
+        </div>
+        <div style="display:flex;gap:0;background:#0f1117;border-radius:4px;overflow:hidden">
+            <div style="text-align:center;flex:1;padding:5px 4px;border-right:1px solid #2d3139">
+                <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">YOUR BET</div>
+                <div style="font-weight:700;color:${status === 'resolved' ? (bet.outcome === 'win' ? '#4caf50' : '#f44336') : '#4caf50'};font-size:12px">${(bet.bet_on||'').split(' ').pop()}</div>
+            </div>
+            ${winnerCol}
+            <div style="text-align:center;flex:1;padding:5px 4px;border-right:1px solid #2d3139">
+                <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">BUY</div>
+                <div style="font-weight:600;color:#e0e0e0;font-size:11px">${buyStr}</div>
+            </div>
+            <div style="text-align:center;flex:1;padding:5px 4px;border-right:1px solid #2d3139">
+                <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">${settledLabel}</div>
+                ${settledVal}
+            </div>
+            <div style="text-align:center;flex:1;padding:5px 4px;border-right:1px solid #2d3139">
+                <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">MODEL</div>
+                <div style="font-weight:600;color:#81c784;font-size:11px">${modelP.toFixed ? modelP.toFixed(1) : modelP}%</div>
+            </div>
+            <div style="text-align:center;flex:1;padding:5px 4px;border-right:1px solid #2d3139">
+                <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">EDGE</div>
+                <div style="font-weight:700;color:${edge >= 10 ? '#4caf50' : edge > 0 ? '#d4740a' : '#f44336'};font-size:11px">${edgeSign}${typeof edge === 'number' ? edge.toFixed(1) : edge}%</div>
+            </div>
+            <div style="text-align:center;flex:1;padding:5px 4px;border-right:1px solid #2d3139">
+                <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">STAKE</div>
+                <div style="font-weight:600;color:#e0e0e0;font-size:11px">${stakeStr}</div>
+            </div>
+            <div style="text-align:center;flex:1;padding:5px 4px;border-right:1px solid #2d3139">
+                <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">${pnlLabel}</div>
+                ${pnlStr}
+            </div>
+            <div style="text-align:center;flex:1;padding:5px 4px">
+                <div style="font-size:7px;color:#6c757d;letter-spacing:0.3px">ROI</div>
+                ${roiStr}
+            </div>
+        </div>
+    </div>`;
+}
+
 function renderActiveBetCards() {
     const container = document.getElementById('activeBetCards');
     if (!container) return;
@@ -1967,70 +2142,24 @@ function renderActiveBetCards() {
         return { bet, sig: sig || bet, status };
     });
 
-    let html = `<div style="margin-bottom:8px; font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600">${activeBets.length > 0 ? 'Active Bets' : 'Recently Resolved'}${activeBets.length > 0 && recentlyResolved.length > 0 ? ' + Recently Resolved' : ''}</div>`;
-    html += '<div style="display:flex; flex-direction:column; gap:6px">';
-
-    cardData.forEach(({bet, sig: s, status}) => {
-        const matchName = bet.match || '—';
-        const edge = (s.edge||bet.edge||0);
-        const edgeSign = edge > 0 ? '+' : '';
-        const modelP = (s.model_prob||bet.model_prob||0);
-        const polyP = (s.poly_price||bet.poly_price||0);
-        const tourney = [s.tournament, s.surface].filter(Boolean).join(' • ');
-        const hasTradeData = bet.actual_stake && bet.actual_stake > 0;
-        const stakeStr = hasTradeData ? '$' + bet.actual_stake.toFixed(2) : '$100*';
-        const buyStr = hasTradeData ? bet.actual_buy_price + 'c' : polyP + 'c';
-
-        // Outcome badge for resolved
-        let badge = '';
-        let borderColor = '#2d3139';
-        let opacity = '1';
-        if (status === 'resolved') {
-            if (bet.outcome === 'win') {
-                badge = '<span style="background:#4caf50; color:#fff; font-size:9px; font-weight:800; padding:2px 8px; border-radius:3px; margin-left:8px">WIN</span>';
-                borderColor = '#4caf5060';
-            } else if (bet.outcome === 'loss') {
-                badge = '<span style="background:#f44336; color:#fff; font-size:9px; font-weight:800; padding:2px 8px; border-radius:3px; margin-left:8px">LOSS</span>';
-                borderColor = '#f4433660';
-                opacity = '0.7';
-            } else if (bet.outcome === 'void') {
-                badge = '<span style="background:#888; color:#fff; font-size:9px; font-weight:800; padding:2px 8px; border-radius:3px; margin-left:8px">VOID</span>';
-                borderColor = '#88888860';
-                opacity = '0.6';
-            }
-        }
-
-        html += `<div style="background:#1a1d27; border:1px solid ${borderColor}; border-radius:6px; padding:8px 12px; opacity:${opacity}">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
-                <div style="font-weight:700; color:#e0e0e0; font-size:12px">${matchName}${badge}</div>
-                <span style="font-size:9px; color:#6c757d">${tourney}</span>
-            </div>
-            <div style="display:flex; gap:0; background:#0f1117; border-radius:4px; overflow:hidden">
-                <div style="text-align:center; flex:1; padding:5px 8px; border-right:1px solid #2d3139">
-                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">YOUR BET</div>
-                    <div style="font-weight:700; color:#d4740a; font-size:12px">${(bet.bet_on||'').split(' ').pop()}</div>
-                </div>
-                <div style="text-align:center; flex:1; padding:5px 8px; border-right:1px solid #2d3139">
-                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">BUY PRICE</div>
-                    <div style="font-weight:600; color:#e0e0e0">${buyStr}</div>
-                </div>
-                <div style="text-align:center; flex:1; padding:5px 8px; border-right:1px solid #2d3139">
-                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">STAKE</div>
-                    <div style="font-weight:600; color:#e0e0e0">${stakeStr}</div>
-                </div>
-                <div style="text-align:center; flex:1; padding:5px 8px; border-right:1px solid #2d3139">
-                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">MODEL</div>
-                    <div style="font-weight:600; color:#4caf50">${modelP.toFixed ? modelP.toFixed(1) : modelP}%</div>
-                </div>
-                <div style="text-align:center; flex:1; padding:5px 8px">
-                    <div style="font-size:7px; color:#6c757d; letter-spacing:0.5px">EDGE</div>
-                    <div style="font-weight:700; color:${edge >= 10 ? '#4caf50' : edge >= 5 ? '#d4740a' : '#6c757d'}">${edgeSign}${typeof edge === 'number' ? edge.toFixed(1) : edge}%</div>
-                </div>
-            </div>
+    // Separate headers
+    let html = '';
+    if (activeBets.length > 0) {
+        html += `<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
+            <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600">Active Bets (${activeBets.length})</div>
         </div>`;
-    });
-
-    html += '</div>';
+        html += '<div style="display:flex; flex-direction:column; gap:6px; margin-bottom:16px">';
+        activeBets.forEach(({bet}) => { html += buildActiveBetCard(bet, picks, 'active'); });
+        html += '</div>';
+    }
+    if (recentlyResolved.length > 0) {
+        html += `<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
+            <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; font-weight:600">Recently Resolved (${recentlyResolved.length})</div>
+        </div>`;
+        html += '<div style="display:flex; flex-direction:column; gap:6px">';
+        recentlyResolved.forEach(({bet}) => { html += buildActiveBetCard(bet, picks, 'resolved'); });
+        html += '</div>';
+    }
     container.innerHTML = html;
 }
 
