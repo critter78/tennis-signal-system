@@ -291,8 +291,8 @@
         .v5-bet-selector .bet-option .bo-prob { font-size: 9px; color: #888; margin-top: 1px; }
         .v5-bet-selector .bet-option.edge-pick { border-color: #d4740a50; background: #1f1a12; }
         .v5-bet-selector .bet-option.edge-pick .bo-label { color: #d4740a; }
-        .v5-bet-selector .bet-option.winner-pick { border-color: #42a5f540; background: #111a2a; }
-        .v5-bet-selector .bet-option.winner-pick .bo-label { color: #42a5f5; }
+        .v5-bet-selector .bet-option.winner-pick { border-color: #4caf5060; background: #122b12; }
+        .v5-bet-selector .bet-option.winner-pick .bo-label { color: #4caf50; }
         .v5-bet-selector .bet-option:hover { background: #252830; }
         .v5-bet-selector .bet-option.active-bet { border-color: #4caf50 !important; background: #122b12 !important; box-shadow: 0 0 8px #4caf5030; }
         .v5-bet-selector .bet-option.active-bet .bo-label { color: #4caf50 !important; }
@@ -2597,17 +2597,21 @@ function renderSignals() {
                     // Short last names for display
                     const nameA = pA.split(' ').pop();
                     const nameB = pB.split(' ').pop();
-                    // Labels: active bet overrides to "✓ ACTIVE", else EDGE PICK / MODEL PICK / BET
+                    // Check if match is resolved and who won
+                    const isResolved = s.outcome === 'win' || s.outcome === 'loss';
+                    const actualWinner = s.actual_winner || '';
+                    const awLast = actualWinner.split(' ').pop().toLowerCase();
+                    const wonA = isResolved && awLast === nameA.toLowerCase();
+                    const wonB = isResolved && awLast === nameB.toLowerCase();
+                    // Labels: resolved shows WINNER, active bet shows ✓ ACTIVE, else EDGE PICK / BET
                     const isEdgeA = edgePick === pA;
                     const isEdgeB = edgePick === pB;
-                    const isWinA = winPick === pA;
-                    const isWinB = winPick === pB;
-                    const roleA = isEdgeA ? 'EDGE PICK' : (isWinA ? 'MODEL PICK' : 'BET');
-                    const roleB = isEdgeB ? 'EDGE PICK' : (isWinB ? 'MODEL PICK' : 'BET');
-                    const labelA = isBetA ? '✓ ACTIVE' : roleA;
-                    const labelB = isBetB ? '✓ ACTIVE' : roleB;
-                    const classA = isEdgeA ? 'edge-pick' : (isWinA ? 'winner-pick' : '');
-                    const classB = isEdgeB ? 'edge-pick' : (isWinB ? 'winner-pick' : '');
+                    const roleA = wonA ? '✓ WINNER' : (isEdgeA ? 'EDGE PICK' : 'BET');
+                    const roleB = wonB ? '✓ WINNER' : (isEdgeB ? 'EDGE PICK' : 'BET');
+                    const labelA = (!isResolved && isBetA) ? '✓ ACTIVE' : roleA;
+                    const labelB = (!isResolved && isBetB) ? '✓ ACTIVE' : roleB;
+                    const classA = wonA ? 'winner-pick' : (isEdgeA ? 'edge-pick' : '');
+                    const classB = wonB ? 'winner-pick' : (isEdgeB ? 'edge-pick' : '');
                     return `<div class="v5-bet-selector">
                         <div class="bet-option ${classA} ${isBetA ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pAe}', ${priceA}, ${probA}, ${edgeA}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
                             <span class="bo-label">${labelA}</span>
