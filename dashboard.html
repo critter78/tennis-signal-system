@@ -2597,13 +2597,13 @@ function renderSignals() {
                     // Short last names for display
                     const nameA = pA.split(' ').pop();
                     const nameB = pB.split(' ').pop();
-                    // Labels: active bet overrides to "✓ ACTIVE", else EDGE PICK / WINNER / BET
+                    // Labels: active bet overrides to "✓ ACTIVE", else EDGE PICK / MODEL PICK / BET
                     const isEdgeA = edgePick === pA;
                     const isEdgeB = edgePick === pB;
                     const isWinA = winPick === pA;
                     const isWinB = winPick === pB;
-                    const roleA = isEdgeA ? 'EDGE PICK' : (isWinA ? 'WINNER' : 'BET');
-                    const roleB = isEdgeB ? 'EDGE PICK' : (isWinB ? 'WINNER' : 'BET');
+                    const roleA = isEdgeA ? 'EDGE PICK' : (isWinA ? 'MODEL PICK' : 'BET');
+                    const roleB = isEdgeB ? 'EDGE PICK' : (isWinB ? 'MODEL PICK' : 'BET');
                     const labelA = isBetA ? '✓ ACTIVE' : roleA;
                     const labelB = isBetB ? '✓ ACTIVE' : roleB;
                     const classA = isEdgeA ? 'edge-pick' : (isWinA ? 'winner-pick' : '');
