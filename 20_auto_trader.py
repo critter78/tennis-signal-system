@@ -245,6 +245,23 @@ def save_pending_trades(trades: list[dict]):
     PENDING_FILE.write_text(json.dumps(trades, indent=2))
 
 
+def load_trade_history() -> list[dict]:
+    """Load confirmed/rejected trades from paper_trades.jsonl to prevent re-queuing."""
+    log_path = LOGS_DIR / "paper_trades.jsonl"
+    if PERSIST.exists():
+        log_path = PERSIST / "logs" / "paper_trades.jsonl"
+    if not log_path.exists():
+        return []
+    trades = []
+    with open(log_path) as f:
+        for line in f:
+            try:
+                trades.append(json.loads(line.strip()))
+            except Exception:
+                continue
+    return trades
+
+
 def add_pending_trade(trade: dict):
     """Add a trade to the pending queue for user confirmation."""
     import uuid
@@ -252,11 +269,21 @@ def add_pending_trade(trade: dict):
     trade["status"] = "pending"
     trade["created_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+    match_key = trade.get("match", "")
+    bet_key = trade.get("bet_on", "")
+
+    # Don't add duplicates — check pending queue
     pending = load_pending_trades()
-    # Don't add duplicates (same match + bet_on)
     for p in pending:
-        if p.get("match") == trade.get("match") and p.get("bet_on") == trade.get("bet_on"):
+        if p.get("match") == match_key and p.get("bet_on") == bet_key:
             return  # already queued
+
+    # Don't re-queue trades that were already confirmed or rejected
+    history = load_trade_history()
+    for h in history:
+        if h.get("match") == match_key and h.get("bet_on") == bet_key:
+            return  # already acted on
+
     pending.append(trade)
     save_pending_trades(pending)
 
