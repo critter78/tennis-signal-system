@@ -119,22 +119,28 @@ def fetch_live_markets(min_volume: float = 0) -> pd.DataFrame:
 
             tokens   = m.get("tokens", [])
             prices   = {}
+            token_ids = {}
             outcomes = m.get("outcomes", [])
             for t in tokens:
                 if isinstance(t, dict):
                     name = t.get("outcome", t.get("name", ""))
                     price = t.get("price")
+                    tid = t.get("token_id", "")
                     if name and price is not None:
                         prices[name] = float(price) * 100  # convert to cents
+                    if name and tid:
+                        token_ids[name] = tid
 
             rows.append({
                 "market_id": m.get("id") or m.get("condition_id"),
+                "condition_id": m.get("condition_id", ""),
                 "question":  m.get("question", ""),
                 "slug":      m.get("slug", ""),
                 "end_date":  m.get("end_date_iso") or m.get("endDateIso"),
                 "volume":    vol,
                 "liquidity": float(m.get("liquidity", 0) or 0),
                 "prices":    prices,
+                "token_ids": token_ids,
                 "outcomes":  outcomes,
             })
 
@@ -261,6 +267,7 @@ def generate_signals(markets_df: pd.DataFrame, model, feature_cols: list,
     for _, mkt in markets_df.iterrows():
         q      = str(mkt.get("question", ""))
         prices = mkt.get("prices", {})
+        tids   = mkt.get("token_ids", {})
         vol    = mkt.get("volume", 0)
         liq    = mkt.get("liquidity", 0)
 
@@ -272,13 +279,16 @@ def generate_signals(markets_df: pd.DataFrame, model, feature_cols: list,
         if not pa:
             continue
 
-        # Get Polymarket prices for each player
+        # Get Polymarket prices and token_ids for each player
         poly_pa = poly_pb = None
+        tid_a = tid_b = None
         for key, val in prices.items():
             if pa.split()[-1].lower() in key.lower():
                 poly_pa = val
+                tid_a = tids.get(key, "")
             elif pb.split()[-1].lower() in key.lower():
                 poly_pb = val
+                tid_b = tids.get(key, "")
 
         # Fallback: just take the two prices in order
         if poly_pa is None or poly_pb is None:
@@ -311,11 +321,13 @@ def generate_signals(markets_df: pd.DataFrame, model, feature_cols: list,
             edge        = edge_a
             poly_price  = poly_pa
             model_prob  = model_prob_a
+            best_tid    = tid_a
         else:
             best_player = pb
             edge        = edge_b
             poly_price  = poly_pb
             model_prob  = 1 - model_prob_a
+            best_tid    = tid_b
 
         kelly = kelly_fraction(model_prob, poly_price, kelly_frac)
 
@@ -333,6 +345,8 @@ def generate_signals(markets_df: pd.DataFrame, model, feature_cols: list,
                 "volume":      round(vol, 0),
                 "liquidity":   round(liq, 0),
                 "question":    q,
+                "token_id":    best_tid or "",
+                "condition_id": mkt.get("condition_id", ""),
             })
 
     df = pd.DataFrame(signals)
