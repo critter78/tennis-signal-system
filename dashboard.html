@@ -3563,7 +3563,7 @@ async function refreshPendingTrades() {
 }
 
 async function confirmTrade(pendingId) {
-    if (!confirm('Confirm this trade? This will log it and open Polymarket so you can place the bet.')) return;
+    if (!confirm('Confirm this trade? This will execute a BUY order on Polymarket.')) return;
     try {
         const res = await fetch('/api/auto-trader/confirm', {
             method: 'POST',
@@ -3576,12 +3576,18 @@ async function confirmTrade(pendingId) {
             if (el) el.textContent = parseInt(el.textContent || 0) + 1;
             await refreshPendingTrades();
             await loadAutoTraderHistory();
-            // Open Polymarket so user can place the actual bet
-            const trade = data.trade || {};
-            const polyLink = trade.poly_link || trade.slug;
-            if (polyLink) {
-                const url = polyLink.startsWith('http') ? polyLink : `https://polymarket.com/event/${polyLink}`;
-                window.open(url, '_blank');
+            // Show execution result
+            const exec = data.execution || {};
+            if (exec.success) {
+                alert(`ORDER PLACED on Polymarket!\nPrice: ${(exec.price*100).toFixed(0)}c | Size: ${exec.size} shares | Stake: $${exec.stake}`);
+            } else {
+                const trade = data.trade || {};
+                const polyLink = trade.poly_link || trade.slug;
+                alert(`Trade logged but CLOB execution failed: ${exec.error || 'unknown'}\nOpening Polymarket so you can place manually.`);
+                if (polyLink) {
+                    const url = polyLink.startsWith('http') ? polyLink : `https://polymarket.com/event/${polyLink}`;
+                    window.open(url, '_blank');
+                }
             }
         }
     } catch(e) {

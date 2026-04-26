@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+import os
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 
@@ -382,6 +383,107 @@ def fetch_clob_price(token_id: str, clob_url: str = "https://clob.polymarket.com
     except Exception as e:
         print(f"[clob] price fetch failed: {e}", file=sys.stderr)
     return None
+
+
+# ─── CLOB Order Execution ──────────────────────────────────────────────────
+
+def get_clob_client():
+    """Initialize Polymarket CLOB client from .env credentials."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(BASE_DIR / ".env")
+    except ImportError:
+        pass  # dotenv not installed, rely on environment vars
+
+    pk = os.environ.get("POLYMARKET_PRIVATE_KEY")
+    api_key = os.environ.get("POLYMARKET_API_KEY")
+    api_secret = os.environ.get("POLYMARKET_API_SECRET")
+    api_passphrase = os.environ.get("POLYMARKET_API_PASSPHRASE")
+    sig_type = int(os.environ.get("POLYMARKET_SIGNATURE_TYPE", "2"))
+    proxy_addr = os.environ.get("POLYMARKET_PROXY_ADDRESS", "")
+
+    if not all([pk, api_key, api_secret, api_passphrase]):
+        print("[clob] Missing credentials in .env — cannot execute trades", file=sys.stderr)
+        return None
+
+    try:
+        from py_clob_client.client import ClobClient
+
+        creds = {
+            "apiKey": api_key,
+            "secret": api_secret,
+            "passphrase": api_passphrase,
+        }
+
+        if sig_type == 0:
+            client = ClobClient(
+                host="https://clob.polymarket.com",
+                chain_id=137,
+                key=pk,
+                creds=creds,
+            )
+        else:
+            client = ClobClient(
+                host="https://clob.polymarket.com",
+                chain_id=137,
+                key=pk,
+                creds=creds,
+                signature_type=sig_type,
+                funder=proxy_addr,
+            )
+        return client
+    except Exception as e:
+        print(f"[clob] Client init failed: {e}", file=sys.stderr)
+        return None
+
+
+def execute_clob_order(trade: dict) -> dict:
+    """
+    Place a limit BUY order on Polymarket CLOB.
+    Returns dict with order_id and status, or error info.
+    """
+    client = get_clob_client()
+    if not client:
+        return {"success": False, "error": "CLOB client not configured"}
+
+    token_id = trade.get("token_id")
+    if not token_id:
+        return {"success": False, "error": "No token_id in trade"}
+
+    stake = trade.get("stake", 5.0)
+    entry_price = trade.get("entry_price", trade.get("poly_price", 50))
+
+    # Convert price: entry_price is in cents (e.g. 66), CLOB wants decimal (0.66)
+    price = entry_price / 100 if entry_price > 1 else entry_price
+
+    # Size = how many shares to buy (stake / price)
+    size = round(stake / price, 2) if price > 0 else 0
+
+    if size <= 0:
+        return {"success": False, "error": f"Invalid size: stake=${stake}, price={price}"}
+
+    try:
+        from py_clob_client.order_builder.constants import BUY
+
+        # Create and post a limit order
+        order = client.create_and_post_order(
+            token_id=token_id,
+            price=round(price, 2),
+            size=size,
+            side=BUY,
+        )
+
+        print(f"[CLOB] Order placed: {order}", file=sys.stderr)
+        return {
+            "success": True,
+            "order": order,
+            "price": price,
+            "size": size,
+            "stake": stake,
+        }
+    except Exception as e:
+        print(f"[CLOB] Order failed: {e}", file=sys.stderr)
+        return {"success": False, "error": str(e)}
 
 
 # ─── Entry Scan ──────────────────────────────────────────────────────────────

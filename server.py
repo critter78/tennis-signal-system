@@ -3242,14 +3242,35 @@ def auto_trader_confirm():
         PENDING_TRADES_FILE.write_text(json.dumps(remaining, indent=2))
 
         if confirmed:
-            # Log to paper/live trade log
+            # Try to execute on Polymarket CLOB
+            exec_result = {"success": False, "error": "execution not attempted"}
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("auto_trader", BASE_DIR / "20_auto_trader.py")
+                at_mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(at_mod)
+                exec_result = at_mod.execute_clob_order(confirmed)
+                if exec_result.get("success"):
+                    confirmed["clob_order"] = exec_result.get("order")
+                    confirmed["executed"] = True
+                    logger.info(f"[AUTO-TRADER] CLOB order placed: {exec_result}")
+                else:
+                    confirmed["executed"] = False
+                    confirmed["exec_error"] = exec_result.get("error", "unknown")
+                    logger.warning(f"[AUTO-TRADER] CLOB order failed: {exec_result.get('error')}")
+            except Exception as e:
+                confirmed["executed"] = False
+                confirmed["exec_error"] = str(e)
+                logger.warning(f"[AUTO-TRADER] CLOB execution error: {e}")
+
+            # Log to trade log regardless
             log_path = LOGS_DIR / "paper_trades.jsonl"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with open(log_path, "a") as f:
                 f.write(json.dumps(confirmed) + "\n")
 
             logger.info(f"[AUTO-TRADER] Confirmed trade: {confirmed.get('match')} — {confirmed.get('bet_on')}")
-            return jsonify({"status": "confirmed", "trade": confirmed})
+            return jsonify({"status": "confirmed", "trade": confirmed, "execution": exec_result})
 
         return jsonify({"error": "pending_id not found"}), 404
 
