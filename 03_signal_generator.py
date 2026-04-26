@@ -122,19 +122,36 @@ def fetch_live_markets(min_volume: float = 0) -> pd.DataFrame:
             token_ids = {}
             outcomes = m.get("outcomes", [])
             clob_tids = m.get("clobTokenIds", [])
+
+            # Build prices from tokens array (keyed by outcome name)
             for t in tokens:
                 if isinstance(t, dict):
                     name = t.get("outcome", t.get("name", ""))
                     price = t.get("price")
-                    tid = t.get("token_id", "")
                     if name and price is not None:
                         prices[name] = float(price) * 100  # convert to cents
-                    if name and tid:
-                        token_ids[name] = tid
-            # Map clobTokenIds to outcomes (primary source for CLOB trading)
-            if clob_tids and outcomes and len(clob_tids) == len(outcomes):
+
+            # Build token_ids — use clobTokenIds mapped to PRICE KEYS
+            # so both dicts share the same keys for reliable lookup
+            price_key_list = list(prices.keys())
+            if clob_tids and len(clob_tids) >= len(price_key_list):
+                # Map clobTokenIds positionally to price keys
+                # tokens[] and outcomes[] are in the same order
+                for i, pk in enumerate(price_key_list):
+                    if i < len(clob_tids):
+                        token_ids[pk] = clob_tids[i]
+            elif clob_tids and outcomes and len(clob_tids) == len(outcomes):
+                # Fallback: map to outcomes names
                 for i, outcome_name in enumerate(outcomes):
                     token_ids[outcome_name] = clob_tids[i]
+            else:
+                # Last resort: try token_id from tokens array
+                for t in tokens:
+                    if isinstance(t, dict):
+                        name = t.get("outcome", t.get("name", ""))
+                        tid = t.get("token_id", "")
+                        if name and tid:
+                            token_ids[name] = tid
 
             rows.append({
                 "market_id": m.get("id") or m.get("condition_id"),
@@ -285,23 +302,39 @@ def generate_signals(markets_df: pd.DataFrame, model, feature_cols: list,
             continue
 
         # Get Polymarket prices and token_ids for each player
+        # Build parallel lists so we can fall back to positional matching
+        price_keys = list(prices.keys())
+        price_vals = list(prices.values())
+        tid_keys   = list(tids.keys())
+        tid_vals   = list(tids.values())
+
         poly_pa = poly_pb = None
         tid_a = tid_b = None
-        for key, val in prices.items():
-            if pa.split()[-1].lower() in key.lower():
-                poly_pa = val
-                tid_a = tids.get(key, "")
-            elif pb.split()[-1].lower() in key.lower():
-                poly_pb = val
-                tid_b = tids.get(key, "")
 
-        # Fallback: just take the two prices in order
+        # Try name-matching against price keys
+        for i, key in enumerate(price_keys):
+            if pa.split()[-1].lower() in key.lower():
+                poly_pa = price_vals[i]
+                # Try exact key in tids first, then positional fallback
+                tid_a = tids.get(key, "")
+                if not tid_a and i < len(tid_vals):
+                    tid_a = tid_vals[i]
+            elif pb.split()[-1].lower() in key.lower():
+                poly_pb = price_vals[i]
+                tid_b = tids.get(key, "")
+                if not tid_b and i < len(tid_vals):
+                    tid_b = tid_vals[i]
+
+        # Fallback: just take the two prices/tids in order
         if poly_pa is None or poly_pb is None:
-            vals = list(prices.values())
-            if len(vals) == 2:
-                poly_pa, poly_pb = vals[0], vals[1]
+            if len(price_vals) == 2:
+                poly_pa, poly_pb = price_vals[0], price_vals[1]
             else:
                 continue
+        # Always ensure token_ids are set — positional fallback
+        if (not tid_a or not tid_b) and len(tid_vals) >= 2:
+            tid_a = tid_a or tid_vals[0]
+            tid_b = tid_b or tid_vals[1]
 
         # Build features + predict
         try:
