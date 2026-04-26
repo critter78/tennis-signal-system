@@ -121,6 +121,7 @@ def fetch_live_markets(min_volume: float = 0) -> pd.DataFrame:
             prices   = {}
             token_ids = {}
             outcomes = m.get("outcomes", [])
+            clob_tids = m.get("clobTokenIds", [])
             for t in tokens:
                 if isinstance(t, dict):
                     name = t.get("outcome", t.get("name", ""))
@@ -130,6 +131,10 @@ def fetch_live_markets(min_volume: float = 0) -> pd.DataFrame:
                         prices[name] = float(price) * 100  # convert to cents
                     if name and tid:
                         token_ids[name] = tid
+            # Map clobTokenIds to outcomes (primary source for CLOB trading)
+            if clob_tids and outcomes and len(clob_tids) == len(outcomes):
+                for i, outcome_name in enumerate(outcomes):
+                    token_ids[outcome_name] = clob_tids[i]
 
             rows.append({
                 "market_id": m.get("id") or m.get("condition_id"),
