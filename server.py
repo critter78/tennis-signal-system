@@ -3312,6 +3312,29 @@ def auto_trader_reject():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/auto-trader/reset", methods=["POST"])
+@enable_cors
+def auto_trader_reset():
+    """Clear all pending trades and trade history for a fresh start."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        # Clear pending trades
+        if PENDING_TRADES_FILE.exists():
+            PENDING_TRADES_FILE.write_text("[]")
+
+        # Clear trade history
+        paper_log = LOGS_DIR / "paper_trades.jsonl"
+        if paper_log.exists():
+            paper_log.write_text("")
+
+        logger.info("[AUTO-TRADER] Reset: cleared pending trades and trade history")
+        return jsonify({"status": "reset", "message": "All pending trades and history cleared"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/auto-trader/scan", methods=["POST"])
 @enable_cors
 def auto_trader_scan():
