@@ -120,10 +120,26 @@ def fetch_live_markets(min_volume: float = 0) -> pd.DataFrame:
             tokens   = m.get("tokens", [])
             prices   = {}
             token_ids = {}
-            outcomes = m.get("outcomes", [])
-            clob_tids = m.get("clobTokenIds", [])
 
-            # Build prices from tokens array (keyed by outcome name)
+            # Gamma API returns outcomes/clobTokenIds/outcomePrices as JSON
+            # strings — parse them into real lists
+            raw_outcomes = m.get("outcomes", [])
+            raw_clob     = m.get("clobTokenIds", [])
+            raw_prices   = m.get("outcomePrices", [])
+            if isinstance(raw_outcomes, str):
+                try: raw_outcomes = json.loads(raw_outcomes)
+                except: raw_outcomes = []
+            if isinstance(raw_clob, str):
+                try: raw_clob = json.loads(raw_clob)
+                except: raw_clob = []
+            if isinstance(raw_prices, str):
+                try: raw_prices = json.loads(raw_prices)
+                except: raw_prices = []
+            if isinstance(tokens, str):
+                try: tokens = json.loads(tokens)
+                except: tokens = []
+
+            # Build prices from tokens array first (keyed by outcome name)
             for t in tokens:
                 if isinstance(t, dict):
                     name = t.get("outcome", t.get("name", ""))
@@ -131,21 +147,20 @@ def fetch_live_markets(min_volume: float = 0) -> pd.DataFrame:
                     if name and price is not None:
                         prices[name] = float(price) * 100  # convert to cents
 
-            # Build token_ids — use clobTokenIds mapped to PRICE KEYS
-            # so both dicts share the same keys for reliable lookup
-            price_key_list = list(prices.keys())
-            if clob_tids and len(clob_tids) >= len(price_key_list):
-                # Map clobTokenIds positionally to price keys
-                # tokens[] and outcomes[] are in the same order
-                for i, pk in enumerate(price_key_list):
-                    if i < len(clob_tids):
-                        token_ids[pk] = clob_tids[i]
-            elif clob_tids and outcomes and len(clob_tids) == len(outcomes):
-                # Fallback: map to outcomes names
-                for i, outcome_name in enumerate(outcomes):
-                    token_ids[outcome_name] = clob_tids[i]
+            # If tokens was empty, use outcomePrices + outcomes
+            if not prices and raw_outcomes and raw_prices and len(raw_outcomes) == len(raw_prices):
+                for i, name in enumerate(raw_outcomes):
+                    try:
+                        prices[name] = float(raw_prices[i]) * 100
+                    except (ValueError, TypeError):
+                        pass
+
+            # Build token_ids from clobTokenIds mapped to outcome names
+            if raw_clob and raw_outcomes and len(raw_clob) == len(raw_outcomes):
+                for i, name in enumerate(raw_outcomes):
+                    token_ids[name] = raw_clob[i]
             else:
-                # Last resort: try token_id from tokens array
+                # Fallback: try token_id from tokens array
                 for t in tokens:
                     if isinstance(t, dict):
                         name = t.get("outcome", t.get("name", ""))
@@ -163,7 +178,7 @@ def fetch_live_markets(min_volume: float = 0) -> pd.DataFrame:
                 "liquidity": float(m.get("liquidity", 0) or 0),
                 "prices":    prices,
                 "token_ids": token_ids,
-                "outcomes":  outcomes,
+                "outcomes":  raw_outcomes,
             })
 
     # Deduplicate by market_id

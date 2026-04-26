@@ -441,56 +441,70 @@ def _resolve_token_id(trade: dict) -> str:
     """
     Last-resort lookup: fetch the market from Gamma API and extract
     the clobTokenId for the player we're betting on.
+    Gamma API returns outcomes/clobTokenIds as JSON strings — must parse them.
     """
     import requests as _req
+    import json as _json
     bet_on = (trade.get("bet_on") or "").strip()
-    match_str = trade.get("match") or trade.get("question") or ""
+    slug = trade.get("slug", "")
     if not bet_on:
         print("[resolve_tid] No bet_on in trade", file=sys.stderr)
         return ""
 
-    # Search Gamma for the match
-    try:
-        url = "https://gamma-api.polymarket.com/markets"
-        # Try searching by player last name
-        search_term = bet_on.split()[-1] if bet_on else ""
-        r = _req.get(url, params={"tag_slug": "tennis", "active": "true",
-                                   "closed": "false", "limit": 200}, timeout=15)
-        r.raise_for_status()
-        markets = r.json()
-    except Exception as e:
-        print(f"[resolve_tid] Gamma API failed: {e}", file=sys.stderr)
-        return ""
+    url = "https://gamma-api.polymarket.com/markets"
+    markets = []
+
+    # Strategy 1: search by slug (most precise)
+    if slug:
+        try:
+            r = _req.get(url, params={"slug": slug}, timeout=15)
+            r.raise_for_status()
+            markets = r.json()
+            print(f"[resolve_tid] Slug search '{slug}': {len(markets)} results", file=sys.stderr)
+        except Exception as e:
+            print(f"[resolve_tid] Slug search failed: {e}", file=sys.stderr)
+
+    # Strategy 2: search by tag if slug didn't work
+    if not markets:
+        for tag in ["tennis", "atp-tennis", "wta-tennis"]:
+            try:
+                r = _req.get(url, params={"tag_slug": tag, "active": "true",
+                                           "closed": "false", "limit": 200}, timeout=15)
+                r.raise_for_status()
+                batch = r.json()
+                markets.extend(batch)
+            except Exception as e:
+                print(f"[resolve_tid] Tag {tag} failed: {e}", file=sys.stderr)
+
+    last_name = bet_on.split()[-1].lower() if bet_on else ""
 
     for m in markets:
         q = m.get("question", "")
-        # Match by checking if both players from match_str appear in question
-        # or if bet_on player's last name is in the question
-        if bet_on.split()[-1].lower() not in q.lower():
+        if last_name and last_name not in q.lower():
             continue
 
+        # Parse JSON strings — Gamma API returns these as strings, not arrays
         outcomes = m.get("outcomes", [])
         clob_tids = m.get("clobTokenIds", [])
-        tokens = m.get("tokens", [])
+        if isinstance(outcomes, str):
+            try: outcomes = _json.loads(outcomes)
+            except: outcomes = []
+        if isinstance(clob_tids, str):
+            try: clob_tids = _json.loads(clob_tids)
+            except: clob_tids = []
 
         if not clob_tids or len(clob_tids) != len(outcomes):
             continue
 
         # Find which outcome matches our bet_on player
         for i, outcome in enumerate(outcomes):
-            if bet_on.split()[-1].lower() in outcome.lower():
+            if last_name in outcome.lower():
                 tid = clob_tids[i]
                 print(f"[resolve_tid] Found token_id for {bet_on}: {tid[:20]}...", file=sys.stderr)
                 return tid
 
-        # Fallback: check tokens[].outcome
-        for i, t in enumerate(tokens):
-            if isinstance(t, dict):
-                name = t.get("outcome", "")
-                if bet_on.split()[-1].lower() in name.lower() and i < len(clob_tids):
-                    tid = clob_tids[i]
-                    print(f"[resolve_tid] Found token_id via tokens for {bet_on}: {tid[:20]}...", file=sys.stderr)
-                    return tid
+    print(f"[resolve_tid] No matching market found for {bet_on}", file=sys.stderr)
+    return ""
 
     print(f"[resolve_tid] No matching market found for {bet_on} in {match_str}", file=sys.stderr)
     return ""
