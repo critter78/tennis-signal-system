@@ -540,13 +540,16 @@ def execute_clob_order(trade: dict) -> dict:
 
     try:
         from py_clob_client.order_builder.constants import BUY
+        from py_clob_client.clob_types import OrderArgs
 
-        # Create and post a limit order
-        order = client.create_and_post_order(
+        # Create and post a limit order using OrderArgs
+        order_args = OrderArgs(
             token_id=token_id,
             price=round(price, 2),
             size=size,
             side=BUY,
+        )
+        order = client.create_and_post_order(order_args
         )
 
         print(f"[CLOB] Order placed: {order}", file=sys.stderr)
