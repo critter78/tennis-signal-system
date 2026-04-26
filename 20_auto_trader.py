@@ -437,6 +437,65 @@ def get_clob_client():
         return None
 
 
+def _resolve_token_id(trade: dict) -> str:
+    """
+    Last-resort lookup: fetch the market from Gamma API and extract
+    the clobTokenId for the player we're betting on.
+    """
+    import requests as _req
+    bet_on = (trade.get("bet_on") or "").strip()
+    match_str = trade.get("match") or trade.get("question") or ""
+    if not bet_on:
+        print("[resolve_tid] No bet_on in trade", file=sys.stderr)
+        return ""
+
+    # Search Gamma for the match
+    try:
+        url = "https://gamma-api.polymarket.com/markets"
+        # Try searching by player last name
+        search_term = bet_on.split()[-1] if bet_on else ""
+        r = _req.get(url, params={"tag_slug": "tennis", "active": "true",
+                                   "closed": "false", "limit": 200}, timeout=15)
+        r.raise_for_status()
+        markets = r.json()
+    except Exception as e:
+        print(f"[resolve_tid] Gamma API failed: {e}", file=sys.stderr)
+        return ""
+
+    for m in markets:
+        q = m.get("question", "")
+        # Match by checking if both players from match_str appear in question
+        # or if bet_on player's last name is in the question
+        if bet_on.split()[-1].lower() not in q.lower():
+            continue
+
+        outcomes = m.get("outcomes", [])
+        clob_tids = m.get("clobTokenIds", [])
+        tokens = m.get("tokens", [])
+
+        if not clob_tids or len(clob_tids) != len(outcomes):
+            continue
+
+        # Find which outcome matches our bet_on player
+        for i, outcome in enumerate(outcomes):
+            if bet_on.split()[-1].lower() in outcome.lower():
+                tid = clob_tids[i]
+                print(f"[resolve_tid] Found token_id for {bet_on}: {tid[:20]}...", file=sys.stderr)
+                return tid
+
+        # Fallback: check tokens[].outcome
+        for i, t in enumerate(tokens):
+            if isinstance(t, dict):
+                name = t.get("outcome", "")
+                if bet_on.split()[-1].lower() in name.lower() and i < len(clob_tids):
+                    tid = clob_tids[i]
+                    print(f"[resolve_tid] Found token_id via tokens for {bet_on}: {tid[:20]}...", file=sys.stderr)
+                    return tid
+
+    print(f"[resolve_tid] No matching market found for {bet_on} in {match_str}", file=sys.stderr)
+    return ""
+
+
 def execute_clob_order(trade: dict) -> dict:
     """
     Place a limit BUY order on Polymarket CLOB.
@@ -448,7 +507,10 @@ def execute_clob_order(trade: dict) -> dict:
 
     token_id = trade.get("token_id")
     if not token_id:
-        return {"success": False, "error": "No token_id in trade"}
+        # Auto-resolve token_id from Gamma API using match/bet_on info
+        token_id = _resolve_token_id(trade)
+    if not token_id:
+        return {"success": False, "error": "No token_id in trade and Gamma API lookup failed"}
 
     stake = trade.get("stake", 5.0)
     entry_price = trade.get("entry_price", trade.get("poly_price", 50))
