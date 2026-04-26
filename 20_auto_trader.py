@@ -408,12 +408,13 @@ def get_clob_client():
 
     try:
         from py_clob_client.client import ClobClient
+        from py_clob_client.clob_types import ApiCreds
 
-        creds = {
-            "apiKey": api_key,
-            "secret": api_secret,
-            "passphrase": api_passphrase,
-        }
+        creds = ApiCreds(
+            api_key=api_key,
+            api_secret=api_secret,
+            api_passphrase=api_passphrase,
+        )
 
         if sig_type == 0:
             client = ClobClient(
