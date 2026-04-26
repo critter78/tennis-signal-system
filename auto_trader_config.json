@@ -1,0 +1,39 @@
+{
+  "mode": "semi",
+  "entry_rules": {
+    "min_edge": 10.0,
+    "min_model_prob": 55.0,
+    "min_gap": 5,
+    "min_consensus": 3,
+    "edge_conf": ["STRONG"],
+    "market_types": ["h2h"],
+    "max_stake_per_bet": 50.0,
+    "kelly_fraction": 0.25,
+    "max_daily_bets": 10,
+    "bet_type": "edge",
+    "min_volume": 1000,
+    "exclude_outrights": true
+  },
+  "exit_rules": {
+    "stop_loss_pct": 15.0,
+    "take_profit_1_price": 85,
+    "take_profit_1_sell_pct": 50,
+    "take_profit_2_price": 95,
+    "take_profit_2_sell_pct": 100,
+    "trailing_stop_pct": 8.0,
+    "time_exit_hours": 4,
+    "poll_interval_seconds": 60
+  },
+  "safety": {
+    "kill_switch": false,
+    "daily_loss_limit": 200.0,
+    "max_total_exposure": 500.0,
+    "require_confirmation": true,
+    "paper_trade_log": "data/logs/paper_trades.jsonl",
+    "live_trade_log": "data/logs/live_trades.jsonl"
+  },
+  "polymarket": {
+    "clob_url": "https://clob.polymarket.com",
+    "gamma_url": "https://gamma-api.polymarket.com"
+  }
+}

@@ -2863,6 +2863,26 @@ def _run_pipeline_background():
     except Exception as e:
         results["dashboard"] = {"status": "error", "error": str(e)}
 
+    # Auto-trader scan (semi-auto: queues pending trades for user confirmation)
+    try:
+        auto_cfg = json.loads(AUTO_TRADER_CONFIG.read_text()) if AUTO_TRADER_CONFIG.exists() else {}
+        if auto_cfg.get("mode") in ("semi", "live") and not auto_cfg.get("safety", {}).get("kill_switch"):
+            logger.info("  Running auto-trader scan...")
+            r = subprocess.run(
+                ["python3", str(BASE_DIR / "20_auto_trader.py"), "--scan"],
+                cwd=str(BASE_DIR), capture_output=True, text=True, timeout=60
+            )
+            results["auto_trader"] = {
+                "status": "ok" if r.returncode == 0 else "error",
+                "output": (r.stdout or "")[-500:],
+            }
+            logger.info(f"  Auto-trader: {(r.stdout or '')[-100:]}")
+        else:
+            results["auto_trader"] = {"status": "skipped", "output": "Mode is paper or kill switch on"}
+    except Exception as e:
+        results["auto_trader"] = {"status": "error", "error": str(e)}
+        logger.error(f"  Auto-trader scan exception: {e}")
+
     elapsed = time.time() - t0
     ok_count = sum(1 for v in results.values() if v.get("status") == "ok")
     _pipeline_status["result"] = {
@@ -3133,6 +3153,198 @@ def _auto_resolve_loop():
         except Exception as e:
             logger.warning(f"[AUTO-RESOLVE] Error: {e}")
         _time.sleep(AUTO_RESOLVE_INTERVAL)
+
+
+# ─── Auto-Trader API Endpoints ─────────���────────────────────────────────────
+
+AUTO_TRADER_CONFIG = BASE_DIR / "auto_trader_config.json"
+PENDING_TRADES_FILE = LOGS_DIR / "pending_trades.json"
+
+
+def _load_auto_config():
+    if AUTO_TRADER_CONFIG.exists():
+        return json.loads(AUTO_TRADER_CONFIG.read_text())
+    return {"mode": "semi"}
+
+
+def _save_auto_config(cfg):
+    AUTO_TRADER_CONFIG.write_text(json.dumps(cfg, indent=2))
+
+
+@app.route("/api/auto-trader/config", methods=["GET", "POST"])
+@enable_cors
+def auto_trader_config_api():
+    """Get or update auto-trader configuration."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if request.method == "GET":
+        cfg = _load_auto_config()
+        return jsonify(cfg)
+
+    # POST — update config
+    try:
+        updates = request.get_json(force=True)
+        cfg = _load_auto_config()
+        # Deep merge entry_rules, exit_rules, safety
+        for section in ("entry_rules", "exit_rules", "safety"):
+            if section in updates:
+                cfg.setdefault(section, {}).update(updates[section])
+                del updates[section]
+        cfg.update(updates)
+        _save_auto_config(cfg)
+        return jsonify({"status": "ok", "config": cfg})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/auto-trader/pending", methods=["GET"])
+@enable_cors
+def auto_trader_pending():
+    """Get pending trades awaiting confirmation."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if PENDING_TRADES_FILE.exists():
+        try:
+            trades = json.loads(PENDING_TRADES_FILE.read_text())
+            return jsonify({"trades": trades})
+        except Exception:
+            pass
+    return jsonify({"trades": []})
+
+
+@app.route("/api/auto-trader/confirm", methods=["POST"])
+@enable_cors
+def auto_trader_confirm():
+    """Confirm a pending trade — logs it and removes from queue."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        data = request.get_json(force=True)
+        pending_id = data.get("pending_id")
+        if not pending_id:
+            return jsonify({"error": "pending_id required"}), 400
+
+        # Load pending
+        pending = json.loads(PENDING_TRADES_FILE.read_text()) if PENDING_TRADES_FILE.exists() else []
+        confirmed = None
+        remaining = []
+        for p in pending:
+            if p.get("pending_id") == pending_id:
+                p["status"] = "confirmed"
+                p["confirmed_at"] = datetime.utcnow().isoformat() + "Z"
+                confirmed = p
+            else:
+                remaining.append(p)
+
+        PENDING_TRADES_FILE.write_text(json.dumps(remaining, indent=2))
+
+        if confirmed:
+            # Log to paper/live trade log
+            log_path = LOGS_DIR / "paper_trades.jsonl"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, "a") as f:
+                f.write(json.dumps(confirmed) + "\n")
+
+            logger.info(f"[AUTO-TRADER] Confirmed trade: {confirmed.get('match')} — {confirmed.get('bet_on')}")
+            return jsonify({"status": "confirmed", "trade": confirmed})
+
+        return jsonify({"error": "pending_id not found"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auto-trader/reject", methods=["POST"])
+@enable_cors
+def auto_trader_reject():
+    """Reject a pending trade — remove from queue."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        data = request.get_json(force=True)
+        pending_id = data.get("pending_id")
+        if not pending_id:
+            return jsonify({"error": "pending_id required"}), 400
+
+        pending = json.loads(PENDING_TRADES_FILE.read_text()) if PENDING_TRADES_FILE.exists() else []
+        rejected = None
+        remaining = []
+        for p in pending:
+            if p.get("pending_id") == pending_id:
+                rejected = p
+            else:
+                remaining.append(p)
+
+        PENDING_TRADES_FILE.write_text(json.dumps(remaining, indent=2))
+
+        if rejected:
+            logger.info(f"[AUTO-TRADER] Rejected trade: {rejected.get('match')} — {rejected.get('bet_on')}")
+            return jsonify({"status": "rejected", "trade": rejected})
+
+        return jsonify({"error": "pending_id not found"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auto-trader/scan", methods=["POST"])
+@enable_cors
+def auto_trader_scan():
+    """Trigger an auto-trader scan (runs entry rules against today's signals)."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["python3", str(BASE_DIR / "20_auto_trader.py"), "--scan"],
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        # Load pending trades to return
+        pending = json.loads(PENDING_TRADES_FILE.read_text()) if PENDING_TRADES_FILE.exists() else []
+        return jsonify({
+            "status": "ok",
+            "output": result.stdout[-2000:] if result.stdout else "",
+            "pending_count": len(pending),
+            "pending": pending,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Scan timed out"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auto-trader/history", methods=["GET"])
+@enable_cors
+def auto_trader_history():
+    """Get recent auto-trader trade history."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    log_path = LOGS_DIR / "paper_trades.jsonl"
+    if not log_path.exists():
+        return jsonify({"trades": []})
+
+    trades = []
+    try:
+        with open(log_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    trades.append(json.loads(line))
+        # Return last 50
+        trades = trades[-50:]
+        trades.reverse()
+        return jsonify({"trades": trades})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

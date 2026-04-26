@@ -468,6 +468,7 @@ window.PICKS_DATA = [];
     <div class="tab" onclick="switchTab('performance')">Performance</div>
     <div class="tab" onclick="switchTab('accuracy')">Model Accuracy</div>
     <div class="tab" onclick="switchTab('players'); loadPlayerCards();">Players</div>
+    <div class="tab" onclick="switchTab('autotrader'); loadAutoTrader();" style="color:#d4740a80">Auto-Trader</div>
 </div>
 
 <!-- SIGNALS -->
@@ -596,6 +597,130 @@ window.PICKS_DATA = [];
         <div style="text-align:center; padding:60px 0; color:#6c757d">
             <div style="font-size:14px; margin-bottom:8px">Loading player profiles...</div>
             <div style="font-size:11px">Computing from match history data</div>
+        </div>
+    </div>
+</div>
+
+<!-- AUTO-TRADER -->
+<div class="panel" id="panel-autotrader">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px">
+        <div>
+            <h2 style="margin:0; font-size:18px; color:#e0e0e0">AUTO-TRADER</h2>
+            <p style="color:#8b949e; font-size:11px; margin:4px 0 0 0">Semi-automatic trade execution — system finds trades, you confirm before execution</p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center">
+            <span id="at-mode-badge" style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span>
+            <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px">RUN SCAN</button>
+            <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:6px 10px; border-radius:6px; font-size:11px; cursor:pointer">SETTINGS</button>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div id="at-stats-bar" style="display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:16px">
+        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Mode</div>
+            <div id="at-stat-mode" style="font-size:15px; font-weight:800; color:#d4740a; margin-top:2px">SEMI</div>
+        </div>
+        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Pending</div>
+            <div id="at-stat-pending" style="font-size:15px; font-weight:800; color:#f59e0b; margin-top:2px">0</div>
+        </div>
+        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Confirmed Today</div>
+            <div id="at-stat-confirmed" style="font-size:15px; font-weight:800; color:#4caf50; margin-top:2px">0</div>
+        </div>
+        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Rejected</div>
+            <div id="at-stat-rejected" style="font-size:15px; font-weight:800; color:#6c757d; margin-top:2px">0</div>
+        </div>
+        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Kill Switch</div>
+            <div id="at-stat-kill" style="font-size:15px; font-weight:800; color:#4caf50; margin-top:2px">OFF</div>
+        </div>
+    </div>
+
+    <!-- Settings Panel (hidden by default) -->
+    <div id="at-settings-panel" style="display:none; background:#0d1117; border:1px solid #2a2d37; border-radius:8px; padding:16px; margin-bottom:16px">
+        <h3 style="margin:0 0 12px 0; font-size:13px; color:#e0e0e0">ENTRY RULES</h3>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px">
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Min Edge %</label>
+                <input type="number" id="at-min-edge" value="10" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Min Model Prob %</label>
+                <input type="number" id="at-min-prob" value="55" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Min Gap</label>
+                <input type="number" id="at-min-gap" value="5" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Max Stake $</label>
+                <input type="number" id="at-max-stake" value="50" step="5" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Kelly Fraction</label>
+                <input type="number" id="at-kelly" value="0.25" step="0.05" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Max Daily Bets</label>
+                <input type="number" id="at-max-daily" value="10" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Daily Loss Limit $</label>
+                <input type="number" id="at-loss-limit" value="200" step="10" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Max Exposure $</label>
+                <input type="number" id="at-max-exposure" value="500" step="50" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+        </div>
+        <h3 style="margin:0 0 12px 0; font-size:13px; color:#e0e0e0">EXIT RULES</h3>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:12px">
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Stop Loss %</label>
+                <input type="number" id="at-stop-loss" value="15" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Take Profit 1 (c)</label>
+                <input type="number" id="at-tp1" value="85" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Take Profit 2 (c)</label>
+                <input type="number" id="at-tp2" value="95" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Trailing Stop %</label>
+                <input type="number" id="at-trail" value="8" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:12px">
+            <button onclick="saveAutoTraderConfig()" style="background:#4caf50; color:#fff; border:none; padding:6px 16px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer">SAVE CONFIG</button>
+            <button onclick="toggleAutoTraderSettings()" style="background:#333; color:#aaa; border:1px solid #444; padding:6px 16px; border-radius:4px; font-size:11px; cursor:pointer">CLOSE</button>
+        </div>
+    </div>
+
+    <!-- Pending Trades (the main feature) -->
+    <div style="margin-bottom:20px">
+        <h3 style="margin:0 0 10px 0; font-size:13px; color:#e0e0e0; display:flex; align-items:center; gap:8px">
+            PENDING TRADES
+            <span id="at-pending-count" style="font-size:10px; background:#f59e0b25; color:#f59e0b; padding:2px 8px; border-radius:10px; font-weight:700">0</span>
+        </h3>
+        <div id="at-pending-list" style="display:flex; flex-direction:column; gap:8px">
+            <div style="text-align:center; padding:40px 0; color:#6c757d; font-size:12px">
+                No pending trades. Click <b>RUN SCAN</b> to check for qualifying signals.
+            </div>
+        </div>
+    </div>
+
+    <!-- Trade History -->
+    <div>
+        <h3 style="margin:0 0 10px 0; font-size:13px; color:#e0e0e0">TRADE HISTORY</h3>
+        <div id="at-history-list" style="display:flex; flex-direction:column; gap:6px">
+            <div style="text-align:center; padding:30px 0; color:#6c757d; font-size:12px">
+                No trades yet.
+            </div>
         </div>
     </div>
 </div>
@@ -3264,6 +3389,251 @@ function goToPlayerCard(name) {
         const search = document.getElementById('playerSearch');
         if (search) search.value = name;
     }, 300);
+}
+
+// ─── AUTO-TRADER ────────────────────────────────────────────────────────────
+
+let _atConfig = null;
+let _atRejectedCount = 0;
+
+function toggleAutoTraderSettings() {
+    const p = document.getElementById('at-settings-panel');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadAutoTrader() {
+    try {
+        // Load config
+        const cfgRes = await fetch('/api/auto-trader/config');
+        if (cfgRes.ok) {
+            _atConfig = await cfgRes.json();
+            populateAutoTraderSettings(_atConfig);
+        }
+        // Load pending
+        await refreshPendingTrades();
+        // Load history
+        await loadAutoTraderHistory();
+    } catch(e) {
+        console.warn('Auto-trader load error:', e);
+    }
+}
+
+function populateAutoTraderSettings(cfg) {
+    const mode = (cfg.mode || 'semi').toUpperCase();
+    const mBadge = document.getElementById('at-mode-badge');
+    const mStat = document.getElementById('at-stat-mode');
+    if (mBadge) {
+        mBadge.textContent = mode === 'SEMI' ? 'SEMI-AUTO' : mode;
+        mBadge.style.color = mode === 'SEMI' ? '#d4740a' : mode === 'LIVE' ? '#f44336' : '#4caf50';
+        mBadge.style.borderColor = mBadge.style.color + '50';
+        mBadge.style.background = mBadge.style.color.replace(')', ',0.15)').replace('rgb', 'rgba');
+    }
+    if (mStat) mStat.textContent = mode;
+
+    const r = cfg.entry_rules || {};
+    const ex = cfg.exit_rules || {};
+    const s = cfg.safety || {};
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    setVal('at-min-edge', r.min_edge || 10);
+    setVal('at-min-prob', r.min_model_prob || 55);
+    setVal('at-min-gap', r.min_gap || 5);
+    setVal('at-max-stake', r.max_stake_per_bet || 50);
+    setVal('at-kelly', r.kelly_fraction || 0.25);
+    setVal('at-max-daily', r.max_daily_bets || 10);
+    setVal('at-loss-limit', s.daily_loss_limit || 200);
+    setVal('at-max-exposure', s.max_total_exposure || 500);
+    setVal('at-stop-loss', ex.stop_loss_pct || 15);
+    setVal('at-tp1', ex.take_profit_1_price || 85);
+    setVal('at-tp2', ex.take_profit_2_price || 95);
+    setVal('at-trail', ex.trailing_stop_pct || 8);
+
+    const killEl = document.getElementById('at-stat-kill');
+    if (killEl) {
+        const isOn = s.kill_switch;
+        killEl.textContent = isOn ? 'ON' : 'OFF';
+        killEl.style.color = isOn ? '#f44336' : '#4caf50';
+    }
+}
+
+async function saveAutoTraderConfig() {
+    const getVal = (id) => parseFloat(document.getElementById(id)?.value || 0);
+    const update = {
+        entry_rules: {
+            min_edge: getVal('at-min-edge'),
+            min_model_prob: getVal('at-min-prob'),
+            min_gap: getVal('at-min-gap'),
+            max_stake_per_bet: getVal('at-max-stake'),
+            kelly_fraction: getVal('at-kelly'),
+            max_daily_bets: getVal('at-max-daily'),
+        },
+        exit_rules: {
+            stop_loss_pct: getVal('at-stop-loss'),
+            take_profit_1_price: getVal('at-tp1'),
+            take_profit_2_price: getVal('at-tp2'),
+            trailing_stop_pct: getVal('at-trail'),
+        },
+        safety: {
+            daily_loss_limit: getVal('at-loss-limit'),
+            max_total_exposure: getVal('at-max-exposure'),
+        }
+    };
+    try {
+        const res = await fetch('/api/auto-trader/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(update),
+        });
+        if (res.ok) {
+            _atConfig = (await res.json()).config;
+            populateAutoTraderSettings(_atConfig);
+            alert('Config saved!');
+        }
+    } catch(e) {
+        alert('Error saving config: ' + e.message);
+    }
+}
+
+async function runAutoScan() {
+    const btn = event.target;
+    btn.textContent = 'SCANNING...';
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/auto-trader/scan', { method: 'POST' });
+        const data = await res.json();
+        if (data.pending_count > 0) {
+            btn.textContent = `FOUND ${data.pending_count}`;
+        } else {
+            btn.textContent = 'NO SIGNALS';
+        }
+        await refreshPendingTrades();
+        await loadAutoTraderHistory();
+    } catch(e) {
+        btn.textContent = 'ERROR';
+        console.error('Scan error:', e);
+    }
+    setTimeout(() => { btn.textContent = 'RUN SCAN'; btn.disabled = false; }, 3000);
+}
+
+async function refreshPendingTrades() {
+    try {
+        const res = await fetch('/api/auto-trader/pending');
+        const data = await res.json();
+        const trades = data.trades || [];
+        const container = document.getElementById('at-pending-list');
+        const countEl = document.getElementById('at-pending-count');
+        const statEl = document.getElementById('at-stat-pending');
+
+        if (countEl) countEl.textContent = trades.length;
+        if (statEl) statEl.textContent = trades.length;
+
+        if (!trades.length) {
+            container.innerHTML = '<div style="text-align:center; padding:40px 0; color:#6c757d; font-size:12px">No pending trades. Click <b>RUN SCAN</b> to check for qualifying signals.</div>';
+            return;
+        }
+
+        container.innerHTML = trades.map(t => {
+            const gap = (t.gap || 0);
+            const gapColor = gap >= 10 ? '#4caf50' : gap >= 5 ? '#81c784' : '#f59e0b';
+            const edgeStr = (t.edge || 0) > 0 ? `+${(t.edge||0).toFixed(1)}%` : `${(t.edge||0).toFixed(1)}%`;
+            const polyLink = t.poly_link || '#';
+            return `
+            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:8px; padding:12px 14px; display:flex; align-items:center; gap:12px; border-left:3px solid #f59e0b">
+                <div style="flex:1; min-width:0">
+                    <div style="font-size:13px; font-weight:700; color:#e0e0e0; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${t.match || '?'}</div>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center">
+                        <span style="font-size:11px; color:#d4740a; font-weight:700">PICK: ${t.bet_on || '?'}</span>
+                        <span style="font-size:10px; color:#aaa">Model: ${(t.model_prob||0).toFixed(1)}%</span>
+                        <span style="font-size:10px; color:#aaa">Poly: ${(t.poly_price||0).toFixed(0)}c</span>
+                        <span style="font-size:10px; font-weight:700; color:${gapColor}; background:${gapColor}15; padding:1px 5px; border-radius:3px">Gap: +${gap.toFixed(0)}</span>
+                        <span style="font-size:10px; color:#aaa">Edge: ${edgeStr}</span>
+                        <span style="font-size:10px; color:#aaa">Stake: $${(t.stake||0).toFixed(2)}</span>
+                    </div>
+                </div>
+                <div style="display:flex; gap:6px; flex-shrink:0">
+                    <a href="${polyLink}" target="_blank" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:5px 10px; border-radius:4px; font-size:10px; text-decoration:none; cursor:pointer">VIEW</a>
+                    <button onclick="confirmTrade('${t.pending_id}')" style="background:#4caf50; color:#fff; border:none; padding:5px 14px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer">CONFIRM</button>
+                    <button onclick="rejectTrade('${t.pending_id}')" style="background:#333; color:#aaa; border:1px solid #444; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">REJECT</button>
+                </div>
+            </div>`;
+        }).join('');
+
+    } catch(e) {
+        console.warn('Pending trades load error:', e);
+    }
+}
+
+async function confirmTrade(pendingId) {
+    if (!confirm('Confirm this trade? This will log it as an active position.')) return;
+    try {
+        const res = await fetch('/api/auto-trader/confirm', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ pending_id: pendingId }),
+        });
+        if (res.ok) {
+            const el = document.getElementById('at-stat-confirmed');
+            if (el) el.textContent = parseInt(el.textContent || 0) + 1;
+            await refreshPendingTrades();
+            await loadAutoTraderHistory();
+        }
+    } catch(e) {
+        alert('Error confirming trade: ' + e.message);
+    }
+}
+
+async function rejectTrade(pendingId) {
+    try {
+        const res = await fetch('/api/auto-trader/reject', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ pending_id: pendingId }),
+        });
+        if (res.ok) {
+            _atRejectedCount++;
+            const el = document.getElementById('at-stat-rejected');
+            if (el) el.textContent = _atRejectedCount;
+            await refreshPendingTrades();
+        }
+    } catch(e) {
+        alert('Error rejecting trade: ' + e.message);
+    }
+}
+
+async function loadAutoTraderHistory() {
+    try {
+        const res = await fetch('/api/auto-trader/history');
+        const data = await res.json();
+        const trades = data.trades || [];
+        const container = document.getElementById('at-history-list');
+
+        if (!trades.length) {
+            container.innerHTML = '<div style="text-align:center; padding:30px 0; color:#6c757d; font-size:12px">No trades yet.</div>';
+            return;
+        }
+
+        container.innerHTML = trades.slice(0, 20).map(t => {
+            const isExit = (t.action || '').includes('exit') || (t.action || '').includes('stop') || (t.action || '').includes('profit') || (t.action || '').includes('trailing');
+            const statusColor = t.status === 'confirmed' ? '#4caf50' : isExit ? '#f59e0b' : '#888';
+            const statusLabel = t.status === 'confirmed' ? 'CONFIRMED' : isExit ? t.action.toUpperCase() : (t.action || 'entry').toUpperCase();
+            const pnl = t.pnl_pct != null ? `${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(1)}%` : '';
+            const pnlColor = (t.pnl_pct || 0) >= 0 ? '#4caf50' : '#f44336';
+            const ts = t.timestamp || t.confirmed_at || t.created_at || '';
+            const timeStr = ts ? new Date(ts).toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+
+            return `
+            <div style="background:#0d1117; border:1px solid #1a1d24; border-radius:6px; padding:8px 12px; display:flex; align-items:center; gap:10px; font-size:11px">
+                <span style="color:${statusColor}; font-weight:700; min-width:75px">${statusLabel}</span>
+                <span style="color:#e0e0e0; font-weight:600; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${t.bet_on || '?'}</span>
+                <span style="color:#888; white-space:nowrap">${(t.match || '').substring(0, 30)}</span>
+                <span style="color:#aaa">$${(t.stake||0).toFixed(0)}</span>
+                ${pnl ? `<span style="color:${pnlColor}; font-weight:700">${pnl}</span>` : ''}
+                <span style="color:#555; font-size:10px">${timeStr}</span>
+            </div>`;
+        }).join('');
+
+    } catch(e) {
+        console.warn('Trade history load error:', e);
+    }
 }
 </script>
 
