@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-04-20T07:14:50.538988Z",
+  "source": "stats.tennismylife.org/api/data-files",
+  "rows": 78150,
+  "years": [
+    2016,
+    2026
+  ],
+  "tiers": [
+    "challenger",
+    "main"
+  ],
+  "surfaces": [
+    "Carpet",
+    "Clay",
+    "Grass",
+    "Hard"
+  ],
+  "tournament_count": 1219,
+  "player_count": 2505,
+  "date_range": [
+    "2016-01-04",
+    "2026-04-12"
+  ],
+  "serve_data_coverage": 97.6
+}

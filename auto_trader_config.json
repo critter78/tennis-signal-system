@@ -1,17 +1,17 @@
 {
   "mode": "semi",
   "entry_rules": {
-    "min_edge": 10.0,
-    "min_model_prob": 55.0,
-    "min_gap": 5,
+    "min_edge": 0,
+    "min_model_prob": 65.0,
+    "min_gap": 0,
     "min_consensus": 3,
-    "edge_conf": ["STRONG"],
+    "edge_conf": ["ALL"],
     "market_types": ["h2h"],
-    "max_stake_per_bet": 50.0,
+    "max_stake_per_bet": 200.0,
     "kelly_fraction": 0.25,
-    "max_daily_bets": 10,
+    "max_daily_bets": 50,
     "bet_type": "edge",
-    "min_volume": 1000,
+    "min_volume": 0,
     "exclude_outrights": true
   },
   "exit_rules": {

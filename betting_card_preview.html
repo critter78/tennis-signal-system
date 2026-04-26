@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎾 Tennis Betting Card — 2026-04-15 12:18</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #f8f9fa;
+    --surface:  #ffffff;
+    --surface2: #f1f3f5;
+    --border:   #dee2e6;
+    --amber:    #d4740a;
+    --amber-dim:#b35f00;
+    --green:    #087f23;
+    --red:      #c62828;
+    --orange:   #d84315;
+    --text:     #212529;
+    --text-dim: #6c757d;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-left h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--amber);
+    letter-spacing: 0.04em;
+  }
+  .header-left .subtitle {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .header-right {
+    text-align: right;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.8;
+  }
+  .header-right strong { color: var(--amber-dim); }
+
+  /* ── SUMMARY BAR ── */
+  .summary {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .summary-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .summary-pill strong { color: var(--amber); }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: #adb5bd; }
+  .card.tier-strong  { border-left: 3px solid var(--orange); }
+  .card.tier-solid   { border-left: 3px solid var(--amber); }
+  .card.tier-watch   { border-left: 3px solid #adb5bd; }
+  .card.tier-marginal { border-left: 3px solid #ced4da; }
+
+  .card-header {
+    padding: 14px 18px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .match-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .match-num  { color: var(--text-dim); font-size: 11px; }
+  .match-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .tier-badge { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
+  .card-meta  { font-size: 11px; color: var(--text-dim); display: flex; gap: 14px; flex-wrap: wrap; }
+
+  .card-body {
+    padding: 18px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  /* ── BET ACTION ── */
+  .bet-action {
+    flex: 0 0 auto;
+    min-width: 260px;
+  }
+  .bet-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .bet-player {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--amber);
+    margin-bottom: 14px;
+    line-height: 1.2;
+  }
+  .bet-numbers {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .number-block {
+    text-align: center;
+  }
+  .num-label { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+  .num-value { font-size: 18px; font-weight: 700; }
+  .num-value.poly   { color: var(--text-dim); }
+  .num-value.model  { color: var(--green); }
+  .num-value.edge   { font-size: 20px; }
+  .num-value.kelly  { color: var(--amber-dim); font-size: 14px; }
+  .arrow { font-size: 14px; color: var(--border); margin: 0 2px; }
+
+  /* ── STATS GRID ── */
+  .stats-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr;
+    gap: 16px;
+    min-width: 300px;
+  }
+  .stats-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--amber-dim);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 7px;
+    gap: 8px;
+  }
+  .stat-label { font-size: 10px; color: var(--text-dim); flex: 0 0 auto; }
+  .stat-val   { font-size: 11px; color: var(--text); }
+  .na         { font-size: 11px; color: #adb5bd; }
+
+  .bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    max-width: 120px;
+  }
+  .bar-wrap span { font-size: 10px; color: var(--text); white-space: nowrap; }
+  .bar {
+    height: 4px;
+    background: var(--amber);
+    flex-shrink: 0;
+    min-width: 2px;
+  }
+
+  /* ── H2H ── */
+  .h2h-col {
+    text-align: center;
+    padding-top: 2px;
+  }
+  .h2h-record {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 10px;
+  }
+  .h2h-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ── CARD FOOTER ── */
+  .card-footer {
+    padding: 12px 18px;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .instructions {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    flex: 1;
+  }
+  .instructions strong { color: var(--amber-dim); }
+  .inst-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-right: 6px;
+  }
+  .poly-link {
+    font-size: 11px;
+    color: var(--amber);
+    text-decoration: none;
+    border: 1px solid var(--amber-dim);
+    padding: 5px 12px;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .poly-link:hover { background: #fff3e0; }
+
+  /* ── EMPTY / DISCLAIMER ── */
+  .empty {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 60px;
+    font-size: 13px;
+    border: 1px dashed var(--border);
+  }
+
+  /* ── BET TOGGLE ── */
+  .card-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .bet-toggle {
+    background: #1b5e20;
+    color: white;
+    border: 2px solid #1b5e20;
+    padding: 8px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .bet-toggle:hover {
+    background: #2e7d32;
+    border-color: #2e7d32;
+  }
+  .bet-toggle.active {
+    background: #e65100;
+    border-color: #e65100;
+    animation: pulse 0.3s ease;
+  }
+  .bet-toggle-mini {
+    background: none;
+    border: 1px solid #adb5bd;
+    color: #6c757d;
+    padding: 1px 6px;
+    font-size: 10px;
+    cursor: pointer;
+    margin-left: 4px;
+    font-family: var(--mono);
+    transition: all 0.2s;
+  }
+  .bet-toggle-mini:hover {
+    border-color: #1b5e20;
+    color: #1b5e20;
+  }
+  .bet-toggle-mini.active {
+    background: #e65100;
+    border-color: #e65100;
+    color: white;
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+  .bet-summary-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #1b5e20;
+    color: white;
+    padding: 12px 24px;
+    font-family: var(--mono);
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1000;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+  }
+  .bet-summary-bar.visible {
+    transform: translateY(0);
+  }
+  .bet-summary-bar button {
+    background: white;
+    color: #1b5e20;
+    border: none;
+    padding: 8px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+  .bet-summary-bar button:hover {
+    background: #e8f5e9;
+  }
+
+  .disclaimer {
+    margin-top: 32px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    background: var(--surface);
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 8px; height: 8px; flex-shrink: 0; }
+
+  /* ── VALUE BADGES ── */
+  .value-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border-radius: 3px;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+  .value-gold {
+    background: linear-gradient(135deg, #fff8e1 0%, #ffe082 100%);
+    color: #e65100;
+    border: 1px solid #ffb300;
+    box-shadow: 0 0 6px rgba(255, 179, 0, 0.35);
+  }
+  .value-green {
+    background: #e8f5e9;
+    color: #1b5e20;
+    border: 1px solid #66bb6a;
+  }
+  .value-blue {
+    background: #e3f2fd;
+    color: #0d47a1;
+    border: 1px solid #64b5f6;
+  }
+
+  /* ── STRAIGHT PICKS TABLE ── */
+  .picks-section {
+    margin-top: 36px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .picks-header {
+    padding: 16px 18px;
+    background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .picks-header h2 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .picks-subtitle {
+    font-size: 11px;
+    color: #a5d6a7;
+  }
+  .picks-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .picks-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .picks-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #e9ecef;
+    color: var(--text);
+    font-family: var(--mono);
+  }
+  .picks-table tr:hover {
+    background: #e8f5e9;
+  }
+
+  /* ── PREDICTIONS TABLE ── */
+  .predictions-section {
+    margin-top: 36px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .predictions-header {
+    padding: 14px 18px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .predictions-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--amber);
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .predictions-subtitle {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .predictions-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .predictions-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .predictions-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #e9ecef;
+    color: var(--text);
+    font-family: var(--mono);
+  }
+  .predictions-table tr:hover {
+    background: #f1f3f5;
+  }
+  .pred-match { color: var(--text); font-weight: 500; max-width: 220px; }
+  .pred-winner { font-weight: 700; }
+  .pred-conf { font-weight: 600; }
+  .pred-poly { color: var(--text-dim); }
+  .pred-model { color: var(--text); }
+  .pred-edge { font-weight: 700; }
+  .pred-signal { text-align: center; font-size: 14px; }
+  .pred-vol { color: var(--text-dim); text-align: right; }
+  .pred-tourney { color: var(--amber-dim); font-size: 11px; max-width: 180px; }
+  .pred-round { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+  .tourney { color: var(--amber); font-weight: 600; }
+
+  @media (max-width: 700px) {
+    .bet-numbers { gap: 6px; }
+    .stats-grid  { grid-template-columns: 1fr; }
+    .h2h-col     { text-align: left; }
+    .card-header { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>🎾 TENNIS BETTING CARD</h1>
+    <div class="subtitle">Polymarket Signal System — XGBoost Model</div>
+  </div>
+  <div class="header-right">
+    Generated: <strong>2026-04-15 12:18</strong><br>
+    Min Edge: <strong>5%</strong> &nbsp;|&nbsp;
+    Min Volume: <strong>$500</strong><br>
+    Matches: <strong>0</strong> &nbsp;|&nbsp; Signals: <strong>0</strong>
+  </div>
+</div>
+
+<div class="summary">
+  <div class="summary-pill">Matches: <strong>0</strong></div>
+  <div class="summary-pill">Bet Signals: <strong>0</strong></div>
+  <div class="summary-pill">Combined Vol: <strong>$0</strong></div>
+  <div class="summary-pill">Avg Edge: <strong>0.0%</strong></div>
+  <div class="summary-pill">Strong (≥10%): <strong>0</strong></div>
+  <div class="summary-pill">Solid (7-10%): <strong>0</strong></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#d84315"></div> 🔥 STRONG ≥10% edge</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d4740a"></div> ✅ SOLID 7-10% edge</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#adb5bd"></div> 👀 WATCH 5-7% edge</div>
+</div>
+<div class="legend" style="margin-top:6px">
+  <div class="legend-item">💰 <strong style="color:#e65100">BEST VALUE</strong> — Model ≥60% win AND Poly ≥15¢ too low</div>
+  <div class="legend-item">💎 <strong style="color:#1b5e20">VALUE</strong> — Model ≥55% win AND Poly ≥8¢ too low</div>
+  <div class="legend-item">📈 <strong style="color:#0d47a1">EDGE+</strong> — Model favors winner AND Poly ≥3¢ too low</div>
+</div>
+
+
+
+
+<div class="empty">No betting signals above threshold — but 0 match prediction(s) shown below.</div>
+
+
+
+
+    <div class="disclaimer">
+        ⚠️ These signals are model outputs, not financial advice. Always verify current Polymarket prices before placing.
+        Kelly stakes assume 25% fractional Kelly — size to your own risk tolerance.
+        Polymarket charges a 2% fee on net winnings — factor this into your minimum edge threshold.
+    </div>
+    
+
+<div class="bet-summary-bar" id="betBar">
+  <span id="betCount">0 bets selected</span>
+  <div>
+    <span id="betTotal" style="margin-right:16px"></span>
+    <button onclick="saveBets()">SAVE MY BETS</button>
+    <button onclick="exportBets()" style="margin-left:8px; background:#e8f5e9">EXPORT JSON</button>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'tennis_bets_' + '2026-04-15 12:18'.replace(/ /g,'_').replace(/:/g,'').replace(/-/g,'');
+let myBets = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+// Restore previously toggled bets on load
+document.addEventListener('DOMContentLoaded', () => {
+  myBets.forEach(bet => {
+    document.querySelectorAll('.bet-toggle, .bet-toggle-mini').forEach(btn => {
+      if (btn.dataset.match === bet.match && btn.dataset.betOn === bet.bet_on) {
+        btn.classList.add('active');
+        if (btn.classList.contains('bet-toggle')) btn.textContent = '✓ BET PLACED';
+        if (btn.classList.contains('bet-toggle-mini')) btn.textContent = '✓';
+      }
+    });
+  });
+  updateBar();
+});
+
+function toggleBet(btn) {
+  const data = {
+    match: btn.dataset.match,
+    bet_on: btn.dataset.betOn,
+    poly_price: parseFloat(btn.dataset.polyPrice) || 0,
+    model_prob: parseFloat(btn.dataset.modelProb) || 0,
+    edge: parseFloat(btn.dataset.edge) || 0,
+    kelly: parseFloat(btn.dataset.kelly) || 0,
+    market_type: btn.dataset.marketType || '',
+    tournament: btn.dataset.tournament || '',
+    surface: btn.dataset.surface || '',
+    timestamp: new Date().toISOString(),
+    card_date: '2026-04-15 12:18',
+  };
+
+  const idx = myBets.findIndex(b => b.match === data.match && b.bet_on === data.bet_on);
+  if (idx >= 0) {
+    myBets.splice(idx, 1);
+    btn.classList.remove('active');
+    if (btn.classList.contains('bet-toggle')) btn.textContent = 'I BET THIS';
+    if (btn.classList.contains('bet-toggle-mini')) btn.textContent = '💰';
+  } else {
+    myBets.push(data);
+    btn.classList.add('active');
+    if (btn.classList.contains('bet-toggle')) btn.textContent = '✓ BET PLACED';
+    if (btn.classList.contains('bet-toggle-mini')) btn.textContent = '✓';
+  }
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(myBets));
+  updateBar();
+}
+
+function updateBar() {
+  const bar = document.getElementById('betBar');
+  const count = document.getElementById('betCount');
+  const total = document.getElementById('betTotal');
+  if (myBets.length > 0) {
+    bar.classList.add('visible');
+    count.textContent = myBets.length + ' bet' + (myBets.length > 1 ? 's' : '') + ' selected';
+    const avgEdge = (myBets.reduce((s, b) => s + Math.abs(b.edge), 0) / myBets.length).toFixed(1);
+    total.textContent = 'Avg Edge: ' + avgEdge + '%';
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+function saveBets() {
+  // Save to localStorage (already done on toggle)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(myBets));
+
+  // Also save to the master bet log
+  const masterKey = 'tennis_all_bets';
+  let allBets = JSON.parse(localStorage.getItem(masterKey) || '[]');
+  myBets.forEach(bet => {
+    const exists = allBets.find(b => b.match === bet.match && b.bet_on === bet.bet_on && b.card_date === bet.card_date);
+    if (!exists) allBets.push(bet);
+  });
+  localStorage.setItem(masterKey, JSON.stringify(allBets));
+
+  alert('Saved ' + myBets.length + ' bet(s) to local storage!\nTotal bets tracked: ' + allBets.length);
+}
+
+function exportBets() {
+  const masterKey = 'tennis_all_bets';
+  let allBets = JSON.parse(localStorage.getItem(masterKey) || '[]');
+
+  // Merge current unsaved
+  myBets.forEach(bet => {
+    const exists = allBets.find(b => b.match === bet.match && b.bet_on === bet.bet_on && b.card_date === bet.card_date);
+    if (!exists) allBets.push(bet);
+  });
+
+  const blob = new Blob([JSON.stringify(allBets, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'my_bets_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>

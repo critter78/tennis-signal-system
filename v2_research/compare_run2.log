@@ -1,0 +1,57 @@
+========================================================================
+  V1 vs V2 COMPARISON — same architecture, different data
+========================================================================
+
+[load] v1 parquet + v2 parquet
+    v1: 36,342 matches (2018-01-01 → 2024-12-18)
+    v2: 72,133 matches (2018-01-01 → 2026-04-12)
+
+[holdout] 1,264 ATP tour matches from 2025-10-01 → 2026-04-12
+
+[train] v1 source: 36,342 matches (through 2024-12-18)
+[train] v2 source: 67,343 matches (through 2025-09-29)
+
+[index] Building V1 stats engine…
+[index] Building V2 stats engine…
+
+[v1] Building TRAIN features on 2,500 sampled matches…
+    [v1-train] 0/2,500 (0.0%, 0s)
+    [v1-train] 500/2,500 (20.0%, 19s)
+    [v1-train] 1,000/2,500 (40.0%, 36s)
+    [v1-train] 1,500/2,500 (60.0%, 58s)
+    [v1-train] 2,000/2,500 (80.0%, 73s)
+    [v1-train] ✓ 2,500 rows built in 85s
+    usable: 2,446
+
+[v2] Building TRAIN features on 2,500 sampled matches…
+    [v2-train] 0/2,500 (0.0%, 0s)
+    [v2-train] 500/2,500 (20.0%, 12s)
+    [v2-train] 1,000/2,500 (40.0%, 24s)
+    [v2-train] 1,500/2,500 (60.0%, 34s)
+    [v2-train] 2,000/2,500 (80.0%, 43s)
+    [v2-train] ✓ 2,500 rows built in 53s
+    usable: 2,463
+
+[train] V1 model…
+[train] V2 model…
+
+[test] Building V1 test features (deterministic flip, v1 stats — stale)…
+    [v1-test] 0/1,264 (0.0%, 0s)
+    [v1-test] 500/1,264 (39.6%, 9s)
+    [v1-test] 1,000/1,264 (79.1%, 16s)
+    [v1-test] ✓ 1,264 rows built in 20s
+[test] Building V2 test features (deterministic flip, v2 stats — fresh)…
+    [v2-test] 0/1,264 (0.0%, 0s)
+    [v2-test] 500/1,264 (39.6%, 14s)
+    [v2-test] 1,000/1,264 (79.1%, 26s)
+    [v2-test] ✓ 1,264 rows built in 30s
+
+[score] shared test matches: 1,264
+
+✓ Report → /sessions/busy-affectionate-darwin/mnt/Tennisbettingsystem/v2_research/reports/model_metrics.md
+✓ V1 model → /sessions/busy-affectionate-darwin/mnt/Tennisbettingsystem/v2_research/models/baseline_v1.pkl
+✓ V2 model → /sessions/busy-affectionate-darwin/mnt/Tennisbettingsystem/v2_research/models/tennis_xgb_v2.pkl
+
+========================================================================
+  V2 WINS  |  AUC: 0.6578 → 0.6638 (Δ +0.0060)  |  Brier: 0.2349 → 0.2293 (Δ -0.0056)
+========================================================================

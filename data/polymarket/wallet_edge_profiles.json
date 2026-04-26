@@ -1,0 +1,832 @@
+[
+  {
+    "wallet": "0x76062e7bbfc0fb783487ff884960c4bc17962836",
+    "display_name": "Starry-Declination",
+    "stats": {
+      "total_pnl": 3368571.199902,
+      "total_volume": 5679531.545245,
+      "markets_traded": 83,
+      "hit_rate": 0.6144578313253012,
+      "roi": 0.5931072260215237
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Unknown",
+        "volume": 5679531.545245,
+        "trades": 254,
+        "pnl": 3368571.199902,
+        "markets": 83
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Final",
+        "pnl": 169519.15388,
+        "markets": 3,
+        "volume": 269160.39268
+      },
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 3199052.0460220003,
+        "markets": 80,
+        "volume": 5410371.152565
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 500/250",
+        "pnl": 3222418.84126,
+        "markets": 71,
+        "volume": 5268132.184982
+      },
+      {
+        "tier": "WTA",
+        "pnl": 146152.358642,
+        "markets": 12,
+        "volume": 411399.360263
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 164.79083333333332,
+      "p25_hours_before_close": 159.98958333333334,
+      "p75_hours_before_close": 167.17194444444442,
+      "late_scalper_share": 0.0
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.5239450478323114,
+      "distribution": {
+        "heavy_dog": 0.09451028569376885,
+        "dog": 0.31753049169032443,
+        "favorite": 0.4240697281828208,
+        "heavy_favorite": 0.16388949443308592
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.625176058214897
+    },
+    "closing_line_value": {
+      "clv_weighted": 0.0002512016301045573,
+      "clv_median": 0.11762167695115078,
+      "clv_positive_rate": 0.036585365853658534,
+      "entries_analyzed": 82
+    }
+  },
+  {
+    "wallet": "0x5d58e38cd0a7e6f5fa67b7f9c2f70dd70df09a15",
+    "display_name": "Our-Cutover",
+    "stats": {
+      "total_pnl": 1444429.5950468075,
+      "total_volume": 2794929.7225981923,
+      "markets_traded": 34,
+      "hit_rate": 0.4117647058823529,
+      "roi": 0.5168035472834904
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Unknown",
+        "volume": 2794929.7225981923,
+        "trades": 200,
+        "pnl": 1444429.5950468075,
+        "markets": 34
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 1444429.5950468075,
+        "markets": 34,
+        "volume": 2794929.7225981923
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 500/250",
+        "pnl": 1396332.3331284751,
+        "markets": 23,
+        "volume": 2494395.3786875247
+      },
+      {
+        "tier": "WTA",
+        "pnl": 48097.26191833236,
+        "markets": 11,
+        "volume": 300534.34391066764
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 166.0988888888889,
+      "p25_hours_before_close": 164.55819444444444,
+      "p75_hours_before_close": 166.84576388888888,
+      "late_scalper_share": 0.0
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.5074617317282798,
+      "distribution": {
+        "heavy_dog": 0.011050539740533487,
+        "dog": 0.5392082274172258,
+        "favorite": 0.3170384340815132,
+        "heavy_favorite": 0.1327027987607274
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.6071124623225926
+    },
+    "closing_line_value": {
+      "clv_weighted": -0.0022972741192389665,
+      "clv_median": -0.2810436106123414,
+      "clv_positive_rate": 0.0,
+      "entries_analyzed": 33
+    }
+  },
+  {
+    "wallet": "0x204f72f35326db932158cba6adff0b9a1da95e14",
+    "display_name": "Frail-Possible",
+    "stats": {
+      "total_pnl": 770652.2108547246,
+      "total_volume": 24695955.473958276,
+      "markets_traded": 4214,
+      "hit_rate": 0.6037019458946369,
+      "roi": 0.03120560415924674
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Clay",
+        "volume": 137616.08601810827,
+        "trades": 650,
+        "pnl": 6313.702713891718,
+        "markets": 22
+      },
+      {
+        "surface": "Hard",
+        "volume": 14085.61505,
+        "trades": 103,
+        "pnl": 378.2361629999999,
+        "markets": 7
+      },
+      {
+        "surface": "Unknown",
+        "volume": 24608415.735840503,
+        "trades": 164539,
+        "pnl": 763960.2719778329,
+        "markets": 4185
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Final",
+        "pnl": 1048.655464000005,
+        "markets": 8,
+        "volume": 101637.087541
+      },
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 769603.5553907246,
+        "markets": 4206,
+        "volume": 24594318.386417277
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 1000",
+        "pnl": 888.9661999999997,
+        "markets": 3,
+        "volume": 9267.5438
+      },
+      {
+        "tier": "ATP 500/250",
+        "pnl": 379578.5943979452,
+        "markets": 2565,
+        "volume": 15395947.175700055
+      },
+      {
+        "tier": "WTA",
+        "pnl": 390184.65025677934,
+        "markets": 1646,
+        "volume": 9290740.75445822
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 165.1472222222222,
+      "p25_hours_before_close": 159.35777777777776,
+      "p75_hours_before_close": 167.13305555555556,
+      "late_scalper_share": 0.0
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.5458592313347758,
+      "distribution": {
+        "heavy_dog": 0.28444045822693564,
+        "dog": 0.15521290312321664,
+        "favorite": 0.17543371844107006,
+        "heavy_favorite": 0.3849129202087776
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.5627898771523141
+    },
+    "closing_line_value": {
+      "clv_weighted": 4.667553843633071e-06,
+      "clv_median": 0.03686960235246517,
+      "clv_positive_rate": 0.0003606636210627555,
+      "entries_analyzed": 8318
+    }
+  },
+  {
+    "wallet": "0x6b7c75862e64d6e976d2c08ad9f9b54add6c5f83",
+    "display_name": "Clueless-Subway",
+    "stats": {
+      "total_pnl": 759408.7994278995,
+      "total_volume": 2263116.2254121006,
+      "markets_traded": 2227,
+      "hit_rate": 0.7166591827570723,
+      "roi": 0.3355589036482718
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Clay",
+        "volume": 7445.404672187638,
+        "trades": 31,
+        "pnl": 1874.2089178123615,
+        "markets": 11
+      },
+      {
+        "surface": "Hard",
+        "volume": 1054.35,
+        "trades": 5,
+        "pnl": 578.9999999999999,
+        "markets": 3
+      },
+      {
+        "surface": "Unknown",
+        "volume": 2259992.449299913,
+        "trades": 8992,
+        "pnl": 756955.5905100872,
+        "markets": 2213
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Final",
+        "pnl": 3965.9317999999994,
+        "markets": 7,
+        "volume": 14130.968799999999
+      },
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 755442.8676278995,
+        "markets": 2220,
+        "volume": 2248985.2566121006
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 500/250",
+        "pnl": 525735.814556136,
+        "markets": 1284,
+        "volume": 1544379.712303864
+      },
+      {
+        "tier": "Grand Slam",
+        "pnl": -28.2725,
+        "markets": 1,
+        "volume": 28.2725
+      },
+      {
+        "tier": "WTA",
+        "pnl": 233701.25737176355,
+        "markets": 942,
+        "volume": 718708.2406082365
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 165.01708333333335,
+      "p25_hours_before_close": 158.8359027777778,
+      "p75_hours_before_close": 166.95652777777778,
+      "late_scalper_share": 0.0
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.49965903510706094,
+      "distribution": {
+        "heavy_dog": 0.21550945978673922,
+        "dog": 0.2878309937302795,
+        "favorite": 0.294309522359949,
+        "heavy_favorite": 0.20235002412303232
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.5179497815203138
+    },
+    "closing_line_value": {
+      "clv_weighted": 6.179714952391116e-05,
+      "clv_median": 0.08555551753387022,
+      "clv_positive_rate": 0.001999200319872051,
+      "entries_analyzed": 2501
+    }
+  },
+  {
+    "wallet": "0x5ef40ef4b6bd83a4013364f3028a57addfa0412c",
+    "display_name": "Partial-Cultivar",
+    "stats": {
+      "total_pnl": 643992.260313,
+      "total_volume": 1225266.891743,
+      "markets_traded": 44,
+      "hit_rate": 0.4090909090909091,
+      "roi": 0.5255934561301094
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Grass",
+        "volume": 36749.641847,
+        "trades": 15,
+        "pnl": 2403.326053000001,
+        "markets": 4
+      },
+      {
+        "surface": "Hard",
+        "volume": 943850.5070389999,
+        "trades": 59,
+        "pnl": 483087.904641,
+        "markets": 22
+      },
+      {
+        "surface": "Unknown",
+        "volume": 244666.742857,
+        "trades": 36,
+        "pnl": 158501.029619,
+        "markets": 18
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Final",
+        "pnl": -8381.39878,
+        "markets": 1,
+        "volume": 8534.60122
+      },
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 652373.659093,
+        "markets": 43,
+        "volume": 1216732.290523
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 1000",
+        "pnl": 530758.576441,
+        "markets": 20,
+        "volume": 896179.835239
+      },
+      {
+        "tier": "ATP 500/250",
+        "pnl": 109955.093339,
+        "markets": 17,
+        "volume": 195734.814577
+      },
+      {
+        "tier": "Grand Slam",
+        "pnl": 2403.326053000001,
+        "markets": 4,
+        "volume": 36749.641847
+      },
+      {
+        "tier": "WTA",
+        "pnl": 875.264479999998,
+        "markets": 3,
+        "volume": 96602.60008
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 4.953333333333333,
+      "p25_hours_before_close": 1.1947222222222222,
+      "p75_hours_before_close": 11.79888888888889,
+      "late_scalper_share": 0.2857142857142857
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.32907086159262144,
+      "distribution": {
+        "heavy_dog": 0.5298545111182477,
+        "dog": 0.35588853236680834,
+        "favorite": 0.09640994408416563,
+        "heavy_favorite": 0.017847012430778294
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.13454200631525234
+    },
+    "closing_line_value": {
+      "clv_weighted": -0.027838836004847486,
+      "clv_median": -0.012812738521367828,
+      "clv_positive_rate": 0.4318181818181818,
+      "entries_analyzed": 44
+    }
+  },
+  {
+    "wallet": "0xe90bec87d9ef430f27f9dcfe72c34b76967d5da2",
+    "display_name": "Wicked-Rap",
+    "stats": {
+      "total_pnl": 630655.41848,
+      "total_volume": 2639837.72152,
+      "markets_traded": 112,
+      "hit_rate": 0.5446428571428571,
+      "roi": 0.2388993131429583
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Hard",
+        "volume": 61.152,
+        "trades": 3,
+        "pnl": 25.748000000000005,
+        "markets": 1
+      },
+      {
+        "surface": "Unknown",
+        "volume": 2639776.56952,
+        "trades": 234,
+        "pnl": 630629.6704800001,
+        "markets": 111
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 630655.41848,
+        "markets": 112,
+        "volume": 2639837.72152
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 500/250",
+        "pnl": 645444.38317,
+        "markets": 86,
+        "volume": 2160583.44683
+      },
+      {
+        "tier": "Grand Slam",
+        "pnl": 25.748000000000005,
+        "markets": 1,
+        "volume": 61.152
+      },
+      {
+        "tier": "WTA",
+        "pnl": -14814.712689999998,
+        "markets": 25,
+        "volume": 479193.12269
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 165.3761111111111,
+      "p25_hours_before_close": 156.83875,
+      "p75_hours_before_close": 183.46041666666667,
+      "late_scalper_share": 0.0
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.5823130729713156,
+      "distribution": {
+        "heavy_dog": 0.06990116346311516,
+        "dog": 0.2414042246229618,
+        "favorite": 0.44694926320548245,
+        "heavy_favorite": 0.2417453487084405
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.7214272661383283
+    },
+    "closing_line_value": {
+      "clv_weighted": -2.7126333086333488e-06,
+      "clv_median": -0.14151158780864925,
+      "clv_positive_rate": 0.0,
+      "entries_analyzed": 133
+    }
+  },
+  {
+    "wallet": "0x88d17ad6bf91ca0935f6e70b37ebe3db92b618da",
+    "display_name": "Homely-Modernist",
+    "stats": {
+      "total_pnl": 545606.7836717567,
+      "total_volume": 2038299.4278932433,
+      "markets_traded": 167,
+      "hit_rate": 0.7544910179640718,
+      "roi": 0.2676774453278869
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Clay",
+        "volume": 131024.71539,
+        "trades": 3,
+        "pnl": 131024.71539,
+        "markets": 3
+      },
+      {
+        "surface": "Unknown",
+        "volume": 1916821.7125002432,
+        "trades": 215,
+        "pnl": 414582.0682817568,
+        "markets": 164
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 545606.7836717567,
+        "markets": 167,
+        "volume": 2038299.4278932433
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 500/250",
+        "pnl": 521894.67437575676,
+        "markets": 142,
+        "volume": 1716276.6486982433
+      },
+      {
+        "tier": "WTA",
+        "pnl": 23712.109296,
+        "markets": 25,
+        "volume": 322022.779195
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 165.3775,
+      "p25_hours_before_close": 159.79118055555557,
+      "p75_hours_before_close": 167.20243055555557,
+      "late_scalper_share": 0.0
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.7637247569271619,
+      "distribution": {
+        "heavy_dog": 0.007828719681350607,
+        "dog": 0.09996541096032449,
+        "favorite": 0.20091072748853572,
+        "heavy_favorite": 0.6912951418697891
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.7688967502320406
+    },
+    "closing_line_value": {
+      "clv_weighted": 0.0,
+      "clv_median": NaN,
+      "clv_positive_rate": 0.0,
+      "entries_analyzed": 156
+    }
+  },
+  {
+    "wallet": "0x34ed5b3a0f8ac5034baf6896bf03e6380041cfe3",
+    "display_name": "Loving-Scheduling",
+    "stats": {
+      "total_pnl": 535832.000201,
+      "total_volume": 1137295.501377,
+      "markets_traded": 223,
+      "hit_rate": 0.9013452914798207,
+      "roi": 0.47114580120314575
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Clay",
+        "volume": 12917.96475,
+        "trades": 2,
+        "pnl": 10562.03525,
+        "markets": 2
+      },
+      {
+        "surface": "Hard",
+        "volume": 1395.98,
+        "trades": 3,
+        "pnl": 576.8199999999999,
+        "markets": 1
+      },
+      {
+        "surface": "Unknown",
+        "volume": 1122981.556627,
+        "trades": 339,
+        "pnl": 524693.144951,
+        "markets": 220
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 535832.000201,
+        "markets": 223,
+        "volume": 1137295.501377
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 500/250",
+        "pnl": 372368.388975,
+        "markets": 163,
+        "volume": 868747.838199
+      },
+      {
+        "tier": "WTA",
+        "pnl": 163463.611226,
+        "markets": 60,
+        "volume": 268547.663178
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 165.34527777777777,
+      "p25_hours_before_close": 160.0698611111111,
+      "p75_hours_before_close": 166.60500000000002,
+      "late_scalper_share": 0.0
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.8128150334525688,
+      "distribution": {
+        "heavy_dog": 0.03965509475594166,
+        "dog": 0.08207262084315296,
+        "favorite": 0.14211901850715697,
+        "heavy_favorite": 0.7361532658937484
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.7946803991025108
+    },
+    "closing_line_value": {
+      "clv_weighted": 0.0,
+      "clv_median": NaN,
+      "clv_positive_rate": 0.0,
+      "entries_analyzed": 143
+    }
+  },
+  {
+    "wallet": "0x31519628fb5e5aa559d4ba27aa1248810b9f0977",
+    "display_name": "Strange-Pumpernickel",
+    "stats": {
+      "total_pnl": 473816.18234,
+      "total_volume": 4847555.41358,
+      "markets_traded": 136,
+      "hit_rate": 0.5441176470588235,
+      "roi": 0.09774332460700616
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Grass",
+        "volume": 477772.91006,
+        "trades": 226,
+        "pnl": 12328.629939999992,
+        "markets": 12
+      },
+      {
+        "surface": "Hard",
+        "volume": 1928943.9776,
+        "trades": 514,
+        "pnl": -97990.75139999995,
+        "markets": 33
+      },
+      {
+        "surface": "Unknown",
+        "volume": 2440838.52592,
+        "trades": 392,
+        "pnl": 559478.3038,
+        "markets": 91
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Final",
+        "pnl": 10784.348720000002,
+        "markets": 3,
+        "volume": 98250.93128
+      },
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 463031.83362,
+        "markets": 133,
+        "volume": 4749304.4823
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 1000",
+        "pnl": -93840.22379999999,
+        "markets": 5,
+        "volume": 160644.35379999998
+      },
+      {
+        "tier": "ATP 500/250",
+        "pnl": 337441.2384,
+        "markets": 80,
+        "volume": 2034091.8432
+      },
+      {
+        "tier": "Grand Slam",
+        "pnl": 8915.695840000033,
+        "markets": 39,
+        "volume": 2245334.94036
+      },
+      {
+        "tier": "WTA",
+        "pnl": 221299.4719,
+        "markets": 12,
+        "volume": 407484.27622
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 164.66472222222222,
+      "p25_hours_before_close": 156.8986111111111,
+      "p75_hours_before_close": 166.46444444444444,
+      "late_scalper_share": 0.05622932745314223
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.5298994441500701,
+      "distribution": {
+        "heavy_dog": 0.2405612775792351,
+        "dog": 0.2706479812601354,
+        "favorite": 0.17889389135300343,
+        "heavy_favorite": 0.30989684980762605
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.5831665713809793
+    },
+    "closing_line_value": {
+      "clv_weighted": 0.0018996060199334595,
+      "clv_median": 0.0028885230114302496,
+      "clv_positive_rate": 0.06698564593301436,
+      "entries_analyzed": 209
+    }
+  },
+  {
+    "wallet": "0xb595d09ce5bbc4d39e3b3d04e80c402d2c8d5922",
+    "display_name": "Hard-Ironclad",
+    "stats": {
+      "total_pnl": 400843.74653181236,
+      "total_volume": 1396243.3711261877,
+      "markets_traded": 2634,
+      "hit_rate": 0.9965831435079726,
+      "roi": 0.2870873049936116
+    },
+    "surface_breakdown": [
+      {
+        "surface": "Clay",
+        "volume": 12693.8495862,
+        "trades": 7,
+        "pnl": 6005.8934738,
+        "markets": 4
+      },
+      {
+        "surface": "Hard",
+        "volume": 62.558099999999996,
+        "trades": 1,
+        "pnl": 0.6319000000000017,
+        "markets": 1
+      },
+      {
+        "surface": "Unknown",
+        "volume": 1385852.0966745566,
+        "trades": 4648,
+        "pnl": 394837.22115801234,
+        "markets": 2629
+      }
+    ],
+    "round_breakdown": [
+      {
+        "round": "Pre-R128/Unknown",
+        "pnl": 400843.74653181236,
+        "markets": 2634,
+        "volume": 1396243.3711261877
+      }
+    ],
+    "tier_breakdown": [
+      {
+        "tier": "ATP 500/250",
+        "pnl": 285275.6870691122,
+        "markets": 1969,
+        "volume": 1020913.1273618878
+      },
+      {
+        "tier": "WTA",
+        "pnl": 115568.05946270017,
+        "markets": 665,
+        "volume": 375330.24376429984
+      }
+    ],
+    "entry_timing": {
+      "median_hours_before_close": 163.20583333333335,
+      "p25_hours_before_close": 155.99194444444444,
+      "p75_hours_before_close": 165.89138888888888,
+      "late_scalper_share": 0.0
+    },
+    "price_bias": {
+      "weighted_avg_entry_price": 0.9701324881475661,
+      "distribution": {
+        "heavy_dog": 0.00013754376731069494,
+        "dog": 0.0,
+        "favorite": 0.008429692460535865,
+        "heavy_favorite": 0.9914327637721534
+      }
+    },
+    "side_tendency": {
+      "yes_on_winner_rate": 0.9981890471019906
+    },
+    "closing_line_value": {
+      "clv_weighted": 0.0,
+      "clv_median": NaN,
+      "clv_positive_rate": 0.0,
+      "entries_analyzed": 2445
+    }
+  }
+]
