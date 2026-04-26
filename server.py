@@ -3157,11 +3157,21 @@ def _auto_resolve_loop():
 
 # ─── Auto-Trader API Endpoints ─────────���────────────────────────────────────
 
-AUTO_TRADER_CONFIG = BASE_DIR / "auto_trader_config.json"
+AUTO_TRADER_CONFIG_LOCAL = BASE_DIR / "auto_trader_config.json"
+# On Render, persist config to /data so it survives deploys
+PERSIST_DIR = Path("/data")
+if PERSIST_DIR.exists() and PERSIST_DIR.is_dir():
+    AUTO_TRADER_CONFIG = PERSIST_DIR / "auto_trader_config.json"
+else:
+    AUTO_TRADER_CONFIG = AUTO_TRADER_CONFIG_LOCAL
 PENDING_TRADES_FILE = LOGS_DIR / "pending_trades.json"
 
 
 def _load_auto_config():
+    # On first run on Render: copy from repo to persistent storage
+    if AUTO_TRADER_CONFIG != AUTO_TRADER_CONFIG_LOCAL and not AUTO_TRADER_CONFIG.exists():
+        if AUTO_TRADER_CONFIG_LOCAL.exists():
+            AUTO_TRADER_CONFIG.write_text(AUTO_TRADER_CONFIG_LOCAL.read_text())
     if AUTO_TRADER_CONFIG.exists():
         return json.loads(AUTO_TRADER_CONFIG.read_text())
     return {"mode": "semi"}
