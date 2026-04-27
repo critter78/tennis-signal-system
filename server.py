@@ -1453,7 +1453,7 @@ def api_bets_raw():
 
 def fetch_poly_trades(since_ts=None):
     """Fetch user's actual trades from Polymarket Data API."""
-    import requests as req
+    import urllib.request, urllib.parse
     trades = []
     try:
         params = {
@@ -1461,14 +1461,16 @@ def fetch_poly_trades(since_ts=None):
             "type": "TRADE",
             "sortBy": "TIMESTAMP",
             "sortDirection": "DESC",
-            "limit": 200,
+            "limit": "200",
         }
         if since_ts:
             params["start"] = str(int(since_ts))
 
-        r = req.get(f"{POLY_DATA_API}/activity", params=params, timeout=15)
-        r.raise_for_status()
-        data = r.json()
+        qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
+        url = f"{POLY_DATA_API}/activity?{qs}"
+        req_obj = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req_obj, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
 
         if isinstance(data, list):
             trades = data
@@ -1863,7 +1865,15 @@ def api_players():
 def api_live_prices():
     """Fetch fresh Polymarket prices for all active signal markets.
     Returns a map of slug → {prices: {outcome: price_cents}, volume}."""
-    import requests as req
+    import urllib.request, urllib.parse
+
+    def _gamma_price_get(url, params=None, timeout=3):
+        if params:
+            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
+            url = f"{url}?{qs}"
+        req_obj = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
 
     try:
         # Read current picks to get slugs
@@ -1899,12 +1909,11 @@ def api_live_prices():
         price_map = {}
         for slug in slug_list:
             try:
-                r = req.get(
-                    f"https://gamma-api.polymarket.com/events?slug={slug}",
+                events = _gamma_price_get(
+                    "https://gamma-api.polymarket.com/events",
+                    params={"slug": slug},
                     timeout=3,
                 )
-                r.raise_for_status()
-                events = r.json()
                 if not events:
                     continue
                 ev = events[0] if isinstance(events, list) else events
@@ -1954,7 +1963,15 @@ def api_whales():
     """Fetch whale data for a specific market on-demand.
     Query params: slug (market slug), token_ids (comma-sep CLOB token IDs),
     outcomes (comma-sep outcome names), volume (total market volume)."""
-    import requests as req
+    import urllib.request, urllib.parse
+
+    def _gamma_whale_get(url, params=None, timeout=8):
+        if params:
+            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
+            url = f"{url}?{qs}"
+        req_obj = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
 
     try:
         slug = request.args.get("slug", "")
@@ -1968,9 +1985,7 @@ def api_whales():
         # If no token IDs provided, try to look them up from the slug
         if not clob_token_ids and slug:
             try:
-                r = req.get(f"https://gamma-api.polymarket.com/events?slug={slug}", timeout=8)
-                r.raise_for_status()
-                events = r.json()
+                events = _gamma_whale_get("https://gamma-api.polymarket.com/events", params={"slug": slug}, timeout=8)
                 if events:
                     ev = events[0] if isinstance(events, list) else events
                     markets = ev.get("markets", [ev])
@@ -2067,8 +2082,17 @@ def _run_inline_resolver():
     Core outcome resolution logic — reusable by both /resolve route and cron pipeline.
     Returns dict with keys: status, message, output.
     """
-    import requests as req
+    import urllib.request, urllib.parse
     import time
+
+    def _gamma_get(url, params=None, timeout=10):
+        """Fetch JSON from Polymarket Gamma API using urllib (avoids requests recursion bug on Render)."""
+        if params:
+            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
+            url = f"{url}?{qs}"
+        req_obj = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
     t0 = time.time()
 
     logger.info("Running inline outcome resolution...")
@@ -2111,14 +2135,13 @@ def _run_inline_resolver():
         resolved_markets = []
         for tag in ["tennis", "atp", "wta"]:
             try:
-                r = req.get(
+                data = _gamma_get(
                     "https://gamma-api.polymarket.com/events",
-                    params={"tag_slug": tag, "closed": "true", "limit": 100,
+                    params={"tag_slug": tag, "closed": "true", "limit": "100",
                             "order": "endDate", "ascending": "false"},
                     timeout=10,
                 )
-                r.raise_for_status()
-                for ev in r.json():
+                for ev in data:
                     markets = ev.get("markets", [])
                     if markets:
                         for m in markets:
@@ -2235,9 +2258,7 @@ def _run_inline_resolver():
                 slug_resolved_cache = {}  # slug -> parsed resolved market
                 for slug in bet_slugs:
                     try:
-                        r = req.get(f"https://gamma-api.polymarket.com/events?slug={slug}", timeout=8)
-                        r.raise_for_status()
-                        events = r.json()
+                        events = _gamma_get(f"https://gamma-api.polymarket.com/events", params={"slug": slug}, timeout=8)
                         if not events:
                             continue
                         ev = events[0] if isinstance(events, list) else events
@@ -2415,9 +2436,7 @@ def _run_inline_resolver():
                     if bet.get("outcome") is not None:
                         continue
                     try:
-                        r = req.get(f"https://gamma-api.polymarket.com/events?slug={bslug}", timeout=8)
-                        r.raise_for_status()
-                        events = r.json()
+                        events = _gamma_get("https://gamma-api.polymarket.com/events", params={"slug": bslug}, timeout=8)
                         if not events:
                             continue
                         ev = events[0] if isinstance(events, list) else events
@@ -2484,9 +2503,7 @@ def _run_inline_resolver():
                     continue
                 slugs_already_fetched.add(pslug)
                 try:
-                    r = req.get(f"https://gamma-api.polymarket.com/events?slug={pslug}", timeout=8)
-                    r.raise_for_status()
-                    events = r.json()
+                    events = _gamma_get("https://gamma-api.polymarket.com/events", params={"slug": pslug}, timeout=8)
                     if not events:
                         continue
                     ev = events[0] if isinstance(events, list) else events
@@ -2678,9 +2695,7 @@ def _run_inline_resolver():
         for slug in list(unmatched_slugs.keys())[:max_slug_lookups]:
             try:
                 slug_lookups += 1
-                r = req.get(f"https://gamma-api.polymarket.com/events?slug={slug}", timeout=8)
-                r.raise_for_status()
-                events = r.json()
+                events = _gamma_get("https://gamma-api.polymarket.com/events", params={"slug": slug}, timeout=8)
                 if not events:
                     continue
                 ev = events[0] if isinstance(events, list) else events
