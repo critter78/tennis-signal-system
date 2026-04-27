@@ -656,8 +656,12 @@ window.PICKS_DATA = [];
                 <input type="number" id="at-min-gap" value="5" step="1" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
             </div>
             <div>
+                <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Bankroll $</label>
+                <input type="number" id="at-bankroll" value="50" step="10" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+            </div>
+            <div>
                 <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Max Stake $</label>
-                <input type="number" id="at-max-stake" value="50" step="5" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+                <input type="number" id="at-max-stake" value="10" step="5" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
             </div>
             <div>
                 <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Min Consensus</label>
@@ -3454,7 +3458,8 @@ function populateAutoTraderSettings(cfg) {
     setVal('at-min-edge', r.min_edge || 10);
     setVal('at-min-prob', r.min_model_prob || 55);
     setVal('at-min-gap', r.min_gap || 5);
-    setVal('at-max-stake', r.max_stake_per_bet || 50);
+    setVal('at-bankroll', r.bankroll || 50);
+    setVal('at-max-stake', r.max_stake_per_bet || 10);
     setVal('at-min-consensus', r.min_consensus || 3);
     setVal('at-min-volume', r.min_volume || 0);
     const ecSel = document.getElementById('at-edge-conf');
@@ -3483,6 +3488,7 @@ async function saveAutoTraderConfig() {
             min_edge: getVal('at-min-edge'),
             min_model_prob: getVal('at-min-prob'),
             min_gap: getVal('at-min-gap'),
+            bankroll: getVal('at-bankroll'),
             max_stake_per_bet: getVal('at-max-stake'),
             min_consensus: getVal('at-min-consensus'),
             min_volume: getVal('at-min-volume'),
