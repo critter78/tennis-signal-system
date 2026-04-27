@@ -159,25 +159,25 @@ def telegram_notify_pending(trades: list):
         tournament = t.get("tournament", "")
 
         text = (
-            f"<b>POLYMARKET TENNIS BETTING SIGNAL</b>\n\n"
-            f"<b>{bet_on}</b>\n"
+            f"\U0001f3be <b>POLYMARKET TENNIS BETTING SIGNAL</b> \U0001f3be\n\n"
+            f"\U0001f3af <b>{bet_on}</b>\n"
             f"{match}\n"
         )
         if tournament:
-            text += f"{tournament}"
+            text += f"\U0001f3c6 {tournament}"
             if surface:
                 text += f" ({surface})"
             text += "\n"
         text += (
             f"\n"
-            f"Model: <b>{model}%</b> | Poly: <b>{poly}c</b>\n"
-            f"Edge: <b>{edge}%</b> | Stake: <b>${stake}</b>\n"
+            f"\U0001f4ca Model: <b>{model}%</b> | Poly: <b>{poly}c</b>\n"
+            f"\U0001f4b0 Edge: <b>{edge}%</b> | Stake: <b>${stake}</b>\n"
         )
 
         keyboard = {
             "inline_keyboard": [[
-                {"text": "Approve", "callback_data": f"approve:{pid}"},
-                {"text": "Reject", "callback_data": f"reject:{pid}"},
+                {"text": "✅ Approve", "callback_data": f"approve:{pid}"},
+                {"text": "❌ Reject", "callback_data": f"reject:{pid}"},
             ]]
         }
         telegram_send(text, reply_markup=keyboard)
