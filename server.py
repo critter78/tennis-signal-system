@@ -20,6 +20,7 @@ from functools import wraps
 from flask import Flask, jsonify, request, send_file, render_template_string, redirect, make_response
 import subprocess
 import logging
+import requests as http_requests  # renamed to avoid Flask conflict
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -87,6 +88,100 @@ CRON_SECRET = os.environ.get("CRON_SECRET", "tennis-cron-2026")
 # Polymarket wallet address — set via environment variable on Render
 POLY_WALLET = os.environ.get("POLY_WALLET", "0x0D2ad18A44ac2D4A001aEdd0EF9a7B016DAA031d")
 POLY_DATA_API = "https://data-api.polymarket.com"
+
+# Telegram bot — for trade signal alerts with approve/reject buttons
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGRAM_BOT_TOKEN else ""
+
+
+def telegram_send(text: str, reply_markup: dict = None) -> bool:
+    """Send a Telegram message. Returns True on success."""
+    if not TELEGRAM_API or not TELEGRAM_CHAT_ID:
+        return False
+    try:
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+        if reply_markup:
+            payload["reply_markup"] = json.dumps(reply_markup)
+        r = http_requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
+        return r.ok
+    except Exception as e:
+        logger.warning(f"[TELEGRAM] Send failed: {e}")
+        return False
+
+
+def telegram_edit(message_id: int, text: str) -> bool:
+    """Edit a previously sent Telegram message."""
+    if not TELEGRAM_API or not TELEGRAM_CHAT_ID:
+        return False
+    try:
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+        r = http_requests.post(f"{TELEGRAM_API}/editMessageText", json=payload, timeout=10)
+        return r.ok
+    except Exception as e:
+        logger.warning(f"[TELEGRAM] Edit failed: {e}")
+        return False
+
+
+def telegram_answer_callback(callback_query_id: str, text: str = "") -> bool:
+    """Answer a callback query (removes loading spinner on button)."""
+    if not TELEGRAM_API:
+        return False
+    try:
+        r = http_requests.post(f"{TELEGRAM_API}/answerCallbackQuery",
+                               json={"callback_query_id": callback_query_id, "text": text},
+                               timeout=10)
+        return r.ok
+    except:
+        return False
+
+
+def telegram_notify_pending(trades: list):
+    """Send Telegram alerts for new pending trades with approve/reject buttons."""
+    for t in trades:
+        pid = t.get("pending_id", "?")
+        bet_on = t.get("bet_on", "?")
+        match = t.get("match", "?")
+        model = t.get("model_prob", 0)
+        poly = t.get("poly_price", t.get("entry_price", 0))
+        edge = t.get("edge", 0)
+        stake = t.get("stake", 5)
+        surface = t.get("surface", "")
+        tournament = t.get("tournament", "")
+
+        text = (
+            f"<b>TRADE SIGNAL</b>\n\n"
+            f"<b>{bet_on}</b>\n"
+            f"{match}\n"
+        )
+        if tournament:
+            text += f"{tournament}"
+            if surface:
+                text += f" ({surface})"
+            text += "\n"
+        text += (
+            f"\n"
+            f"Model: <b>{model}%</b> | Poly: <b>{poly}c</b>\n"
+            f"Edge: <b>{edge}%</b> | Stake: <b>${stake}</b>\n"
+        )
+
+        keyboard = {
+            "inline_keyboard": [[
+                {"text": "Approve", "callback_data": f"approve:{pid}"},
+                {"text": "Reject", "callback_data": f"reject:{pid}"},
+            ]]
+        }
+        telegram_send(text, reply_markup=keyboard)
+
 
 # Create necessary directories
 CARDS_DIR.mkdir(exist_ok=True)
@@ -3322,6 +3417,118 @@ def auto_trader_reject():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/telegram/webhook", methods=["POST"])
+def telegram_webhook():
+    """Handle Telegram bot webhook — inline button callbacks for approve/reject."""
+    try:
+        data = request.get_json(force=True)
+        callback = data.get("callback_query")
+        if not callback:
+            return jsonify({"ok": True})  # Ignore non-callback updates
+
+        cb_id = callback.get("id", "")
+        cb_data = callback.get("data", "")
+        message = callback.get("message", {})
+        msg_id = message.get("message_id")
+        from_user = callback.get("from", {}).get("first_name", "?")
+
+        logger.info(f"[TELEGRAM] Callback: {cb_data} from {from_user}")
+
+        if ":" not in cb_data:
+            telegram_answer_callback(cb_id, "Unknown action")
+            return jsonify({"ok": True})
+
+        action, pending_id = cb_data.split(":", 1)
+
+        # Load pending trades
+        pending = json.loads(PENDING_TRADES_FILE.read_text()) if PENDING_TRADES_FILE.exists() else []
+        trade = None
+        for p in pending:
+            if p.get("pending_id") == pending_id:
+                trade = p
+                break
+
+        if not trade:
+            telegram_answer_callback(cb_id, "Trade not found (expired?)")
+            if msg_id:
+                original_text = message.get("text", "")
+                telegram_edit(msg_id, original_text + "\n\n(Trade no longer pending)")
+            return jsonify({"ok": True})
+
+        bet_on = trade.get("bet_on", "?")
+        match_name = trade.get("match", "?")
+
+        if action == "approve":
+            telegram_answer_callback(cb_id, "Approving...")
+
+            # Confirm on server (reuse the same logic as the /confirm endpoint)
+            remaining = [p for p in pending if p.get("pending_id") != pending_id]
+            trade["status"] = "confirmed"
+            trade["confirmed_at"] = datetime.utcnow().isoformat() + "Z"
+            PENDING_TRADES_FILE.write_text(json.dumps(remaining, indent=2))
+
+            # Try CLOB execution
+            exec_result = {"success": False, "error": "execution not attempted"}
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("auto_trader", BASE_DIR / "20_auto_trader.py")
+                at_mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(at_mod)
+                exec_result = at_mod.execute_clob_order(trade)
+                if exec_result.get("success"):
+                    trade["clob_order"] = exec_result.get("order")
+                    trade["executed"] = True
+                else:
+                    trade["executed"] = False
+                    trade["exec_error"] = exec_result.get("error", "unknown")
+            except Exception as e:
+                trade["executed"] = False
+                trade["exec_error"] = str(e)
+
+            # Log to trade history
+            log_path = LOGS_DIR / "paper_trades.jsonl"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, "a") as f:
+                f.write(json.dumps(trade) + "\n")
+
+            # Update Telegram message
+            if trade.get("executed"):
+                status_text = f"APPROVED by {from_user}\nCLOB order sent — awaiting local executor"
+            else:
+                status_text = f"APPROVED by {from_user}\nCLOB: {trade.get('exec_error', 'pending local executor')}"
+
+            if msg_id:
+                telegram_edit(msg_id,
+                    f"TRADE SIGNAL\n\n"
+                    f"{bet_on}\n{match_name}\n\n"
+                    f"Status: {status_text}")
+
+            logger.info(f"[TELEGRAM] Approved: {bet_on} ({match_name})")
+
+        elif action == "reject":
+            telegram_answer_callback(cb_id, "Rejected")
+
+            remaining = [p for p in pending if p.get("pending_id") != pending_id]
+            PENDING_TRADES_FILE.write_text(json.dumps(remaining, indent=2))
+
+            if msg_id:
+                telegram_edit(msg_id,
+                    f"TRADE SIGNAL\n\n"
+                    f"{bet_on}\n{match_name}\n\n"
+                    f"Status: REJECTED by {from_user}")
+
+            logger.info(f"[TELEGRAM] Rejected: {bet_on} ({match_name})")
+
+        else:
+            telegram_answer_callback(cb_id, "Unknown action")
+
+        return jsonify({"ok": True})
+
+    except Exception as e:
+        logger.warning(f"[TELEGRAM] Webhook error: {e}")
+        return jsonify({"ok": True})  # Always return 200 to Telegram
+
+
 @app.route("/api/auto-trader/reset", methods=["POST"])
 @enable_cors
 def auto_trader_reset():
@@ -3363,6 +3570,15 @@ def auto_trader_scan():
         )
         # Load pending trades to return
         pending = json.loads(PENDING_TRADES_FILE.read_text()) if PENDING_TRADES_FILE.exists() else []
+
+        # Send Telegram alerts for new pending trades
+        if pending:
+            try:
+                telegram_notify_pending(pending)
+                logger.info(f"[AUTO-TRADER] Sent {len(pending)} Telegram alert(s)")
+            except Exception as e:
+                logger.warning(f"[AUTO-TRADER] Telegram notify failed: {e}")
+
         return jsonify({
             "status": "ok",
             "output": result.stdout[-2000:] if result.stdout else "",
