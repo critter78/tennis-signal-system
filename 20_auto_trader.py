@@ -67,8 +67,8 @@ def load_config() -> dict:
         "entry_rules": {
             "min_edge": 10.0, "min_model_prob": 55.0, "min_gap": 5,
             "min_consensus": 3, "edge_conf": ["STRONG"],
-            "market_types": ["h2h"], "max_stake_per_bet": 50.0,
-            "kelly_fraction": 0.25, "max_daily_bets": 10,
+            "market_types": ["h2h"], "max_stake_per_bet": 10.0,
+            "bankroll": 50.0, "kelly_fraction": 0.25, "max_daily_bets": 10,
             "bet_type": "edge", "min_volume": 1000,
             "exclude_outrights": True,
         },
@@ -202,14 +202,18 @@ def passes_entry_rules(signal: dict, rules: dict, existing_bets: list[dict]) -> 
 
 
 def calculate_stake(signal: dict, rules: dict) -> float:
-    """Calculate stake using Kelly fraction, capped by max_stake."""
+    """Calculate stake using Kelly fraction against bankroll, capped by max_stake."""
     kelly_fraction = rules.get("kelly_fraction", 0.25)
     max_stake = rules.get("max_stake_per_bet", 50.0)
+    bankroll = rules.get("bankroll", 0)
+
+    # Use bankroll if set, otherwise fall back to max_stake as base
+    base = bankroll if bankroll > 0 else max_stake
 
     # Try pre-computed kelly_stake first
     kelly_pct = signal.get("kelly_stake", 0)
     if kelly_pct and kelly_pct > 0:
-        stake = max_stake * (kelly_pct / 100) * kelly_fraction
+        stake = base * (kelly_pct / 100) * kelly_fraction
     else:
         # Compute from edge: Kelly % = (p*b - q) / b where p = model_prob, b = decimal odds from poly_price
         model_prob = signal.get("model_prob", 50) / 100
@@ -219,12 +223,12 @@ def calculate_stake(signal: dict, rules: dict) -> float:
             q = 1 - model_prob
             kelly_raw = (model_prob * b - q) / b if b > 0 else 0
             kelly_raw = max(0, kelly_raw)
-            stake = max_stake * kelly_raw * kelly_fraction
+            stake = base * kelly_raw * kelly_fraction
         else:
-            stake = max_stake * 0.1  # fallback 10% of max
+            stake = base * 0.1  # fallback 10% of base
 
-    # Floor at $5, cap at max
-    stake = max(5.0, min(stake, max_stake))
+    # Floor at $2, cap at max_stake
+    stake = max(2.0, min(stake, max_stake))
     return round(stake, 2)
 
 
