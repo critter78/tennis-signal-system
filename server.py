@@ -96,7 +96,8 @@ TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGRAM_B
 
 
 def telegram_send(text: str, reply_markup: dict = None) -> bool:
-    """Send a Telegram message. Returns True on success."""
+    """Send a Telegram message via urllib (avoids requests recursion on Render)."""
+    import urllib.request
     if not TELEGRAM_API or not TELEGRAM_CHAT_ID:
         logger.warning(f"[TELEGRAM] Skipped — missing token={bool(TELEGRAM_BOT_TOKEN)} chat_id={bool(TELEGRAM_CHAT_ID)}")
         return False
@@ -107,21 +108,30 @@ def telegram_send(text: str, reply_markup: dict = None) -> bool:
             "parse_mode": "HTML",
         }
         if reply_markup:
-            payload["reply_markup"] = json.dumps(reply_markup)  # Telegram expects JSON string for form-data
-        # Use data= (form-encoded) instead of json= to avoid recursion depth issues
-        r = http_requests.post(f"{TELEGRAM_API}/sendMessage", data=payload, timeout=10)
-        if not r.ok:
-            logger.warning(f"[TELEGRAM] Send failed {r.status_code}: {r.text[:300]}")
-        else:
-            logger.info(f"[TELEGRAM] Message sent OK")
-        return r.ok
+            payload["reply_markup"] = reply_markup
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"{TELEGRAM_API}/sendMessage",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode()
+            if resp.status == 200:
+                logger.info(f"[TELEGRAM] Message sent OK")
+                return True
+            else:
+                logger.warning(f"[TELEGRAM] Send failed {resp.status}: {body[:300]}")
+                return False
     except Exception as e:
         logger.warning(f"[TELEGRAM] Send exception: {e}")
         return False
 
 
 def telegram_edit(message_id: int, text: str) -> bool:
-    """Edit a previously sent Telegram message."""
+    """Edit a previously sent Telegram message via urllib."""
+    import urllib.request
     if not TELEGRAM_API or not TELEGRAM_CHAT_ID:
         return False
     try:
@@ -131,22 +141,35 @@ def telegram_edit(message_id: int, text: str) -> bool:
             "text": text,
             "parse_mode": "HTML",
         }
-        r = http_requests.post(f"{TELEGRAM_API}/editMessageText", data=payload, timeout=10)
-        return r.ok
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"{TELEGRAM_API}/editMessageText",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200
     except Exception as e:
         logger.warning(f"[TELEGRAM] Edit failed: {e}")
         return False
 
 
 def telegram_answer_callback(callback_query_id: str, text: str = "") -> bool:
-    """Answer a callback query (removes loading spinner on button)."""
+    """Answer a callback query via urllib."""
+    import urllib.request
     if not TELEGRAM_API:
         return False
     try:
-        r = http_requests.post(f"{TELEGRAM_API}/answerCallbackQuery",
-                               data={"callback_query_id": callback_query_id, "text": text},
-                               timeout=10)
-        return r.ok
+        data = json.dumps({"callback_query_id": callback_query_id, "text": text}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{TELEGRAM_API}/answerCallbackQuery",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200
     except:
         return False
 
