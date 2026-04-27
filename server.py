@@ -107,8 +107,9 @@ def telegram_send(text: str, reply_markup: dict = None) -> bool:
             "parse_mode": "HTML",
         }
         if reply_markup:
-            payload["reply_markup"] = reply_markup  # dict — requests json= handles serialization
-        r = http_requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
+            payload["reply_markup"] = json.dumps(reply_markup)  # Telegram expects JSON string for form-data
+        # Use data= (form-encoded) instead of json= to avoid recursion depth issues
+        r = http_requests.post(f"{TELEGRAM_API}/sendMessage", data=payload, timeout=10)
         if not r.ok:
             logger.warning(f"[TELEGRAM] Send failed {r.status_code}: {r.text[:300]}")
         else:
@@ -130,7 +131,7 @@ def telegram_edit(message_id: int, text: str) -> bool:
             "text": text,
             "parse_mode": "HTML",
         }
-        r = http_requests.post(f"{TELEGRAM_API}/editMessageText", json=payload, timeout=10)
+        r = http_requests.post(f"{TELEGRAM_API}/editMessageText", data=payload, timeout=10)
         return r.ok
     except Exception as e:
         logger.warning(f"[TELEGRAM] Edit failed: {e}")
@@ -143,7 +144,7 @@ def telegram_answer_callback(callback_query_id: str, text: str = "") -> bool:
         return False
     try:
         r = http_requests.post(f"{TELEGRAM_API}/answerCallbackQuery",
-                               json={"callback_query_id": callback_query_id, "text": text},
+                               data={"callback_query_id": callback_query_id, "text": text},
                                timeout=10)
         return r.ok
     except:

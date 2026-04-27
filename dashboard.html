@@ -2033,6 +2033,22 @@ function renderPerformance() {
     let csP = 0, bsP = 0, clP = 0, wlP = 0;
     resolved.forEach(b => { if (b.outcome === 'win') { csP++; clP = 0; if (csP > bsP) bsP = csP; } else { clP++; csP = 0; if (clP > wlP) wlP = clP; } });
     const avgEdgeP = resolved.length > 0 ? resolved.reduce((s, b) => s + (b.edge || 0), 0) / resolved.length : 0;
+
+    // ── Group by day (must be before Sharpe calc) ──
+    const dayMap = {};
+    filtered.forEach(b => {
+        const d = (b.timestamp || b.card_date || '').slice(0, 10);
+        if (!d) return;
+        if (!dayMap[d]) dayMap[d] = { bets: 0, wins: 0, losses: 0, voids: 0, pending: 0, pnl: 0, staked: 0 };
+        dayMap[d].bets++;
+        if (b.outcome === 'win') { dayMap[d].wins++; dayMap[d].pnl += (b.bestPnl || 0); }
+        else if (b.outcome === 'loss') { dayMap[d].losses++; dayMap[d].pnl += (b.bestPnl || 0); }
+        else if (b.outcome === 'void') dayMap[d].voids++;
+        else dayMap[d].pending++;
+        dayMap[d].staked += (b.actual_stake || 0);
+    });
+    const days = Object.keys(dayMap).sort().reverse();
+
     // Sharpe-like ratio: mean daily P&L / stdev daily P&L
     const dailyPnls = Object.values(dayMap).map(d => d.pnl);
     const meanDaily = dailyPnls.length > 0 ? dailyPnls.reduce((a, b) => a + b, 0) / dailyPnls.length : 0;
@@ -2070,21 +2086,6 @@ function renderPerformance() {
         `<div class="stat-card"><div class="label">Staked</div><div class="value amber">$${totalStaked.toFixed(2)}</div></div>`,
         `<div class="stat-card"><div class="label">ROI</div><div class="value ${roi !== '—' && parseFloat(roi) >= 0 ? 'green' : 'red'}">${roi}${roi !== '—' ? '%' : ''}</div></div>`,
     ].join('');
-
-    // Group by day — use bestPnl (actual trade P&L when available)
-    const dayMap = {};
-    filtered.forEach(b => {
-        const d = (b.timestamp || b.card_date || '').slice(0, 10);
-        if (!d) return;
-        if (!dayMap[d]) dayMap[d] = { bets: 0, wins: 0, losses: 0, voids: 0, pending: 0, pnl: 0, staked: 0 };
-        dayMap[d].bets++;
-        if (b.outcome === 'win') { dayMap[d].wins++; dayMap[d].pnl += (b.bestPnl || 0); }
-        else if (b.outcome === 'loss') { dayMap[d].losses++; dayMap[d].pnl += (b.bestPnl || 0); }
-        else if (b.outcome === 'void') dayMap[d].voids++;
-        else dayMap[d].pending++;
-        dayMap[d].staked += (b.actual_stake || 0);
-    });
-    const days = Object.keys(dayMap).sort().reverse();
 
     // Daily breakdown table
     const tableEl = document.getElementById('perfDailyTable');
