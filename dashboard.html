@@ -620,6 +620,7 @@ window.PICKS_DATA = [];
         <div style="display:flex; gap:8px; align-items:center">
             <span id="at-mode-badge" style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span>
             <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px">RUN SCAN</button>
+            <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px">RESET</button>
             <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:6px 10px; border-radius:6px; font-size:11px; cursor:pointer">SETTINGS</button>
         </div>
     </div>
@@ -3741,6 +3742,22 @@ async function rejectTrade(pendingId) {
         }
     } catch(e) {
         alert('Error rejecting trade: ' + e.message);
+    }
+}
+
+async function resetAutoTrader() {
+    if (!confirm('Reset all pending trades and trade history? This cannot be undone.')) return;
+    try {
+        const res = await fetch('/api/auto-trader/reset', { method: 'POST' });
+        if (res.ok) {
+            await refreshPendingTrades();
+            await loadAutoTraderHistory();
+            alert('Auto-trader reset. Pending trades and history cleared.');
+        } else {
+            alert('Reset failed: ' + (await res.text()));
+        }
+    } catch(e) {
+        alert('Reset error: ' + e.message);
     }
 }
 

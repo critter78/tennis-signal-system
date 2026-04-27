@@ -3356,22 +3356,25 @@ def auto_trader_confirm():
             exec_result = {"success": False, "error": "execution not attempted"}
             try:
                 import importlib.util
+                logger.info(f"[AUTO-TRADER] Loading CLOB executor for trade: {confirmed.get('match')} — {confirmed.get('bet_on')}")
                 spec = importlib.util.spec_from_file_location("auto_trader", BASE_DIR / "20_auto_trader.py")
                 at_mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(at_mod)
+                logger.info(f"[AUTO-TRADER] Module loaded, calling execute_clob_order...")
                 exec_result = at_mod.execute_clob_order(confirmed)
                 if exec_result.get("success"):
                     confirmed["clob_order"] = exec_result.get("order")
                     confirmed["executed"] = True
-                    logger.info(f"[AUTO-TRADER] CLOB order placed: {exec_result}")
+                    logger.info(f"[AUTO-TRADER] CLOB order placed: price={exec_result.get('price')}, size={exec_result.get('size')}, stake={exec_result.get('stake')}")
                 else:
                     confirmed["executed"] = False
                     confirmed["exec_error"] = exec_result.get("error", "unknown")
                     logger.warning(f"[AUTO-TRADER] CLOB order failed: {exec_result.get('error')}")
             except Exception as e:
+                import traceback
                 confirmed["executed"] = False
                 confirmed["exec_error"] = str(e)
-                logger.warning(f"[AUTO-TRADER] CLOB execution error: {e}")
+                logger.warning(f"[AUTO-TRADER] CLOB execution error: {e}\n{traceback.format_exc()}")
 
             # Log to trade log regardless
             log_path = LOGS_DIR / "paper_trades.jsonl"
