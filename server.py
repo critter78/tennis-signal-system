@@ -2206,9 +2206,13 @@ def _run_inline_resolver():
             bet_list = bets_data.get("bets", []) if isinstance(bets_data, dict) else []
 
             # Revert incorrectly voided H2H bets for re-resolution
+            # BUT preserve voids that came from actual trade data (trade_result)
             n_bet_void_reverted = 0
             for bet in bet_list:
                 if bet.get("outcome") != "void":
+                    continue
+                # Don't revert if trade_result confirms the void — that's wallet data
+                if bet.get("trade_result") in ("void", "refund"):
                     continue
                 match_name = bet.get("match", "")
                 if " vs " in match_name and " — " not in match_name:
@@ -2427,7 +2431,31 @@ def _run_inline_resolver():
                     except Exception:
                         pass
 
-                if bet_resolutions > 0 or n_bet_void_reverted > 0:
+                # ── Phase 0d: Propagate trade_result → outcome for unresolved bets ──
+                # If wallet monitoring already determined the result but the resolver
+                # couldn't match it, trust the wallet data.
+                trade_propagated = 0
+                for bet in bet_list:
+                    if bet.get("outcome") is not None:
+                        continue
+                    tr = bet.get("trade_result", "")
+                    if tr and tr != "open":
+                        if tr == "win":
+                            bet["outcome"] = "win"
+                            if bet.get("trade_pnl") is not None:
+                                bet["pnl"] = bet["trade_pnl"]
+                        elif tr == "loss":
+                            bet["outcome"] = "loss"
+                            if bet.get("trade_pnl") is not None:
+                                bet["pnl"] = bet["trade_pnl"]
+                        elif tr in ("void", "refund", "partial"):
+                            bet["outcome"] = "void"
+                            bet["pnl"] = 0.0
+                        trade_propagated += 1
+                if trade_propagated:
+                    output_lines.append(f"Phase 0d: Propagated {trade_propagated} trade_result → outcome")
+
+                if bet_resolutions > 0 or n_bet_void_reverted > 0 or trade_propagated > 0:
                     if isinstance(bets_data, dict):
                         bets_data["bets"] = bet_list
                     save_bets(bets_data)

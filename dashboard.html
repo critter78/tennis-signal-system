@@ -1991,6 +1991,14 @@ function getEnrichedBets() {
                 myOutcome = iWon ? 'win' : 'loss';
             }
         }
+        // Fallback: use trade_result from wallet data if no outcome resolved
+        if (!myOutcome && bet.trade_result && bet.trade_result !== 'open') {
+            if (bet.trade_result === 'win') myOutcome = 'win';
+            else if (bet.trade_result === 'loss') myOutcome = 'loss';
+            else if (bet.trade_result === 'void' || bet.trade_result === 'refund') myOutcome = 'void';
+            else if (bet.trade_result === 'partial') myOutcome = 'void';
+            if (bet.trade_pnl != null) myPnl = bet.trade_pnl;
+        }
         const hasTradeData = bet.actual_stake && bet.actual_stake > 0;
         if (myOutcome === 'void') { myPnl = 0; }
         else if (myPnl == null && hasTradeData && myOutcome) {
