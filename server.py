@@ -159,7 +159,7 @@ def telegram_notify_pending(trades: list):
         tournament = t.get("tournament", "")
 
         text = (
-            f"<b>TRADE SIGNAL</b>\n\n"
+            f"<b>POLYMARKET TENNIS BETTING SIGNAL</b>\n\n"
             f"<b>{bet_on}</b>\n"
             f"{match}\n"
         )
@@ -3499,7 +3499,7 @@ def telegram_webhook():
 
             if msg_id:
                 telegram_edit(msg_id,
-                    f"TRADE SIGNAL\n\n"
+                    f"POLYMARKET TENNIS BETTING SIGNAL\n\n"
                     f"{bet_on}\n{match_name}\n\n"
                     f"Status: {status_text}")
 
@@ -3513,7 +3513,7 @@ def telegram_webhook():
 
             if msg_id:
                 telegram_edit(msg_id,
-                    f"TRADE SIGNAL\n\n"
+                    f"POLYMARKET TENNIS BETTING SIGNAL\n\n"
                     f"{bet_on}\n{match_name}\n\n"
                     f"Status: REJECTED by {from_user}")
 
