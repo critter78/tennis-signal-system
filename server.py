@@ -98,6 +98,7 @@ TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGRAM_B
 def telegram_send(text: str, reply_markup: dict = None) -> bool:
     """Send a Telegram message. Returns True on success."""
     if not TELEGRAM_API or not TELEGRAM_CHAT_ID:
+        logger.warning(f"[TELEGRAM] Skipped — missing token={bool(TELEGRAM_BOT_TOKEN)} chat_id={bool(TELEGRAM_CHAT_ID)}")
         return False
     try:
         payload = {
@@ -106,11 +107,15 @@ def telegram_send(text: str, reply_markup: dict = None) -> bool:
             "parse_mode": "HTML",
         }
         if reply_markup:
-            payload["reply_markup"] = json.dumps(reply_markup)
+            payload["reply_markup"] = reply_markup  # dict — requests json= handles serialization
         r = http_requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
+        if not r.ok:
+            logger.warning(f"[TELEGRAM] Send failed {r.status_code}: {r.text[:300]}")
+        else:
+            logger.info(f"[TELEGRAM] Message sent OK")
         return r.ok
     except Exception as e:
-        logger.warning(f"[TELEGRAM] Send failed: {e}")
+        logger.warning(f"[TELEGRAM] Send exception: {e}")
         return False
 
 
@@ -3561,6 +3566,7 @@ def auto_trader_scan():
 
     try:
         import subprocess
+        logger.info(f"[AUTO-TRADER] Starting scan subprocess...")
         result = subprocess.run(
             ["python3", str(BASE_DIR / "20_auto_trader.py"), "--scan"],
             cwd=str(BASE_DIR),
@@ -3568,16 +3574,31 @@ def auto_trader_scan():
             text=True,
             timeout=60
         )
+        logger.info(f"[AUTO-TRADER] Scan exit code: {result.returncode}")
+        if result.stdout:
+            logger.info(f"[AUTO-TRADER] Scan stdout (last 500): {result.stdout[-500:]}")
+        if result.stderr:
+            logger.warning(f"[AUTO-TRADER] Scan stderr: {result.stderr[-500:]}")
+
         # Load pending trades to return
         pending = json.loads(PENDING_TRADES_FILE.read_text()) if PENDING_TRADES_FILE.exists() else []
+        logger.info(f"[AUTO-TRADER] Pending trades in file: {len(pending)}")
 
-        # Send Telegram alerts for new pending trades
-        if pending:
+        # Send Telegram alerts only for NEW pending trades (not yet alerted)
+        new_trades = [t for t in pending if not t.get("telegram_sent")]
+        if new_trades:
             try:
-                telegram_notify_pending(pending)
-                logger.info(f"[AUTO-TRADER] Sent {len(pending)} Telegram alert(s)")
+                telegram_notify_pending(new_trades)
+                # Mark as alerted so we don't re-send
+                for t in pending:
+                    if not t.get("telegram_sent"):
+                        t["telegram_sent"] = True
+                PENDING_TRADES_FILE.write_text(json.dumps(pending, indent=2))
+                logger.info(f"[AUTO-TRADER] Sent {len(new_trades)} NEW Telegram alert(s) ({len(pending)} total pending)")
             except Exception as e:
                 logger.warning(f"[AUTO-TRADER] Telegram notify failed: {e}")
+        else:
+            logger.info(f"[AUTO-TRADER] No new pending trades to alert ({len(pending)} already alerted)")
 
         return jsonify({
             "status": "ok",

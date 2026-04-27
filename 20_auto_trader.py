@@ -41,16 +41,21 @@ import os
 # ─── Paths ───────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).parent.resolve()
-CONFIG_FILE = BASE_DIR / "auto_trader_config.json"
 
 # Render persistent storage
 PERSIST = Path("/data")
 if PERSIST.exists() and PERSIST.is_dir():
     LOGS_DIR = PERSIST / "logs"
     DATA_DIR = PERSIST / "data"
+    CONFIG_FILE = PERSIST / "auto_trader_config.json"  # Match where server saves config
+    # Fallback: copy from repo on first run
+    if not CONFIG_FILE.exists() and (BASE_DIR / "auto_trader_config.json").exists():
+        import shutil
+        shutil.copy2(BASE_DIR / "auto_trader_config.json", CONFIG_FILE)
 else:
     LOGS_DIR = BASE_DIR / "logs"
     DATA_DIR = BASE_DIR / "data"
+    CONFIG_FILE = BASE_DIR / "auto_trader_config.json"
 
 PICKS_FILE = LOGS_DIR / "picks.jsonl"
 BETS_FILE = LOGS_DIR / "my_bets.json"
