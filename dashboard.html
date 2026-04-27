@@ -42,6 +42,8 @@
         .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
         .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
         @media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+        @media (max-width: 1400px) { #playerCardsGrid { grid-template-columns: repeat(2, 1fr) !important; } }
+        @media (max-width: 700px) { #playerCardsGrid { grid-template-columns: 1fr !important; } }
 
         /* ── MOBILE RESPONSIVE ── */
         @media (max-width: 600px) {
@@ -380,7 +382,7 @@
         .bar-val { font-size: 11px; font-weight: 700; width: 50px; }
 
         /* ── PLAYER CARDS ── */
-        .pc { background:#161b22; border:1px solid #30363d; border-radius:12px; width:540px; overflow:hidden; }
+        .pc { background:#161b22; border:1px solid #30363d; border-radius:12px; width:100%; max-width:540px; overflow:hidden; }
         .pc-hdr { padding:18px 20px; display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #30363d; }
         .pc-name { font-size:20px; font-weight:700; color:#fff; }
         .pc-meta { font-size:10px; color:#8b949e; margin-top:3px; }
@@ -546,17 +548,24 @@ window.PICKS_DATA = [];
 
 <!-- PERFORMANCE -->
 <div class="panel" id="panel-performance">
-    <div class="chart-card" style="margin-bottom:20px">
+    <!-- ── Advanced Performance Metrics ── -->
+    <div id="perfAdvancedStats" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-bottom:16px"></div>
+    <!-- ── P&L Chart (compact) ── -->
+    <div class="chart-card" style="margin-bottom:16px">
         <h3>DAILY P&L</h3>
-        <canvas id="chartDailyPnl" height="160"></canvas>
+        <canvas id="chartDailyPnl" height="120"></canvas>
     </div>
-    <div class="grid-2">
-        <div class="chart-card"><h3>WIN RATE BY SURFACE</h3><canvas id="chartSurface"></canvas></div>
-        <div class="chart-card"><h3>WIN RATE BY EDGE TIER</h3><canvas id="chartTier"></canvas></div>
+    <!-- ── Cumulative Equity Curve ── -->
+    <div class="chart-card" style="margin-bottom:16px">
+        <h3>EQUITY CURVE</h3>
+        <canvas id="chartEquityCurve" height="120"></canvas>
     </div>
-    <div class="grid-2">
-        <div class="chart-card"><h3>TOP TOURNAMENTS BY SIGNAL COUNT</h3><canvas id="chartTourney"></canvas></div>
-        <div class="chart-card"><h3>WIN RATE BY CONFIDENCE</h3><canvas id="chartConfPerf"></canvas></div>
+    <!-- ── Breakdown Charts (compact 2x2 grid) ── -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
+        <div class="chart-card"><h3>WIN RATE BY SURFACE</h3><canvas id="chartSurface" height="140"></canvas></div>
+        <div class="chart-card"><h3>WIN RATE BY EDGE TIER</h3><canvas id="chartTier" height="140"></canvas></div>
+        <div class="chart-card"><h3>TOP TOURNAMENTS</h3><canvas id="chartTourney" height="140"></canvas></div>
+        <div class="chart-card"><h3>WIN RATE BY CONFIDENCE</h3><canvas id="chartConfPerf" height="140"></canvas></div>
     </div>
 </div>
 
@@ -593,7 +602,7 @@ window.PICKS_DATA = [];
         </select>
         <span id="playerCount" style="color:#6c757d; font-size:11px"></span>
     </div>
-    <div id="playerCardsGrid" style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center">
+    <div id="playerCardsGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; max-width:1800px; margin:0 auto">
         <div style="text-align:center; padding:60px 0; color:#6c757d">
             <div style="font-size:14px; margin-bottom:8px">Loading player profiles...</div>
             <div style="font-size:11px">Computing from match history data</div>
@@ -1475,9 +1484,9 @@ Chart.defaults.font.size = 10;
 
 // ─── RANKING TIER ACCURACY ───
 (function() {
-    const tiers = { 'Top 10': { w: 0, n: 0 }, '11-25': { w: 0, n: 0 }, '26-50': { w: 0, n: 0 }, '50+': { w: 0, n: 0 }, 'Unranked': { w: 0, n: 0 } };
-    const source = resolved.length > 0 ? resolved : picks;
+    const tiers = { 'Top 10': { w: 0, l: 0, n: 0 }, '11-25': { w: 0, l: 0, n: 0 }, '26-50': { w: 0, l: 0, n: 0 }, '50+': { w: 0, l: 0, n: 0 }, 'Unranked': { w: 0, l: 0, n: 0 } };
     const useResolved = resolved.length > 0;
+    const source = useResolved ? resolved : picks;
 
     source.forEach(p => {
         const r = p.rank;
@@ -1487,11 +1496,14 @@ Chart.defaults.font.size = 10;
         else if (r && r <= 50) tier = '26-50';
         else if (r) tier = '50+';
         tiers[tier].n++;
-        if (useResolved && p.outcome === 'win') tiers[tier].w++;
+        if (useResolved) {
+            if (p.outcome === 'win') tiers[tier].w++;
+            else if (p.outcome === 'loss') tiers[tier].l++;
+        }
     });
 
     const labels = Object.keys(tiers);
-    const data = useResolved ? labels.map(t => tiers[t].n > 0 ? (tiers[t].w / tiers[t].n * 100) : 0) : labels.map(t => tiers[t].n);
+    const data = useResolved ? labels.map(t => (tiers[t].w + tiers[t].l) > 0 ? (tiers[t].w / (tiers[t].w + tiers[t].l) * 100) : 0) : labels.map(t => tiers[t].n);
 
     new Chart(document.getElementById('chartRankTier'), {
         type: 'bar',
@@ -1505,19 +1517,22 @@ Chart.defaults.font.size = 10;
 
 // ─── EDGE ACCURACY ───
 (function() {
-    const tiers = { '5-10%': { w: 0, n: 0 }, '10-15%': { w: 0, n: 0 }, '15-20%': { w: 0, n: 0 }, '20%+': { w: 0, n: 0 } };
-    const source = resolved.length > 0 ? resolved.filter(p => p.has_edge) : withEdge;
+    const tiers = { '5-10%': { w: 0, l: 0, n: 0 }, '10-15%': { w: 0, l: 0, n: 0 }, '15-20%': { w: 0, l: 0, n: 0 }, '20%+': { w: 0, l: 0, n: 0 } };
     const useResolved = resolved.length > 0;
+    const source = useResolved ? resolved.filter(p => p.has_edge) : withEdge;
 
     source.forEach(p => {
         const e = Math.abs(p.edge || 0);
         let tier = e >= 20 ? '20%+' : e >= 15 ? '15-20%' : e >= 10 ? '10-15%' : '5-10%';
         tiers[tier].n++;
-        if (useResolved && p.outcome === 'win') tiers[tier].w++;
+        if (useResolved) {
+            if (p.outcome === 'win') tiers[tier].w++;
+            else if (p.outcome === 'loss') tiers[tier].l++;
+        }
     });
 
     const labels = Object.keys(tiers);
-    const data = useResolved ? labels.map(t => tiers[t].n > 0 ? (tiers[t].w / tiers[t].n * 100) : 0) : labels.map(t => tiers[t].n);
+    const data = useResolved ? labels.map(t => (tiers[t].w + tiers[t].l) > 0 ? (tiers[t].w / (tiers[t].w + tiers[t].l) * 100) : 0) : labels.map(t => tiers[t].n);
 
     new Chart(document.getElementById('chartEdgeAcc'), {
         type: 'bar',
@@ -1769,39 +1784,55 @@ function renderMyBets() {
     const resolvedStaked = resolvedBets.reduce((s, b) => s + (b._hasTradeData ? (b.actual_stake || 0) : 100), 0);
     const resolvedRoi = resolvedStaked > 0 ? (resolvedPnl / resolvedStaked * 100) : 0;
 
-    let html = `<div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap">
-        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
-            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">RESOLVED</div>
-            <div style="font-weight:700; color:#e0e0e0; font-size:15px">${resolvedBets.length}</div>
-        </div>
-        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
-            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">RECORD</div>
-            <div style="font-weight:700; font-size:13px"><span style="color:#4caf50">${bWins}W</span> <span style="color:#6c757d">-</span> <span style="color:#f44336">${bLosses}L</span></div>
-        </div>
-        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
-            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">WIN RATE</div>
-            <div style="font-weight:700; color:${resolvedBets.length > 0 && bWins/resolvedBets.length >= 0.5 ? '#4caf50' : '#f44336'}; font-size:15px">${resolvedBets.length > 0 ? (bWins/resolvedBets.length*100).toFixed(1) : '—'}%</div>
-        </div>
-        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
-            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">P&L</div>
-            <div style="font-weight:700; color:${resolvedPnl >= 0 ? '#4caf50' : '#f44336'}; font-size:15px">${resolvedPnl >= 0 ? '+' : ''}$${resolvedPnl.toFixed(2)}</div>
-        </div>
-        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
-            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">STAKED</div>
-            <div style="font-weight:700; color:#d4740a; font-size:15px">$${resolvedStaked.toFixed(2)}</div>
-        </div>
-        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
-            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">ROI</div>
-            <div style="font-weight:700; color:${resolvedRoi >= 0 ? '#4caf50' : '#f44336'}; font-size:15px">${resolvedBets.length > 0 ? (resolvedRoi >= 0 ? '+' : '') + resolvedRoi.toFixed(1) + '%' : '—'}</div>
-        </div>
-        <div style="background:#0f1117; border:1px solid #2d3139; border-radius:6px; padding:6px 12px; text-align:center; flex:1; min-width:60px">
-            <div style="font-size:7px; color:#6c757d; letter-spacing:0.3px">PENDING</div>
-            <div style="font-weight:700; color:#6c757d; font-size:15px">${bPending}</div>
-        </div>
+    // ── Advanced stats ──
+    const avgEdge = resolvedBets.length > 0 ? resolvedBets.reduce((s, b) => s + (b.edge || 0), 0) / resolvedBets.length : 0;
+    const winPnls = resolvedBets.filter(b => b.outcome === 'win').map(b => b._hasTradeData && b.trade_pnl != null ? b.trade_pnl : (b.pnl || 0));
+    const lossPnls = resolvedBets.filter(b => b.outcome === 'loss').map(b => b._hasTradeData && b.trade_pnl != null ? b.trade_pnl : (b.pnl || 0));
+    const avgWin = winPnls.length > 0 ? winPnls.reduce((a, b) => a + b, 0) / winPnls.length : 0;
+    const avgLoss = lossPnls.length > 0 ? Math.abs(lossPnls.reduce((a, b) => a + b, 0) / lossPnls.length) : 0;
+    const profitFactor = avgLoss > 0 ? (avgWin * bWins) / (avgLoss * bLosses) : bWins > 0 ? Infinity : 0;
+    // Max drawdown
+    let peak = 0, maxDD = 0, running = 0;
+    resolvedBets.forEach(b => {
+        const p = b._hasTradeData && b.trade_pnl != null ? b.trade_pnl : (b.pnl || 0);
+        running += p;
+        if (running > peak) peak = running;
+        const dd = peak - running;
+        if (dd > maxDD) maxDD = dd;
+    });
+    // Streak
+    let curStreak = 0, bestStreak = 0, worstStreak = 0, curLossStreak = 0;
+    resolvedBets.forEach(b => {
+        if (b.outcome === 'win') { curStreak++; curLossStreak = 0; if (curStreak > bestStreak) bestStreak = curStreak; }
+        else { curLossStreak++; curStreak = 0; if (curLossStreak > worstStreak) worstStreak = curLossStreak; }
+    });
+
+    const sc = (lbl, val, col = '#e0e0e0') => `<div style="background:#0f1117;border:1px solid #2d3139;border-radius:6px;padding:8px 12px;text-align:center;flex:1;min-width:70px">
+        <div style="font-size:9px;color:#6c757d;letter-spacing:0.3px;margin-bottom:2px">${lbl}</div>
+        <div style="font-weight:700;color:${col};font-size:15px">${val}</div>
+    </div>`;
+
+    let html = `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+        ${sc('RESOLVED', resolvedBets.length)}
+        ${sc('RECORD', `<span style="color:#4caf50">${bWins}W</span> <span style="color:#6c757d">-</span> <span style="color:#f44336">${bLosses}L</span>`)}
+        ${sc('WIN RATE', resolvedBets.length > 0 ? (bWins/resolvedBets.length*100).toFixed(1) + '%' : '—', resolvedBets.length > 0 && bWins/resolvedBets.length >= 0.5 ? '#4caf50' : '#f44336')}
+        ${sc('P&L', (resolvedPnl >= 0 ? '+' : '') + '$' + resolvedPnl.toFixed(2), resolvedPnl >= 0 ? '#4caf50' : '#f44336')}
+        ${sc('STAKED', '$' + resolvedStaked.toFixed(2), '#d4740a')}
+        ${sc('ROI', resolvedBets.length > 0 ? (resolvedRoi >= 0 ? '+' : '') + resolvedRoi.toFixed(1) + '%' : '—', resolvedRoi >= 0 ? '#4caf50' : '#f44336')}
+        ${sc('PENDING', bPending, '#6c757d')}
     </div>
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-        <div style="font-size:9px; color:#6c757d">Stats show <strong style="color:#e0e0e0">resolved bets only</strong> (excludes ${bPending} pending${bVoid ? ', ' + bVoid + ' void' : ''}). P&L uses actual wallet data where available, $100 notional otherwise.</div>
-        <button id="syncTradesBtn" onclick="syncPolyTrades()" style="background:#1b5e20; color:white; border:none; padding:5px 12px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.04em;">Sync Trades</button>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+        ${sc('AVG WIN', avgWin > 0 ? '+$' + avgWin.toFixed(2) : '—', '#4caf50')}
+        ${sc('AVG LOSS', avgLoss > 0 ? '-$' + avgLoss.toFixed(2) : '—', '#f44336')}
+        ${sc('PROFIT FACTOR', profitFactor === Infinity ? '∞' : profitFactor > 0 ? profitFactor.toFixed(2) : '—', profitFactor >= 1.5 ? '#4caf50' : profitFactor >= 1 ? '#d4740a' : '#f44336')}
+        ${sc('MAX DRAWDOWN', maxDD > 0 ? '-$' + maxDD.toFixed(2) : '$0', maxDD > 0 ? '#f44336' : '#4caf50')}
+        ${sc('AVG EDGE', avgEdge > 0 ? '+' + avgEdge.toFixed(1) + '%' : avgEdge.toFixed(1) + '%', avgEdge >= 10 ? '#4caf50' : '#d4740a')}
+        ${sc('BEST STREAK', bestStreak + 'W', '#4caf50')}
+        ${sc('WORST STREAK', worstStreak + 'L', '#f44336')}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:9px;color:#6c757d">Stats show <strong style="color:#e0e0e0">resolved bets only</strong> (excludes ${bPending} pending${bVoid ? ', ' + bVoid + ' void' : ''}). P&L uses actual wallet data where available, $100 notional otherwise.</div>
+        <button id="syncTradesBtn" onclick="syncPolyTrades()" style="background:#1b5e20;color:white;border:none;padding:5px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:0.04em;">Sync Trades</button>
     </div>`;
 
     html += `<table><thead><tr>
@@ -1990,7 +2021,45 @@ function renderPerformance() {
     const winRate = resolved.length > 0 ? (wins.length / resolved.length * 100).toFixed(1) : '—';
     const roi = totalStaked > 0 ? (totalPnl / totalStaked * 100).toFixed(1) : '—';
 
-    // Summary cards
+    // ── Advanced performance metrics ──
+    const winPnlsP = wins.map(b => b.bestPnl || 0);
+    const lossPnlsP = losses.map(b => Math.abs(b.bestPnl || 0));
+    const avgWinP = winPnlsP.length > 0 ? winPnlsP.reduce((a, b) => a + b, 0) / winPnlsP.length : 0;
+    const avgLossP = lossPnlsP.length > 0 ? lossPnlsP.reduce((a, b) => a + b, 0) / lossPnlsP.length : 0;
+    const profitFactorP = avgLossP > 0 && losses.length > 0 ? (avgWinP * wins.length) / (avgLossP * losses.length) : wins.length > 0 ? Infinity : 0;
+    let peakP = 0, maxDDP = 0, runP = 0;
+    resolved.forEach(b => { runP += (b.bestPnl || 0); if (runP > peakP) peakP = runP; const d = peakP - runP; if (d > maxDDP) maxDDP = d; });
+    let csP = 0, bsP = 0, clP = 0, wlP = 0;
+    resolved.forEach(b => { if (b.outcome === 'win') { csP++; clP = 0; if (csP > bsP) bsP = csP; } else { clP++; csP = 0; if (clP > wlP) wlP = clP; } });
+    const avgEdgeP = resolved.length > 0 ? resolved.reduce((s, b) => s + (b.edge || 0), 0) / resolved.length : 0;
+    // Sharpe-like ratio: mean daily P&L / stdev daily P&L
+    const dailyPnls = Object.values(dayMap).map(d => d.pnl);
+    const meanDaily = dailyPnls.length > 0 ? dailyPnls.reduce((a, b) => a + b, 0) / dailyPnls.length : 0;
+    const stdDaily = dailyPnls.length > 1 ? Math.sqrt(dailyPnls.reduce((s, v) => s + Math.pow(v - meanDaily, 2), 0) / (dailyPnls.length - 1)) : 0;
+    const sharpe = stdDaily > 0 ? (meanDaily / stdDaily).toFixed(2) : '—';
+
+    const psc = (lbl, val, col) => `<div style="background:#0f1117;border:1px solid #2d3139;border-radius:6px;padding:8px 10px;text-align:center">
+        <div style="font-size:9px;color:#6c757d;letter-spacing:0.3px;margin-bottom:2px">${lbl}</div>
+        <div style="font-weight:700;color:${col};font-size:14px">${val}</div>
+    </div>`;
+
+    const advEl = document.getElementById('perfAdvancedStats');
+    advEl.innerHTML = [
+        psc('RECORD', `<span style="color:#4caf50">${wins.length}W</span> <span style="color:#6c757d">-</span> <span style="color:#f44336">${losses.length}L</span>`, '#e0e0e0'),
+        psc('WIN RATE', winRate !== '—' ? winRate + '%' : '—', winRate !== '—' && parseFloat(winRate) >= 50 ? '#4caf50' : '#f44336'),
+        psc('P&L', (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2), totalPnl >= 0 ? '#4caf50' : '#f44336'),
+        psc('ROI', roi !== '—' ? (parseFloat(roi) >= 0 ? '+' : '') + roi + '%' : '—', roi !== '—' && parseFloat(roi) >= 0 ? '#4caf50' : '#f44336'),
+        psc('AVG WIN', avgWinP > 0 ? '+$' + avgWinP.toFixed(2) : '—', '#4caf50'),
+        psc('AVG LOSS', avgLossP > 0 ? '-$' + avgLossP.toFixed(2) : '—', '#f44336'),
+        psc('PROFIT FACTOR', profitFactorP === Infinity ? '∞' : profitFactorP > 0 ? profitFactorP.toFixed(2) : '—', profitFactorP >= 1.5 ? '#4caf50' : profitFactorP >= 1 ? '#d4740a' : '#f44336'),
+        psc('MAX DRAWDOWN', maxDDP > 0 ? '-$' + maxDDP.toFixed(2) : '$0', maxDDP > 0 ? '#f44336' : '#4caf50'),
+        psc('SHARPE', sharpe, sharpe !== '—' && parseFloat(sharpe) >= 0.5 ? '#4caf50' : sharpe !== '—' && parseFloat(sharpe) >= 0 ? '#d4740a' : '#f44336'),
+        psc('BEST STREAK', bsP + 'W', '#4caf50'),
+        psc('WORST STREAK', wlP + 'L', '#f44336'),
+        psc('AVG EDGE', (avgEdgeP >= 0 ? '+' : '') + avgEdgeP.toFixed(1) + '%', avgEdgeP >= 10 ? '#4caf50' : '#d4740a'),
+    ].join('');
+
+    // Summary cards (compact row for My Bets tab)
     const cards = document.getElementById('perfSummaryCards');
     cards.innerHTML = [
         `<div class="stat-card"><div class="label">Bets</div><div class="value white">${filtered.length}</div></div>`,
@@ -2112,6 +2181,38 @@ renderMyBets();
             }
         }
     });
+
+    // ── EQUITY CURVE ──
+    const cumData = [];
+    let cumSum = 0;
+    sortedDays.forEach(d => { cumSum += dayMap[d].pnl; cumData.push(round2(cumSum)); });
+    const eqCtx = document.getElementById('chartEquityCurve');
+    if (eqCtx) {
+        new Chart(eqCtx, {
+            type: 'line',
+            data: {
+                labels: sortedDays,
+                datasets: [{
+                    label: 'Cumulative P&L ($)',
+                    data: cumData,
+                    borderColor: cumData[cumData.length - 1] >= 0 ? '#4caf50' : '#f44336',
+                    backgroundColor: (cumData[cumData.length - 1] >= 0 ? 'rgba(76,175,80,' : 'rgba(244,67,54,') + '0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    borderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `P&L: ${ctx.raw >= 0 ? '+' : ''}$${ctx.raw.toFixed(2)}` } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+                    y: { grid: { color: '#2d313940' }, ticks: { callback: v => '$' + v } }
+                }
+            }
+        });
+    }
 })();
 
 // ─── ACTIVE BET CARDS (mini cards for pending bets) ───
