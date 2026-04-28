@@ -146,9 +146,13 @@ def passes_entry_rules(signal: dict, rules: dict, existing_bets: list[dict]) -> 
     match = signal.get("match", "")
     bet_on = signal.get("bet_on", "")
 
-    # Already bet on this match?
+    # Already bet on this match? Only block if bet is still active (pending/open)
+    # Resolved bets (win/loss/void) should NOT prevent re-betting on rematch
     for b in existing_bets:
         if b.get("match") == match:
+            outcome = b.get("outcome")
+            if outcome in ("win", "loss", "void"):
+                continue  # Resolved — allow new bet on same match name
             return False, "already_bet"
 
     # Market type filter
@@ -288,11 +292,14 @@ def add_pending_trade(trade: dict):
         if p.get("match") == match_key and p.get("bet_on") == bet_key:
             return  # already queued
 
-    # Don't re-queue trades that were already confirmed or rejected
+    # Don't re-queue trades that were already confirmed or rejected TODAY
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     history = load_trade_history()
     for h in history:
         if h.get("match") == match_key and h.get("bet_on") == bet_key:
-            return  # already acted on
+            h_date = (h.get("timestamp") or h.get("created_at") or "")[:10]
+            if h_date == today:
+                return  # already acted on today
 
     pending.append(trade)
     save_pending_trades(pending)
@@ -632,6 +639,7 @@ def scan_entries(config: dict, dry_run: bool = False) -> list[dict]:
 
         if not passes:
             filtered += 1
+            print(f"  [skip] {sig.get('match', '?')[:45]} — {reason}")
             continue
 
         # Check exposure limit
