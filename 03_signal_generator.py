@@ -400,6 +400,7 @@ def generate_signals(markets_df: pd.DataFrame, model, feature_cols: list,
                 "question":    q,
                 "token_id":    best_tid or "",
                 "condition_id": mkt.get("condition_id", ""),
+                "slug":        mkt.get("slug", ""),
             })
 
     df = pd.DataFrame(signals)

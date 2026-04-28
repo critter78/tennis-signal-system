@@ -35,7 +35,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
-import requests
 import os
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
@@ -389,13 +388,18 @@ def load_todays_trades(config: dict) -> list[dict]:
 # ─── CLOB Price Fetch ────────────────────────────────────────────────────────
 
 def fetch_clob_price(token_id: str, clob_url: str = "https://clob.polymarket.com") -> float | None:
-    """Fetch current BUY price from Polymarket CLOB."""
+    """Fetch current BUY price from Polymarket CLOB (uses urllib to avoid recursion on Render)."""
+    import urllib.request, urllib.parse
     try:
-        r = requests.get(f"{clob_url}/price",
-                         params={"token_id": token_id, "side": "BUY"},
-                         timeout=10)
-        if r.status_code == 200:
-            return float(r.json().get("price", 0) or 0)
+        qs = urllib.parse.urlencode({"token_id": token_id, "side": "BUY"})
+        url = f"{clob_url}/price?{qs}"
+        req = urllib.request.Request(url, headers={
+            "Accept": "application/json",
+            "User-Agent": "python-requests/2.31.0",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            return float(data.get("price", 0) or 0)
     except Exception as e:
         print(f"[clob] price fetch failed: {e}", file=sys.stderr)
     return None
@@ -459,25 +463,46 @@ def _resolve_token_id(trade: dict) -> str:
     Last-resort lookup: fetch the market from Gamma API and extract
     the clobTokenId for the player we're betting on.
     Gamma API returns outcomes/clobTokenIds as JSON strings — must parse them.
+    Uses urllib to avoid requests recursion bug on Render.
     """
-    import requests as _req
+    import urllib.request, urllib.parse
     import json as _json
+
+    _HEADERS = {
+        "Accept": "application/json",
+        "User-Agent": "python-requests/2.31.0",
+        "Accept-Encoding": "identity",
+        "Connection": "close",
+    }
+
+    def _gamma_fetch(url, params=None, timeout=15):
+        if params:
+            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
+            url = f"{url}?{qs}"
+        req = urllib.request.Request(url, headers=_HEADERS)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return _json.loads(resp.read().decode())
+
     bet_on = (trade.get("bet_on") or "").strip()
     slug = trade.get("slug", "")
     if not bet_on:
         print("[resolve_tid] No bet_on in trade", file=sys.stderr)
         return ""
 
-    url = "https://gamma-api.polymarket.com/markets"
+    # Try events endpoint first (returns markets with clobTokenIds)
+    events_url = "https://gamma-api.polymarket.com/events"
+    markets_url = "https://gamma-api.polymarket.com/markets"
     markets = []
 
-    # Strategy 1: search by slug (most precise)
+    # Strategy 1: search by slug via events endpoint (most precise)
     if slug:
         try:
-            r = _req.get(url, params={"slug": slug}, timeout=15)
-            r.raise_for_status()
-            markets = r.json()
-            print(f"[resolve_tid] Slug search '{slug}': {len(markets)} results", file=sys.stderr)
+            events = _gamma_fetch(events_url, params={"slug": slug})
+            if events:
+                ev = events[0] if isinstance(events, list) else events
+                for m in ev.get("markets", [ev]):
+                    markets.append(m)
+            print(f"[resolve_tid] Slug search '{slug}': {len(markets)} markets", file=sys.stderr)
         except Exception as e:
             print(f"[resolve_tid] Slug search failed: {e}", file=sys.stderr)
 
@@ -485,10 +510,9 @@ def _resolve_token_id(trade: dict) -> str:
     if not markets:
         for tag in ["tennis", "atp-tennis", "wta-tennis"]:
             try:
-                r = _req.get(url, params={"tag_slug": tag, "active": "true",
-                                           "closed": "false", "limit": 200}, timeout=15)
-                r.raise_for_status()
-                batch = r.json()
+                batch = _gamma_fetch(markets_url, params={
+                    "tag_slug": tag, "active": "true", "closed": "false", "limit": "200"
+                })
                 markets.extend(batch)
             except Exception as e:
                 print(f"[resolve_tid] Tag {tag} failed: {e}", file=sys.stderr)
@@ -521,9 +545,6 @@ def _resolve_token_id(trade: dict) -> str:
                 return tid
 
     print(f"[resolve_tid] No matching market found for {bet_on}", file=sys.stderr)
-    return ""
-
-    print(f"[resolve_tid] No matching market found for {bet_on} in {match_str}", file=sys.stderr)
     return ""
 
 
@@ -603,6 +624,37 @@ def scan_entries(config: dict, dry_run: bool = False) -> list[dict]:
 
     # Load signals and existing bets
     signals = load_todays_signals()
+
+    # ── Inject missing token_ids from browser-fetched cache ──────────
+    # The Gamma API is blocked by Cloudflare on Render, so the dashboard
+    # fetches token_ids browser-side and writes them to a cache file.
+    _tid_cache_path = LOGS_DIR / "token_id_cache.json"
+    if _tid_cache_path.exists():
+        try:
+            _tid_map = json.loads(_tid_cache_path.read_text())  # {slug: {outcome: tokenId}}
+            _injected = 0
+            for sig in signals:
+                if sig.get("token_id"):
+                    continue  # already has one
+                slug = sig.get("slug", "")
+                bet_on = (sig.get("bet_on") or "").strip()
+                if not slug or not bet_on:
+                    continue
+                entry = _tid_map.get(slug, {})
+                if not entry:
+                    continue
+                # Try exact match on outcome name, then last-name match
+                last_name = bet_on.split()[-1].lower()
+                for outcome_name, tid in entry.items():
+                    if last_name in outcome_name.lower():
+                        sig["token_id"] = tid
+                        _injected += 1
+                        break
+            if _injected:
+                print(f"[token_id] Injected {_injected} token_ids from browser cache")
+        except Exception as e:
+            print(f"[token_id] Cache load failed: {e}", file=sys.stderr)
+
     existing_bets = load_existing_bets()
     todays_trades = load_todays_trades(config)
 

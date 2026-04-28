@@ -1769,9 +1769,21 @@ def generate_signals(markets_df, model, feature_cols, df_hist, min_edge=0.05, de
         except Exception as e:
             print(f"  [whale] Failed for {pa} vs {pb}: {e}", file=sys.stderr)
 
+        # ── Resolve token_id for the bet_on player ──
+        _bet_tid = ""
+        clob_ids = mkt.get("clob_token_ids", [])
+        mkt_outcomes = mkt.get("outcomes", [])
+        if clob_ids and len(clob_ids) == len(mkt_outcomes):
+            bet_last = bet_player.split()[-1].lower() if bet_player else ""
+            for _oi, _oname in enumerate(mkt_outcomes):
+                if bet_last and bet_last in str(_oname).lower():
+                    _bet_tid = clob_ids[_oi]
+                    break
+
         signals.append({
             "market_id":    mkt.get("market_id", ""),
             "slug":         slug,
+            "token_id":     _bet_tid,
             "match":        f"{pa} vs {pb}",
             "player_a":     pa,
             "player_b":     pb,
@@ -2151,9 +2163,19 @@ def generate_outright_signals(markets_df, df_hist, min_edge=0.01, debug=False):
         except Exception as e:
             print(f"  [whale] Failed for outright {player}: {e}", file=sys.stderr)
 
+        # Resolve token_id for outright bet_on player
+        _bet_tid = ""
+        if clob_ids and len(clob_ids) == len(mkt_outcomes):
+            _p_last = player.split()[-1].lower() if player else ""
+            for _oi, _oname in enumerate(mkt_outcomes):
+                if _p_last and _p_last in str(_oname).lower():
+                    _bet_tid = clob_ids[_oi]
+                    break
+
         signals.append({
             "market_id":       mkt.get("market_id", ""),
             "slug":            slug,
+            "token_id":        _bet_tid,
             "match":           f"{player} — {tournament}",
             "player_a":        player,
             "player_b":        tournament,
@@ -2326,11 +2348,22 @@ def generate_signals_data_only(markets_df, df_hist=None, debug=False):
         except Exception:
             pass
 
+        # Resolve token_id for data-only bet_on player
+        _bet_tid = ""
+        if clob_ids and len(clob_ids) == len(mkt_outcomes):
+            _pw_last = predicted_winner.split()[-1].lower() if predicted_winner else ""
+            for _oi, _oname in enumerate(mkt_outcomes):
+                if _pw_last and _pw_last in str(_oname).lower():
+                    _bet_tid = clob_ids[_oi]
+                    break
+
         signals.append({
             "match":        f"{pa} vs {pb}",
             "player_a":     pa,
             "player_b":     pb,
             "bet_on":       predicted_winner,
+            "token_id":     _bet_tid,
+            "slug":         slug,
             "poly_price":   round(max(poly_pa, poly_pb), 1),
             "model_prob":   round(confidence, 1),
             "model_prob_a": round(poly_pa, 1),
@@ -2420,11 +2453,22 @@ def generate_outright_signals_data_only(markets_df, debug=False):
         except Exception:
             pass
 
+        # Resolve token_id for outright data-only player
+        _bet_tid = ""
+        if clob_ids and len(clob_ids) == len(mkt_outcomes):
+            _p_last = player.split()[-1].lower() if player else ""
+            for _oi, _oname in enumerate(mkt_outcomes):
+                if _p_last and _p_last in str(_oname).lower():
+                    _bet_tid = clob_ids[_oi]
+                    break
+
         signals.append({
             "match":        f"{player} — {tournament}",
             "player_a":     player,
             "player_b":     "The Field",
             "bet_on":       player,
+            "token_id":     _bet_tid,
+            "slug":         slug,
             "poly_price":   round(poly_yes, 1),
             "model_prob":   round(poly_yes, 1),  # Use Poly price as model estimate
             "model_prob_a": round(poly_yes, 1),

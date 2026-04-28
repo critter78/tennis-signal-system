@@ -3723,10 +3723,44 @@ async function resolveOutcomesNow() {
 
 async function runAutoScan() {
     const btn = event.target;
-    btn.textContent = 'SCANNING...';
+    btn.textContent = 'FETCHING MARKETS...';
     btn.disabled = true;
     try {
-        const res = await fetch('/api/auto-trader/scan', { method: 'POST' });
+        // Step 1: Browser fetches token_ids from Gamma API (bypasses Cloudflare)
+        const tokenMap = {};
+        const GAMMA = 'https://gamma-api.polymarket.com/markets';
+        for (const tag of ['tennis', 'atp-tennis', 'wta-tennis']) {
+            try {
+                const gRes = await fetch(`${GAMMA}?tag_slug=${tag}&active=true&closed=false&limit=500`);
+                if (gRes.ok) {
+                    const markets = await gRes.json();
+                    for (const m of markets) {
+                        const slug = m.slug || '';
+                        if (!slug) continue;
+                        let outcomes = m.outcomes || [];
+                        let clobIds = m.clobTokenIds || [];
+                        if (typeof outcomes === 'string') try { outcomes = JSON.parse(outcomes); } catch(e) { outcomes = []; }
+                        if (typeof clobIds === 'string') try { clobIds = JSON.parse(clobIds); } catch(e) { clobIds = []; }
+                        if (clobIds.length === outcomes.length && clobIds.length > 0) {
+                            const entry = {};
+                            for (let i = 0; i < outcomes.length; i++) {
+                                entry[outcomes[i]] = clobIds[i];
+                            }
+                            tokenMap[slug] = entry;
+                        }
+                    }
+                }
+            } catch(e) { console.warn(`Gamma tag ${tag} failed:`, e); }
+        }
+        console.log(`[scan] Fetched ${Object.keys(tokenMap).length} market token maps from Gamma`);
+
+        // Step 2: Send scan request with token_id map
+        btn.textContent = 'SCANNING...';
+        const res = await fetch('/api/auto-trader/scan', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ token_id_map: tokenMap })
+        });
         const data = await res.json();
         if (data.pending_count > 0) {
             btn.textContent = `FOUND ${data.pending_count}`;

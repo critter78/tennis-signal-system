@@ -3743,6 +3743,16 @@ def auto_trader_scan():
 
     try:
         import subprocess
+
+        # Accept browser-fetched token_id map (bypasses Cloudflare WAF on Render)
+        body = request.get_json(silent=True) or {}
+        token_id_map = body.get("token_id_map")
+        if token_id_map and isinstance(token_id_map, dict):
+            cache_path = LOGS_DIR / "token_id_cache.json"
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(token_id_map))
+            logger.info(f"[AUTO-TRADER] Wrote token_id cache: {len(token_id_map)} markets")
+
         logger.info(f"[AUTO-TRADER] Starting scan subprocess...")
         result = subprocess.run(
             ["python3", str(BASE_DIR / "20_auto_trader.py"), "--scan"],
