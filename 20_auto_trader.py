@@ -210,9 +210,17 @@ def passes_entry_rules(signal: dict, rules: dict, existing_bets: list[dict]) -> 
 
 
 def calculate_stake(signal: dict, rules: dict) -> float:
-    """Calculate stake using Kelly fraction against bankroll, capped by max_stake."""
-    kelly_fraction = rules.get("kelly_fraction", 0.25)
+    """Calculate stake using Kelly fraction or flat wager, capped by max_stake."""
+    use_kelly = rules.get("use_kelly", True)
     max_stake = rules.get("max_stake_per_bet", 50.0)
+
+    if not use_kelly:
+        # Flat wager mode — consistent amount per trade
+        flat = rules.get("flat_wager", 5.0)
+        return round(max(2.0, min(flat, max_stake)), 2)
+
+    # Kelly mode
+    kelly_fraction = rules.get("kelly_fraction", 0.25)
     bankroll = rules.get("bankroll", 0)
 
     # Use bankroll if set, otherwise fall back to max_stake as base
