@@ -528,6 +528,9 @@ window.PICKS_DATA = [];
         <input type="date" id="perfDateFrom" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2d3139; padding:5px 8px; font-size:11px; font-family:'IBM Plex Mono',monospace" onchange="setPerfRange('custom')">
         <span style="color:#6c757d; font-size:10px">to</span>
         <input type="date" id="perfDateTo" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2d3139; padding:5px 8px; font-size:11px; font-family:'IBM Plex Mono',monospace" onchange="setPerfRange('custom')">
+        <span style="color:#6c757d; font-size:10px; margin:0 4px">|</span>
+        <button id="resolveBtn" onclick="resolveOutcomesNow()" style="background:#4caf50; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px">RESOLVE OUTCOMES</button>
+        <span id="resolveStatus" style="font-size:10px; color:#6c757d; display:none"></span>
     </div>
     <!-- ── Performance Summary Cards ── -->
     <div id="perfSummaryCards" class="stats-row" style="margin-bottom:16px"></div>
@@ -3632,6 +3635,90 @@ async function saveAutoTraderConfig() {
     } catch(e) {
         alert('Error saving config: ' + e.message);
     }
+}
+
+async function resolveOutcomesNow() {
+    const btn = document.getElementById('resolveBtn');
+    const status = document.getElementById('resolveStatus');
+    btn.textContent = 'FETCHING MARKETS...';
+    btn.disabled = true;
+    status.style.display = 'inline';
+    status.textContent = '';
+
+    try {
+        // Step 1: Get slugs needed from server
+        status.textContent = 'Getting slugs...';
+        const slugRes = await fetch('/api/resolve-slugs');
+        const slugData = await slugRes.json();
+        const slugs = slugData.slugs || [];
+        status.textContent = `Fetching ${slugs.length} markets...`;
+
+        // Step 2: Fetch bulk closed events from Gamma API (browser bypasses Cloudflare)
+        const allEvents = [];
+        const seenSlugs = new Set();
+        for (const tag of ['tennis', 'atp', 'wta']) {
+            try {
+                const r = await fetch(`https://gamma-api.polymarket.com/events?tag_slug=${tag}&closed=true&limit=100&order=endDate&ascending=false`);
+                if (r.ok) {
+                    const events = await r.json();
+                    events.forEach(ev => {
+                        const s = ev.slug || '';
+                        if (s && !seenSlugs.has(s)) { seenSlugs.add(s); allEvents.push(ev); }
+                    });
+                }
+            } catch(e) { console.warn(`Bulk fetch ${tag}:`, e); }
+        }
+        status.textContent = `Got ${allEvents.length} bulk + fetching ${slugs.length} individual...`;
+
+        // Step 3: Fetch individual slugs not already in bulk results (batched, 5 at a time)
+        const missingSlugs = slugs.filter(s => !seenSlugs.has(s));
+        let fetched = 0;
+        const BATCH = 5;
+        for (let i = 0; i < missingSlugs.length; i += BATCH) {
+            const batch = missingSlugs.slice(i, i + BATCH);
+            const results = await Promise.allSettled(
+                batch.map(s => fetch(`https://gamma-api.polymarket.com/events?slug=${s}`).then(r => r.ok ? r.json() : []))
+            );
+            results.forEach((r, j) => {
+                if (r.status === 'fulfilled' && Array.isArray(r.value) && r.value.length > 0) {
+                    const ev = r.value[0];
+                    const s = ev.slug || batch[j];
+                    if (!seenSlugs.has(s)) { seenSlugs.add(s); allEvents.push(ev); }
+                }
+            });
+            fetched += batch.length;
+            if (fetched % 20 === 0) status.textContent = `Fetched ${fetched}/${missingSlugs.length} slugs...`;
+        }
+
+        btn.textContent = 'RESOLVING...';
+        status.textContent = `Sending ${allEvents.length} markets to server...`;
+
+        // Step 4: POST all fetched events to server for resolution
+        const resolveRes = await fetch('/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ markets: allEvents })
+        });
+        const result = await resolveRes.json();
+
+        // Show output
+        const output = result.output || result.message || 'Done';
+        btn.textContent = 'DONE';
+        status.textContent = output.split('\n').slice(-2).join(' | ');
+        console.log('Resolve output:', output);
+
+        // Show full output in an alert for visibility
+        alert('Resolve Results:\n\n' + output);
+
+        // Refresh the page data
+        setTimeout(() => location.reload(), 2000);
+
+    } catch(e) {
+        btn.textContent = 'ERROR';
+        status.textContent = e.message;
+        console.error('Resolve error:', e);
+    }
+    setTimeout(() => { btn.textContent = 'RESOLVE OUTCOMES'; btn.disabled = false; }, 5000);
 }
 
 async function runAutoScan() {

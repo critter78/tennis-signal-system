@@ -1468,7 +1468,12 @@ def fetch_poly_trades(since_ts=None):
 
         qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
         url = f"{POLY_DATA_API}/activity?{qs}"
-        req_obj = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req_obj = urllib.request.Request(url, headers={
+            "Accept": "application/json",
+            "User-Agent": "python-requests/2.31.0",
+            "Accept-Encoding": "identity",
+            "Connection": "close",
+        })
         with urllib.request.urlopen(req_obj, timeout=15) as resp:
             data = json.loads(resp.read().decode())
 
@@ -1867,11 +1872,17 @@ def api_live_prices():
     Returns a map of slug → {prices: {outcome: price_cents}, volume}."""
     import urllib.request, urllib.parse
 
+    _GAMMA_HEADERS = {
+        "Accept": "application/json",
+        "User-Agent": "python-requests/2.31.0",
+        "Accept-Encoding": "identity",
+        "Connection": "close",
+    }
     def _gamma_price_get(url, params=None, timeout=3):
         if params:
             qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
             url = f"{url}?{qs}"
-        req_obj = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
         with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
 
@@ -1965,11 +1976,17 @@ def api_whales():
     outcomes (comma-sep outcome names), volume (total market volume)."""
     import urllib.request, urllib.parse
 
+    _GAMMA_HEADERS = {
+        "Accept": "application/json",
+        "User-Agent": "python-requests/2.31.0",
+        "Accept-Encoding": "identity",
+        "Connection": "close",
+    }
     def _gamma_whale_get(url, params=None, timeout=8):
         if params:
             qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
             url = f"{url}?{qs}"
-        req_obj = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
         with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
 
@@ -2077,20 +2094,29 @@ def generate_card():
         return jsonify({"error": str(e)}), 500
 
 
-def _run_inline_resolver():
+def _run_inline_resolver(prefetched_markets=None):
     """
     Core outcome resolution logic — reusable by both /resolve route and cron pipeline.
+    prefetched_markets: optional list of raw Gamma API event objects fetched by the browser
+                       (bypasses Cloudflare WAF that blocks datacenter IPs).
     Returns dict with keys: status, message, output.
     """
     import urllib.request, urllib.parse
     import time
 
+    _GAMMA_HEADERS = {
+        "Accept": "application/json",
+        "User-Agent": "python-requests/2.31.0",
+        "Accept-Encoding": "identity",
+        "Connection": "close",
+    }
+
     def _gamma_get(url, params=None, timeout=10):
-        """Fetch JSON from Polymarket Gamma API using urllib (avoids requests recursion bug on Render)."""
+        """Fetch JSON from Polymarket Gamma API using urllib. Falls back gracefully if blocked."""
         if params:
             qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
             url = f"{url}?{qs}"
-        req_obj = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
         with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
     t0 = time.time()
@@ -2131,31 +2157,51 @@ def _run_inline_resolver():
         # NOTE: Do NOT return early here — even if no picks are eligible,
         # Phase 0 still needs to run to resolve BETS (which are independent of picks)
 
-        # Bulk fetch resolved markets from Polymarket (3 API calls)
+        # ── Build resolved markets from pre-fetched data OR server-side API calls ──
         resolved_markets = []
-        for tag in ["tennis", "atp", "wta"]:
-            try:
-                data = _gamma_get(
-                    "https://gamma-api.polymarket.com/events",
-                    params={"tag_slug": tag, "closed": "true", "limit": "100",
-                            "order": "endDate", "ascending": "false"},
-                    timeout=10,
-                )
-                for ev in data:
-                    markets = ev.get("markets", [])
-                    if markets:
-                        for m in markets:
-                            parsed = _parse_resolved_market(m)
-                            if parsed:
-                                if not parsed.get("slug"):
-                                    parsed["slug"] = ev.get("slug", "")
-                                resolved_markets.append(parsed)
-                    else:
-                        parsed = _parse_resolved_market(ev)
+
+        if prefetched_markets:
+            # Browser already fetched from Gamma API (bypasses Cloudflare WAF)
+            output_lines.append(f"Using {len(prefetched_markets)} pre-fetched events from browser")
+            for ev in prefetched_markets:
+                markets = ev.get("markets", [])
+                if markets:
+                    for m in markets:
+                        parsed = _parse_resolved_market(m)
                         if parsed:
+                            if not parsed.get("slug"):
+                                parsed["slug"] = ev.get("slug", "")
                             resolved_markets.append(parsed)
-            except Exception as e:
-                output_lines.append(f"[warn] events/{tag}: {e}")
+                else:
+                    parsed = _parse_resolved_market(ev)
+                    if parsed:
+                        resolved_markets.append(parsed)
+
+        # Fallback: try server-side fetch (may fail with 403 if Cloudflare blocks)
+        if not prefetched_markets:
+            for tag in ["tennis", "atp", "wta"]:
+                try:
+                    data = _gamma_get(
+                        "https://gamma-api.polymarket.com/events",
+                        params={"tag_slug": tag, "closed": "true", "limit": "100",
+                                "order": "endDate", "ascending": "false"},
+                        timeout=10,
+                    )
+                    for ev in data:
+                        markets = ev.get("markets", [])
+                        if markets:
+                            for m in markets:
+                                parsed = _parse_resolved_market(m)
+                                if parsed:
+                                    if not parsed.get("slug"):
+                                        parsed["slug"] = ev.get("slug", "")
+                                    resolved_markets.append(parsed)
+                        else:
+                            parsed = _parse_resolved_market(ev)
+                            if parsed:
+                                resolved_markets.append(parsed)
+                except Exception as e:
+                    output_lines.append(f"[warn] events/{tag}: {e}")
 
         # Deduplicate
         seen = set()
@@ -2167,6 +2213,21 @@ def _run_inline_resolver():
                 unique_resolved.append(rm)
 
         output_lines.append(f"Found {len(unique_resolved)} resolved markets ({time.time()-t0:.1f}s)")
+
+        # Build slug → raw event lookup from prefetched data for individual slug phases
+        _prefetch_slug_cache = {}
+        if prefetched_markets:
+            for ev in prefetched_markets:
+                s = ev.get("slug", "")
+                if s:
+                    _prefetch_slug_cache[s] = ev
+
+        def _get_event_by_slug(slug):
+            """Get event by slug: use prefetch cache if available, else server-side API."""
+            if slug in _prefetch_slug_cache:
+                return [_prefetch_slug_cache[slug]]
+            # Fallback to API (may 403 on Render)
+            return _gamma_get("https://gamma-api.polymarket.com/events", params={"slug": slug}, timeout=8)
 
         # Build fast lookup index: map last-name pairs to resolved markets
         # This replaces the O(n*m) SequenceMatcher loop with O(1) dict lookups
@@ -2258,7 +2319,7 @@ def _run_inline_resolver():
                 slug_resolved_cache = {}  # slug -> parsed resolved market
                 for slug in bet_slugs:
                     try:
-                        events = _gamma_get(f"https://gamma-api.polymarket.com/events", params={"slug": slug}, timeout=8)
+                        events = _get_event_by_slug(slug)
                         if not events:
                             continue
                         ev = events[0] if isinstance(events, list) else events
@@ -2436,7 +2497,7 @@ def _run_inline_resolver():
                     if bet.get("outcome") is not None:
                         continue
                     try:
-                        events = _gamma_get("https://gamma-api.polymarket.com/events", params={"slug": bslug}, timeout=8)
+                        events = _get_event_by_slug(bslug)
                         if not events:
                             continue
                         ev = events[0] if isinstance(events, list) else events
@@ -2503,7 +2564,7 @@ def _run_inline_resolver():
                     continue
                 slugs_already_fetched.add(pslug)
                 try:
-                    events = _gamma_get("https://gamma-api.polymarket.com/events", params={"slug": pslug}, timeout=8)
+                    events = _get_event_by_slug(pslug)
                     if not events:
                         continue
                     ev = events[0] if isinstance(events, list) else events
@@ -2695,7 +2756,7 @@ def _run_inline_resolver():
         for slug in list(unmatched_slugs.keys())[:max_slug_lookups]:
             try:
                 slug_lookups += 1
-                events = _gamma_get("https://gamma-api.polymarket.com/events", params={"slug": slug}, timeout=8)
+                events = _get_event_by_slug(slug)
                 if not events:
                     continue
                 ev = events[0] if isinstance(events, list) else events
@@ -2810,6 +2871,42 @@ def _run_inline_resolver():
         return {"status": "error", "error": str(e)}
 
 
+@app.route("/api/resolve-slugs", methods=["GET"])
+@enable_cors
+def api_resolve_slugs():
+    """Return all slugs needed for resolution so the browser can fetch them."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        slugs = set()
+        # From picks
+        picks = load_picks_jsonl()
+        for p in picks:
+            if p.get("outcome") is not None:
+                continue
+            s = p.get("slug", "")
+            if not s:
+                pl = p.get("poly_link", "")
+                if "/event/" in pl:
+                    s = pl.split("/event/")[-1].split("?")[0].split("/")[0]
+            if s:
+                slugs.add(s)
+        # From bets
+        bets_data = load_bets()
+        bet_list = bets_data.get("bets", []) if isinstance(bets_data, dict) else []
+        for b in bet_list:
+            if b.get("outcome") is not None:
+                continue
+            pl = b.get("poly_link", "")
+            if "/event/" in pl:
+                s = pl.split("/event/")[-1].split("?")[0].split("/")[0]
+                if s:
+                    slugs.add(s)
+        return jsonify({"slugs": sorted(slugs), "count": len(slugs)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/resolve", methods=["POST"])
 @enable_cors
 def resolve_outcomes_route():
@@ -2817,7 +2914,17 @@ def resolve_outcomes_route():
     if not check_admin_cookie():
         return jsonify({"error": "Unauthorized"}), 401
 
-    result = _run_inline_resolver()
+    # Accept pre-fetched market data from browser (bypasses Cloudflare WAF)
+    prefetched = None
+    try:
+        body = request.get_json(silent=True) or {}
+        if "markets" in body:
+            prefetched = body["markets"]
+            logger.info(f"[RESOLVE] Received {len(prefetched)} pre-fetched markets from browser")
+    except Exception:
+        pass
+
+    result = _run_inline_resolver(prefetched_markets=prefetched)
     status_code = 200 if result.get("status") == "success" else 500
     return jsonify(result), status_code
 
