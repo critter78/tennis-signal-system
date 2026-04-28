@@ -181,13 +181,22 @@ def execute_order(client, trade: dict, dry_run: bool = False) -> dict:
         from py_clob_client.order_builder.constants import BUY
         from py_clob_client.clob_types import OrderArgs, PartialCreateOrderOptions
 
+        # Query the market's actual tick_size and neg_risk (prevents order_version_mismatch)
+        tick_size = client.get_tick_size(token_id)
+        neg_risk = client.get_neg_risk(token_id)
+        log(f"  Market params: tick_size={tick_size}, neg_risk={neg_risk}")
+
+        # Round price to match tick_size precision
+        tick_float = float(tick_size)
+        price = round(round(price / tick_float) * tick_float, 4)
+
         order_args = OrderArgs(
             token_id=token_id,
-            price=round(price, 2),
+            price=price,
             size=size,
             side=BUY,
         )
-        options = PartialCreateOrderOptions(tick_size="0.01")
+        options = PartialCreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk)
         order = client.create_and_post_order(order_args, options)
 
         log(f"  CLOB order placed: {order}")
