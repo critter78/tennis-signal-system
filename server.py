@@ -3526,38 +3526,18 @@ def auto_trader_confirm():
         PENDING_TRADES_FILE.write_text(json.dumps(remaining, indent=2))
 
         if confirmed:
-            # Try to execute on Polymarket CLOB
-            exec_result = {"success": False, "error": "execution not attempted"}
-            try:
-                import importlib.util
-                logger.info(f"[AUTO-TRADER] Loading CLOB executor for trade: {confirmed.get('match')} — {confirmed.get('bet_on')}")
-                spec = importlib.util.spec_from_file_location("auto_trader", BASE_DIR / "20_auto_trader.py")
-                at_mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(at_mod)
-                logger.info(f"[AUTO-TRADER] Module loaded, calling execute_clob_order...")
-                exec_result = at_mod.execute_clob_order(confirmed)
-                if exec_result.get("success"):
-                    confirmed["clob_order"] = exec_result.get("order")
-                    confirmed["executed"] = True
-                    logger.info(f"[AUTO-TRADER] CLOB order placed: price={exec_result.get('price')}, size={exec_result.get('size')}, stake={exec_result.get('stake')}")
-                else:
-                    confirmed["executed"] = False
-                    confirmed["exec_error"] = exec_result.get("error", "unknown")
-                    logger.warning(f"[AUTO-TRADER] CLOB order failed: {exec_result.get('error')}")
-            except Exception as e:
-                import traceback
-                confirmed["executed"] = False
-                confirmed["exec_error"] = str(e)
-                logger.warning(f"[AUTO-TRADER] CLOB execution error: {e}\n{traceback.format_exc()}")
+            # Queue for local executor (Render is geo-blocked by Polymarket)
+            confirmed["executed"] = False
+            confirmed["exec_error"] = "awaiting_local_executor"
 
-            # Log to trade log regardless
+            # Log to trade log — local executor will pick this up
             log_path = LOGS_DIR / "paper_trades.jsonl"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with open(log_path, "a") as f:
                 f.write(json.dumps(confirmed) + "\n")
 
-            logger.info(f"[AUTO-TRADER] Confirmed trade: {confirmed.get('match')} — {confirmed.get('bet_on')}")
-            return jsonify({"status": "confirmed", "trade": confirmed, "execution": exec_result})
+            logger.info(f"[AUTO-TRADER] Confirmed trade: {confirmed.get('match')} — {confirmed.get('bet_on')} (queued for local executor)")
+            return jsonify({"status": "confirmed", "trade": confirmed, "execution": {"awaiting": "local_executor"}})
 
         return jsonify({"error": "pending_id not found"}), 404
 
@@ -3643,49 +3623,29 @@ def telegram_webhook():
         if action == "approve":
             telegram_answer_callback(cb_id, "Approving...")
 
-            # Confirm on server (reuse the same logic as the /confirm endpoint)
+            # Remove from pending queue
             remaining = [p for p in pending if p.get("pending_id") != pending_id]
             trade["status"] = "confirmed"
             trade["confirmed_at"] = datetime.utcnow().isoformat() + "Z"
+            trade["executed"] = False  # Awaiting local executor (Render is geo-blocked)
+            trade["telegram_msg_id"] = msg_id  # So local executor can update the message
             PENDING_TRADES_FILE.write_text(json.dumps(remaining, indent=2))
 
-            # Try CLOB execution
-            exec_result = {"success": False, "error": "execution not attempted"}
-            try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location("auto_trader", BASE_DIR / "20_auto_trader.py")
-                at_mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(at_mod)
-                exec_result = at_mod.execute_clob_order(trade)
-                if exec_result.get("success"):
-                    trade["clob_order"] = exec_result.get("order")
-                    trade["executed"] = True
-                else:
-                    trade["executed"] = False
-                    trade["exec_error"] = exec_result.get("error", "unknown")
-            except Exception as e:
-                trade["executed"] = False
-                trade["exec_error"] = str(e)
-
-            # Log to trade history
+            # Log to trade history (local executor will pick this up)
             log_path = LOGS_DIR / "paper_trades.jsonl"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with open(log_path, "a") as f:
                 f.write(json.dumps(trade) + "\n")
 
-            # Update Telegram message
-            if trade.get("executed"):
-                status_text = f"APPROVED by {from_user}\nCLOB order sent — awaiting local executor"
-            else:
-                status_text = f"APPROVED by {from_user}\nCLOB: {trade.get('exec_error', 'pending local executor')}"
-
+            # Update Telegram message — tell user local executor will handle it
+            status_text = f"APPROVED by {from_user}\nAwaiting local executor..."
             if msg_id:
                 telegram_edit(msg_id,
                     f"POLYMARKET TENNIS BETTING SIGNAL\n\n"
                     f"{bet_on}\n{match_name}\n\n"
                     f"Status: {status_text}")
 
-            logger.info(f"[TELEGRAM] Approved: {bet_on} ({match_name})")
+            logger.info(f"[TELEGRAM] Approved: {bet_on} ({match_name}) — queued for local executor")
 
         elif action == "reject":
             telegram_answer_callback(cb_id, "Rejected")
@@ -3732,6 +3692,104 @@ def auto_trader_reset():
         return jsonify({"status": "reset", "message": "All pending trades and history cleared"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auto-trader/approved", methods=["GET"])
+@enable_cors
+def auto_trader_approved():
+    """Return confirmed-but-unexecuted trades for the local executor to pick up."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    log_path = LOGS_DIR / "paper_trades.jsonl"
+    if not log_path.exists():
+        return jsonify({"trades": []})
+
+    trades = []
+    try:
+        with open(log_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                t = json.loads(line)
+                if t.get("status") == "confirmed" and not t.get("executed"):
+                    trades.append(t)
+        return jsonify({"trades": trades})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auto-trader/execution-report", methods=["POST"])
+@enable_cors
+def auto_trader_execution_report():
+    """Local executor reports CLOB execution result. Updates trade log + Telegram."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    body = request.get_json(silent=True) or {}
+    pending_id = body.get("pending_id")
+    success = body.get("success", False)
+    order_data = body.get("order")
+    error_msg = body.get("error", "")
+
+    if not pending_id:
+        return jsonify({"error": "pending_id required"}), 400
+
+    # Update the trade in paper_trades.jsonl
+    log_path = LOGS_DIR / "paper_trades.jsonl"
+    if not log_path.exists():
+        return jsonify({"error": "No trade log found"}), 404
+
+    trades = []
+    updated = False
+    with open(log_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            trades.append(json.loads(line))
+
+    for t in trades:
+        if t.get("pending_id") == pending_id:
+            t["executed"] = success
+            t["executed_at"] = datetime.utcnow().isoformat() + "Z"
+            t["executed_by"] = "local_executor"
+            if success:
+                t["clob_order"] = order_data
+                t.pop("exec_error", None)
+            else:
+                t["exec_error"] = error_msg
+            updated = True
+
+            # Update Telegram message if we have the msg_id
+            tg_msg_id = t.get("telegram_msg_id")
+            bet_on = t.get("bet_on", "?")
+            match_name = t.get("match", "?")
+            if tg_msg_id:
+                if success:
+                    status_text = f"APPROVED\nCLOB order placed by local executor"
+                else:
+                    status_text = f"APPROVED\nLocal executor failed: {error_msg[:80]}"
+                try:
+                    telegram_edit(tg_msg_id,
+                        f"POLYMARKET TENNIS BETTING SIGNAL\n\n"
+                        f"{bet_on}\n{match_name}\n\n"
+                        f"Status: {status_text}")
+                except Exception as e:
+                    logger.warning(f"[EXEC-REPORT] Telegram edit failed: {e}")
+            break
+
+    if not updated:
+        return jsonify({"error": f"Trade {pending_id} not found"}), 404
+
+    # Rewrite the log
+    with open(log_path, "w") as f:
+        for t in trades:
+            f.write(json.dumps(t) + "\n")
+
+    logger.info(f"[EXEC-REPORT] {pending_id}: {'SUCCESS' if success else 'FAILED'}")
+    return jsonify({"ok": True, "updated": True})
 
 
 @app.route("/api/auto-trader/scan", methods=["POST"])
