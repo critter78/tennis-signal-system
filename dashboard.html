@@ -706,7 +706,7 @@ window.PICKS_DATA = [];
 
     <!-- AT Top Stats Bar (unified) -->
     <div class="stats-row at-stats-bar" style="margin-bottom:16px">
-        <div class="stat-card"><div class="label">Mode</div><div class="value amber" id="at-stat-mode">SEMI</div></div>
+        <div class="stat-card"><div class="label">Mode</div><div class="value" id="at-stat-mode"><span style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span></div></div>
         <div class="stat-card"><div class="label">Open Positions</div><div class="value" style="color:#42a5f5" id="at-stat-open">0</div></div>
         <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:#f59e0b" id="at-stat-pending">0</div></div>
         <div class="stat-card"><div class="label">Confirmed</div><div class="value green" id="at-stat-confirmed">0</div></div>
@@ -3844,7 +3844,11 @@ function populateAutoTraderSettings(cfg) {
         mBadge.style.borderColor = mBadge.style.color + '50';
         mBadge.style.background = mBadge.style.color.replace(')', ',0.15)').replace('rgb', 'rgba');
     }
-    if (mStat) mStat.textContent = mode;
+    if (mStat) {
+        const label = mode === 'SEMI' ? 'SEMI-AUTO' : mode;
+        const color = mode === 'SEMI' ? '#d4740a' : mode === 'LIVE' ? '#f44336' : '#4caf50';
+        mStat.innerHTML = `<span style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:${color}25; color:${color}; border:1px solid ${color}50">${label}</span>`;
+    }
     const r = cfg.entry_rules || {};
     const ex = cfg.exit_rules || {};
     const s = cfg.safety || {};
