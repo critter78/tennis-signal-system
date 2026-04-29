@@ -640,6 +640,10 @@ def serve_dashboard(is_shared=False, share_expires=None):
                 # CSS-based hiding — works immediately, no DOM timing issues
                 share_css = """
                 <style id="shared-view-styles">
+                    /* Hide mode switcher — shared view is signals only */
+                    .mode-switcher { display: none !important; }
+                    /* Hide auto-trader app entirely */
+                    #autotrader-app { display: none !important; }
                     /* Hide all tabs except Today's Signals and Players */
                     .tab { display: none !important; }
                     .tab.active, .tab[onclick*="signals"], .tab[onclick*="players"] { display: inline-block !important; cursor: pointer; pointer-events: auto; }
@@ -647,14 +651,16 @@ def serve_dashboard(is_shared=False, share_expires=None):
                     #panel-overview, #panel-mybets, #panel-performance, #panel-accuracy { display: none !important; }
                     /* Hide admin/logout links */
                     a[href*="admin"], a[href*="logout"] { display: none !important; }
-                    /* Hide Place Bet buttons */
-                    .sig-bet-btn { display: none !important; }
+                    /* Hide Place Bet buttons and bet selectors */
+                    .sig-bet-btn, .v5-bet-btn, .v5-bet-selector, .v5-card-foot { display: none !important; }
                     /* Hide LSTM sections */
                     #lstmProgress, #lstmInsights { display: none !important; }
                     /* Hide header subtitle (picks logged, bets placed, resolved counts) */
                     #headerSub { display: none !important; }
                     /* Hide personal stat cards (Bets Placed, Win Rate, Total P&L) via nth-child */
                     .stat-card:nth-child(2), .stat-card:nth-child(4), .stat-card:nth-child(5) { display: none !important; }
+                    /* Hide auto-trade and active bet badges */
+                    .active-tag { display: none !important; }
                 </style>
                 """
 
