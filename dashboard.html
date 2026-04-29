@@ -29,9 +29,7 @@
         .stat-card .value.red { color: #f44336; }
         .stat-card .value.amber { color: #d4740a; }
         .stat-card .value.white { color: #e0e0e0; }
-        .at-stats-bar { flex-wrap: nowrap; gap: 8px; }
-        .at-stats-bar .stat-card { min-width: 0; padding: 10px 12px; }
-        .at-stats-bar .stat-card .value { font-size: 16px; }
+        .at-stats-bar { flex-wrap: wrap; }
 
         .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #2d3139; }
         .tab { padding: 10px 20px; font-size: 12px; font-weight: 600; color: #6c757d; cursor: pointer; letter-spacing: 0.04em; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
@@ -697,13 +695,6 @@ window.PICKS_DATA = [];
 
 <!-- ═══ AUTO-TRADER APP (full-page experience) ═══ -->
 <div id="autotrader-app">
-    <!-- AT Action Buttons -->
-    <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:10px">
-        <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RUN SCAN</button>
-        <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RESET</button>
-        <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:6px 10px; border-radius:6px; font-size:11px; cursor:pointer; font-family:'IBM Plex Mono',monospace">SETTINGS</button>
-    </div>
-
     <!-- AT Top Stats Bar (unified) -->
     <div class="stats-row at-stats-bar" style="margin-bottom:16px">
         <div class="stat-card"><div class="label">Mode</div><div class="value" id="at-stat-mode"><span style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span></div></div>
@@ -821,13 +812,20 @@ window.PICKS_DATA = [];
         </div>
     </div>
 
-    <!-- AT Sub-Tabs -->
-    <div class="at-sub-tabs">
-        <button class="at-sub-tab active" onclick="switchAtTab('dashboard')">My Bets</button>
-        <button class="at-sub-tab" onclick="switchAtTab('pending')">Pending <span id="at-pending-count" style="font-size:9px; background:#f59e0b25; color:#f59e0b; padding:1px 6px; border-radius:8px; font-weight:700; margin-left:4px">0</span></button>
-        <button class="at-sub-tab" onclick="switchAtTab('history')">Trade History</button>
-        <button class="at-sub-tab" onclick="switchAtTab('performance')">Performance</button>
-        <button class="at-sub-tab" onclick="switchAtTab('accuracy')">Model Accuracy</button>
+    <!-- AT Sub-Tabs + Action Buttons -->
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #2d3139; margin-bottom:20px">
+        <div class="at-sub-tabs" style="border-bottom:none; margin-bottom:0">
+            <button class="at-sub-tab active" onclick="switchAtTab('dashboard')">My Bets</button>
+            <button class="at-sub-tab" onclick="switchAtTab('pending')">Pending <span id="at-pending-count" style="font-size:9px; background:#f59e0b25; color:#f59e0b; padding:1px 6px; border-radius:8px; font-weight:700; margin-left:4px">0</span></button>
+            <button class="at-sub-tab" onclick="switchAtTab('history')">Trade History</button>
+            <button class="at-sub-tab" onclick="switchAtTab('performance')">Performance</button>
+            <button class="at-sub-tab" onclick="switchAtTab('accuracy')">Model Accuracy</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; padding-bottom:8px">
+            <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RUN SCAN</button>
+            <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RESET</button>
+            <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:5px 10px; border-radius:6px; font-size:10px; cursor:pointer; font-family:'IBM Plex Mono',monospace">SETTINGS</button>
+        </div>
     </div>
 
     <!-- ── AT DASHBOARD SUB-PANEL ── -->
