@@ -29,6 +29,9 @@
         .stat-card .value.red { color: #f44336; }
         .stat-card .value.amber { color: #d4740a; }
         .stat-card .value.white { color: #e0e0e0; }
+        .at-stats-bar { flex-wrap: nowrap; gap: 8px; }
+        .at-stats-bar .stat-card { min-width: 0; padding: 10px 12px; }
+        .at-stats-bar .stat-card .value { font-size: 16px; }
 
         .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #2d3139; }
         .tab { padding: 10px 20px; font-size: 12px; font-weight: 600; color: #6c757d; cursor: pointer; letter-spacing: 0.04em; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
@@ -711,11 +714,13 @@ window.PICKS_DATA = [];
     </div>
 
     <!-- AT Top Stats Bar (unified) -->
-    <div class="stats-row" style="margin-bottom:16px">
+    <div class="stats-row at-stats-bar" style="margin-bottom:16px">
         <div class="stat-card"><div class="label">Mode</div><div class="value amber" id="at-stat-mode">SEMI</div></div>
         <div class="stat-card"><div class="label">Open Positions</div><div class="value" style="color:#42a5f5" id="at-stat-open">0</div></div>
         <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:#f59e0b" id="at-stat-pending">0</div></div>
         <div class="stat-card"><div class="label">Confirmed</div><div class="value green" id="at-stat-confirmed">0</div></div>
+        <div class="stat-card"><div class="label">Rejected</div><div class="value" style="color:#6c757d" id="at-stat-rejected">0</div></div>
+        <div class="stat-card"><div class="label">Kill Switch</div><div class="value" style="color:#4caf50" id="at-stat-kill">OFF</div></div>
         <div class="stat-card"><div class="label">Total Invested</div><div class="value white" id="at-dash-invested">$0</div></div>
         <div class="stat-card"><div class="label">Unrealized P&L</div><div class="value" id="at-dash-unrealized" style="color:#6c757d">$0</div></div>
         <div class="stat-card"><div class="label">Realized P&L</div><div class="value" id="at-dash-realized" style="color:#6c757d">$0</div></div>
