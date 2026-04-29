@@ -3627,26 +3627,27 @@ function populateAutoTraderSettings(cfg) {
     const ex = cfg.exit_rules || {};
     const s = cfg.safety || {};
     const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-    setVal('at-min-edge', r.min_edge || 10);
-    setVal('at-min-prob', r.min_model_prob || 55);
-    setVal('at-min-gap', r.min_gap || 5);
-    setVal('at-bankroll', r.bankroll || 50);
-    setVal('at-max-stake', r.max_stake_per_bet || 10);
-    setVal('at-min-consensus', r.min_consensus || 3);
-    setVal('at-min-volume', r.min_volume || 0);
+    const v = (x, d) => x != null ? x : d;  // allows 0
+    setVal('at-min-edge', v(r.min_edge, 10));
+    setVal('at-min-prob', v(r.min_model_prob, 55));
+    setVal('at-min-gap', v(r.min_gap, 5));
+    setVal('at-bankroll', v(r.bankroll, 50));
+    setVal('at-max-stake', v(r.max_stake_per_bet, 10));
+    setVal('at-min-consensus', v(r.min_consensus, 3));
+    setVal('at-min-volume', v(r.min_volume, 0));
     const ecSel = document.getElementById('at-edge-conf');
     if (ecSel) { const ec = (r.edge_conf || ['ALL']); ecSel.value = Array.isArray(ec) ? ec[0] : ec; }
-    setVal('at-kelly', r.kelly_fraction || 0.25);
-    setVal('at-flat-wager', r.flat_wager || 5);
+    setVal('at-kelly', v(r.kelly_fraction, 0.25));
+    setVal('at-flat-wager', v(r.flat_wager, 5));
     const kellyToggle = document.getElementById('at-kelly-toggle');
     if (kellyToggle) { kellyToggle.checked = r.use_kelly !== false; toggleKellyMode(); }
-    setVal('at-max-daily', r.max_daily_bets || 10);
-    setVal('at-loss-limit', s.daily_loss_limit || 200);
-    setVal('at-max-exposure', s.max_total_exposure || 500);
-    setVal('at-stop-loss', ex.stop_loss_pct || 15);
-    setVal('at-tp1', ex.take_profit_1_price || 85);
-    setVal('at-tp2', ex.take_profit_2_price || 95);
-    setVal('at-trail', ex.trailing_stop_pct || 8);
+    setVal('at-max-daily', v(r.max_daily_bets, 10));
+    setVal('at-loss-limit', v(s.daily_loss_limit, 200));
+    setVal('at-max-exposure', v(s.max_total_exposure, 500));
+    setVal('at-stop-loss', v(ex.stop_loss_pct, 15));
+    setVal('at-tp1', v(ex.take_profit_1_price, 85));
+    setVal('at-tp2', v(ex.take_profit_2_price, 95));
+    setVal('at-trail', v(ex.trailing_stop_pct, 8));
 
     const killEl = document.getElementById('at-stat-kill');
     if (killEl) {
