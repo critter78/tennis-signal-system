@@ -3889,7 +3889,7 @@ async function refreshPendingTrades() {
 }
 
 async function confirmTrade(pendingId) {
-    if (!confirm('Confirm this trade? This will execute a BUY order on Polymarket.')) return;
+    if (!confirm('Confirm this trade? The local executor will place a BUY order on Polymarket.')) return;
     try {
         const res = await fetch('/api/auto-trader/confirm', {
             method: 'POST',
@@ -3904,7 +3904,9 @@ async function confirmTrade(pendingId) {
             await loadAutoTraderHistory();
             // Show execution result
             const exec = data.execution || {};
-            if (exec.success) {
+            if (exec.awaiting === 'local_executor') {
+                alert('Trade confirmed — queued for local executor.\nMake sure the executor is running on your Mac.');
+            } else if (exec.success) {
                 alert(`ORDER PLACED on Polymarket!\nPrice: ${(exec.price*100).toFixed(0)}c | Size: ${exec.size} shares | Stake: $${exec.stake}`);
             } else {
                 const trade = data.trade || {};
