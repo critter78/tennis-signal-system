@@ -2482,9 +2482,10 @@ function renderSignals() {
     latest = latest.filter(p => p.outcome === null || p.outcome === undefined);
 
     // Apply filters
-    if (filterType === 'edge') latest = latest.filter(p => p.has_edge);
+    if (filterType === 'edge') latest = latest.filter(p => p.has_edge && p.market_type !== 'outright');
     else if (filterType === 'outright') latest = latest.filter(p => p.market_type === 'outright');
     else if (filterType === 'h2h') latest = latest.filter(p => p.market_type === 'h2h');
+    else latest = latest.filter(p => p.market_type !== 'outright');  // default: hide outrights
     if (filterSurface !== 'all') latest = latest.filter(p => p.surface === filterSurface);
 
     // Sort
