@@ -416,7 +416,7 @@ def fetch_clob_price(token_id: str, clob_url: str = "https://clob.polymarket.com
 # ─── CLOB Order Execution ──────────────────────────────────────────────────
 
 def get_clob_client():
-    """Initialize Polymarket CLOB client from .env credentials."""
+    """Initialize Polymarket CLOB V2 client from .env credentials."""
     try:
         from dotenv import load_dotenv
         load_dotenv(BASE_DIR / ".env")
@@ -435,8 +435,7 @@ def get_clob_client():
         return None
 
     try:
-        from py_clob_client.client import ClobClient
-        from py_clob_client.clob_types import ApiCreds
+        from py_clob_client_v2 import ClobClient, ApiCreds
 
         creds = ApiCreds(
             api_key=api_key,
@@ -444,22 +443,14 @@ def get_clob_client():
             api_passphrase=api_passphrase,
         )
 
-        if sig_type == 0:
-            client = ClobClient(
-                host="https://clob.polymarket.com",
-                chain_id=137,
-                key=pk,
-                creds=creds,
-            )
-        else:
-            client = ClobClient(
-                host="https://clob.polymarket.com",
-                chain_id=137,
-                key=pk,
-                creds=creds,
-                signature_type=sig_type,
-                funder=proxy_addr,
-            )
+        client = ClobClient(
+            host="https://clob.polymarket.com",
+            chain_id=137,
+            key=pk,
+            creds=creds,
+            signature_type=sig_type,
+            funder=proxy_addr if proxy_addr else None,
+        )
         return client
     except Exception as e:
         print(f"[clob] Client init failed: {e}", file=sys.stderr)
@@ -585,26 +576,26 @@ def execute_clob_order(trade: dict) -> dict:
         return {"success": False, "error": f"Invalid size: stake=${stake}, price={price}"}
 
     try:
-        from py_clob_client.order_builder.constants import BUY
-        from py_clob_client.clob_types import OrderArgs, PartialCreateOrderOptions
+        from py_clob_client_v2 import OrderArgsV2, PartialCreateOrderOptions, OrderType
+        from py_clob_client_v2.order_utils import Side
 
-        # Query market's actual tick_size and neg_risk (prevents order_version_mismatch)
+        # Query market's actual tick_size
         tick_size = client.get_tick_size(token_id)
-        neg_risk = client.get_neg_risk(token_id)
-        print(f"[CLOB] Market params: tick_size={tick_size}, neg_risk={neg_risk}", file=sys.stderr)
+        print(f"[CLOB V2] Market params: tick_size={tick_size}", file=sys.stderr)
 
         # Round price to match tick_size precision
         tick_float = float(tick_size)
         price = round(round(price / tick_float) * tick_float, 4)
 
-        order_args = OrderArgs(
+        # V2 OrderArgs — no more fee_rate_bps in the order struct
+        order_args = OrderArgsV2(
             token_id=token_id,
             price=price,
             size=size,
-            side=BUY,
+            side=Side.BUY,
         )
-        options = PartialCreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk)
-        order = client.create_and_post_order(order_args, options)
+        options = PartialCreateOrderOptions(tick_size=tick_size)
+        order = client.create_and_post_order(order_args, options, order_type=OrderType.GTC)
 
         print(f"[CLOB] Order placed: {order}", file=sys.stderr)
         return {
