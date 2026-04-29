@@ -697,20 +697,11 @@ window.PICKS_DATA = [];
 
 <!-- ═══ AUTO-TRADER APP (full-page experience) ═══ -->
 <div id="autotrader-app">
-    <!-- AT Header -->
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px">
-        <div>
-            <h2 style="margin:0; font-size:18px; color:#e0e0e0; display:flex; align-items:center; gap:8px">
-                AUTO-TRADER
-                <span id="at-mode-badge" style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span>
-            </h2>
-            <p style="color:#8b949e; font-size:11px; margin:4px 0 0 0">Semi-automatic trade execution — system finds trades, you confirm before execution</p>
-        </div>
-        <div style="display:flex; gap:8px; align-items:center">
-            <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RUN SCAN</button>
-            <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RESET</button>
-            <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:6px 10px; border-radius:6px; font-size:11px; cursor:pointer; font-family:'IBM Plex Mono',monospace">SETTINGS</button>
-        </div>
+    <!-- AT Action Buttons -->
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:10px">
+        <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RUN SCAN</button>
+        <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RESET</button>
+        <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:6px 10px; border-radius:6px; font-size:11px; cursor:pointer; font-family:'IBM Plex Mono',monospace">SETTINGS</button>
     </div>
 
     <!-- AT Top Stats Bar (unified) -->
