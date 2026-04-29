@@ -159,6 +159,7 @@
         .sig-card { background: #1a1d27; border-radius: 10px; border: 1px solid #2d3139; padding: 0; overflow: hidden; transition: border-color 0.2s; box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 8px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04); }
         .sig-card:hover { border-color: #d4740a; }
         .sig-card.is-bet { border-color: #e65100; border-width: 2px; }
+        .sig-card.is-auto { border-color: #1565c0; border-width: 2px; }
         /* v5.1 Card Header */
         .card-hdr { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 14px; background: linear-gradient(135deg, #1a1d27 0%, #22252f 100%); border-bottom: 1px solid #2a2d37; }
         .hdr-names { font-size: 15px; font-weight: 700; color: #fff; background: linear-gradient(180deg, #10121a 0%, #161922 100%); border: 1px solid #2a2d37; border-radius: 5px; padding: 8px 16px; margin-bottom: 4px; box-shadow: inset 0 1px 4px rgba(0,0,0,0.3), inset 0 0 10px rgba(196,135,58,0.15), inset 0 -1px 4px rgba(196,135,58,0.10), inset 1px 0 4px rgba(196,135,58,0.08), inset -1px 0 4px rgba(196,135,58,0.08), 0 1px 0 rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 2px; }
@@ -708,32 +709,16 @@ window.PICKS_DATA = [];
         </div>
     </div>
 
-    <!-- AT Top Stats Bar -->
-    <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:16px">
-        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
-            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Mode</div>
-            <div id="at-stat-mode" style="font-size:15px; font-weight:800; color:#d4740a; margin-top:2px">SEMI</div>
-        </div>
-        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
-            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Open</div>
-            <div id="at-stat-open" style="font-size:15px; font-weight:800; color:#42a5f5; margin-top:2px">0</div>
-        </div>
-        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
-            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Pending</div>
-            <div id="at-stat-pending" style="font-size:15px; font-weight:800; color:#f59e0b; margin-top:2px">0</div>
-        </div>
-        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
-            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Confirmed</div>
-            <div id="at-stat-confirmed" style="font-size:15px; font-weight:800; color:#4caf50; margin-top:2px">0</div>
-        </div>
-        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
-            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Rejected</div>
-            <div id="at-stat-rejected" style="font-size:15px; font-weight:800; color:#6c757d; margin-top:2px">0</div>
-        </div>
-        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
-            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Kill Switch</div>
-            <div id="at-stat-kill" style="font-size:15px; font-weight:800; color:#4caf50; margin-top:2px">OFF</div>
-        </div>
+    <!-- AT Top Stats Bar (unified) -->
+    <div class="stats-row" style="margin-bottom:16px">
+        <div class="stat-card"><div class="label">Mode</div><div class="value amber" id="at-stat-mode">SEMI</div></div>
+        <div class="stat-card"><div class="label">Open Positions</div><div class="value" style="color:#42a5f5" id="at-stat-open">0</div></div>
+        <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:#f59e0b" id="at-stat-pending">0</div></div>
+        <div class="stat-card"><div class="label">Confirmed</div><div class="value green" id="at-stat-confirmed">0</div></div>
+        <div class="stat-card"><div class="label">Total Invested</div><div class="value white" id="at-dash-invested">$0</div></div>
+        <div class="stat-card"><div class="label">Unrealized P&L</div><div class="value" id="at-dash-unrealized" style="color:#6c757d">$0</div></div>
+        <div class="stat-card"><div class="label">Realized P&L</div><div class="value" id="at-dash-realized" style="color:#6c757d">$0</div></div>
+        <div class="stat-card"><div class="label">Win Rate</div><div class="value" id="at-dash-winrate" style="color:#6c757d">—</div></div>
     </div>
 
     <!-- Settings Panel (hidden by default) -->
@@ -841,10 +826,11 @@ window.PICKS_DATA = [];
 
     <!-- AT Sub-Tabs -->
     <div class="at-sub-tabs">
-        <button class="at-sub-tab active" onclick="switchAtTab('dashboard')">Dashboard</button>
+        <button class="at-sub-tab active" onclick="switchAtTab('dashboard')">My Bets</button>
         <button class="at-sub-tab" onclick="switchAtTab('pending')">Pending <span id="at-pending-count" style="font-size:9px; background:#f59e0b25; color:#f59e0b; padding:1px 6px; border-radius:8px; font-weight:700; margin-left:4px">0</span></button>
         <button class="at-sub-tab" onclick="switchAtTab('history')">Trade History</button>
         <button class="at-sub-tab" onclick="switchAtTab('performance')">Performance</button>
+        <button class="at-sub-tab" onclick="switchAtTab('accuracy')">Model Accuracy</button>
     </div>
 
     <!-- ── AT DASHBOARD SUB-PANEL ── -->
@@ -863,25 +849,7 @@ window.PICKS_DATA = [];
                 <div style="text-align:center; padding:40px 0; color:#6c757d; font-size:12px">No open positions</div>
             </div>
         </div>
-        <!-- Quick P&L Summary -->
-        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:20px">
-            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:12px; text-align:center">
-                <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Total Invested</div>
-                <div id="at-dash-invested" style="font-size:18px; font-weight:800; color:#e0e0e0; margin-top:4px">$0</div>
-            </div>
-            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:12px; text-align:center">
-                <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Unrealized P&L</div>
-                <div id="at-dash-unrealized" style="font-size:18px; font-weight:800; color:#6c757d; margin-top:4px">$0</div>
-            </div>
-            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:12px; text-align:center">
-                <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Realized P&L</div>
-                <div id="at-dash-realized" style="font-size:18px; font-weight:800; color:#6c757d; margin-top:4px">$0</div>
-            </div>
-            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:12px; text-align:center">
-                <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Win Rate</div>
-                <div id="at-dash-winrate" style="font-size:18px; font-weight:800; color:#6c757d; margin-top:4px">—</div>
-            </div>
-        </div>
+        <!-- P&L stats are now in the top unified stats bar -->
         <!-- Recent Activity -->
         <div>
             <h3 style="margin:0 0 10px 0; font-size:13px; color:#e0e0e0">RECENT ACTIVITY</h3>
@@ -954,6 +922,32 @@ window.PICKS_DATA = [];
             <div class="chart-card"><h3>ENTRY PRICE DISTRIBUTION</h3><canvas id="atChartEntryDist" height="140"></canvas></div>
         </div>
     </div>
+    <!-- ── AT MODEL ACCURACY SUB-PANEL ── -->
+    <div class="at-sub-panel" id="at-panel-accuracy">
+        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:8px; padding:14px 16px; margin-bottom:16px; display:flex; align-items:center; gap:10px">
+            <span style="font-size:16px">🧠</span>
+            <div>
+                <div style="font-size:12px; font-weight:700; color:#e0e0e0">SHARED MODEL</div>
+                <div style="font-size:10px; color:#888">The LSTM model learns from ALL resolved trades — both manual and auto-trader. Same model powers both sections.</div>
+            </div>
+        </div>
+        <!-- Clone of LSTM Training Progress -->
+        <div id="atLstmProgress" class="chart-card" style="margin-bottom:20px"></div>
+        <!-- Clone of LSTM Insights -->
+        <div id="atLstmInsights" class="chart-card" style="margin-bottom:20px"></div>
+        <div class="grid-2">
+            <div class="chart-card"><h3>CALIBRATION — MODEL PROB vs ACTUAL WIN RATE</h3><canvas id="atChartCalib"></canvas></div>
+            <div class="chart-card"><h3>MODEL vs MARKET PRICING</h3><canvas id="atChartModelMarket"></canvas></div>
+        </div>
+        <div class="chart-card" style="margin-bottom:20px">
+            <h3>ROLLING WIN RATE TREND (20-PICK WINDOW)</h3>
+            <canvas id="atChartWinRateTrend" height="140"></canvas>
+        </div>
+        <div class="grid-2">
+            <div class="chart-card"><h3>ACCURACY BY RANKING TIER</h3><canvas id="atChartRankTier"></canvas></div>
+            <div class="chart-card"><h3>EDGE ACCURACY — DID HIGH-EDGE PICKS WIN MORE?</h3><canvas id="atChartEdgeAcc"></canvas></div>
+        </div>
+    </div>
 </div><!-- end #autotrader-app -->
 
 <script>
@@ -985,6 +979,7 @@ function switchAtTab(name) {
     document.getElementById('at-panel-' + name).classList.add('active');
     if (name === 'performance') renderAtPerformance();
     if (name === 'history') renderAtHistoryView();
+    if (name === 'accuracy') cloneModelAccuracyToAT();
 }
 
 // ─── AT VIEW TOGGLE (table/cards) ───
@@ -1005,6 +1000,16 @@ function switchTab(name) {
     document.getElementById('panel-' + name).classList.add('active');
     document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
 }
+
+// ─── AUTO-TRADER STATE (early declaration for cross-section use) ───
+var _atTradeHistory = [];
+var _atPollInterval = null;
+var _atPricePollInterval = null;
+var _atConfig = {};
+var _atLivePrices = {};
+var _atRejectedCount = 0;
+var _atPerfCharts = {};
+var _atAccuracyCloned = false;
 
 // ─── DATA PROCESSING ───
 const picks = window.PICKS_DATA || [];
@@ -1098,6 +1103,18 @@ let myBets = JSON.parse(localStorage.getItem('tennis_all_bets') || '[]');
         if (typeof renderMyBets === 'function') renderMyBets();
         if (typeof renderActiveBetCards === 'function') renderActiveBetCards();
     } catch(e) { console.warn('Bet sync skipped:', e); }
+})();
+
+// Prefetch auto-trader history for badges on signal cards
+(async function prefetchAtHistory() {
+    try {
+        const res = await fetch('/api/auto-trader/history');
+        if (res.ok) {
+            const data = await res.json();
+            _atTradeHistory = data.trades || [];
+            if (typeof renderSignals === 'function') renderSignals();
+        }
+    } catch(e) { /* AT history not available yet */ }
 })();
 
 const resolved = picks.filter(p => p.outcome !== null && p.outcome !== undefined);
@@ -2758,6 +2775,7 @@ function renderSignals() {
     latest.forEach(s => {
         const edge = Math.abs(s.edge || 0);
         const isBet = myBets.some(b => b.match === s.match);
+        const isAutoTrade = _atTradeHistory.some(t => t.status === 'confirmed' && t.match === s.match);
 
         // Edge tier badge
         let tierBadge = '';
@@ -2892,12 +2910,13 @@ function renderSignals() {
         const dateStr = s.logged_at ? new Date(s.logged_at).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '';
 
         html += `
-        <div class="sig-card ${isBet ? 'is-bet' : ''}" id="${cardId}">
+        <div class="sig-card ${isBet ? 'is-bet' : ''} ${isAutoTrade && !isBet ? 'is-auto' : ''}" id="${cardId}">
             <!-- HEADER with plaque names -->
             <div class="card-hdr">
                 <div>
                     <div class="hdr-names"><span class="pa player-link" data-player="${s.player_a||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_a||''}</span><span class="pb player-link" data-player="${s.player_b||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_b||''}</span></div>
                     ${isBet ? '<span class="active-tag">ACTIVE BET</span>' : ''}
+                    ${isAutoTrade ? '<span class="active-tag" style="background:#1565c0">AUTO-TRADE</span>' : ''}
                 </div>
                 <div class="hdr-right">
                     <div class="hdr-tourney">${tourney || ''} ${surface ? '<span class="hdr-surface" style="color:'+sfcColor+'">| '+surface+'</span>' : ''}</div>
@@ -3766,8 +3785,6 @@ function goToPlayerCard(name) {
 
 // ─── AUTO-TRADER ────────────────────────────────────────────────────────────
 
-let _atRejectedCount = 0;
-
 function toggleAutoTraderSettings() {
     const p = document.getElementById('at-settings-panel');
     p.style.display = p.style.display === 'none' ? 'block' : 'none';
@@ -3794,10 +3811,7 @@ function toggleKellyMode() {
     }
 }
 
-let _atPollInterval = null;
-let _atPricePollInterval = null;
-let _atTradeHistory = [];
-let _atConfig = {};
+// (variables declared early — see top of script)
 
 async function loadAutoTrader() {
     try {
@@ -3966,8 +3980,6 @@ function renderAtDashboard() {
 }
 
 // ─── OPEN POSITIONS WITH LIVE PRICES ───
-let _atLivePrices = {};
-
 function renderOpenPositions(openTrades) {
     const container = document.getElementById('at-open-positions');
     if (!openTrades || !openTrades.length) {
@@ -4143,8 +4155,6 @@ function renderAtHistoryView() {
 }
 
 // ─── AT PERFORMANCE CHARTS ───
-let _atPerfCharts = {};
-
 function renderAtPerformance() {
     const trades = _atTradeHistory.filter(t => t.status === 'confirmed');
     const closed = trades.filter(t => t.outcome === 'win' || t.outcome === 'loss');
@@ -4285,6 +4295,43 @@ function renderAtSignalQualityChart(trades) {
             ]
         },
         options: { responsive: true, plugins: { legend: { labels: { color: '#6c757d', font: { size: 10 } } } }, scales: { x: { title: { display: true, text: 'Model Prob %', color: '#6c757d', font: { size: 10 } }, ticks: { color: '#6c757d', font: { size: 9 } }, grid: { color: '#1e2130' } }, y: { title: { display: true, text: 'Entry Price (c)', color: '#6c757d', font: { size: 10 } }, ticks: { color: '#6c757d', font: { size: 9 } }, grid: { color: '#1e2130' } } } }
+    });
+}
+
+// ─── CLONE MODEL ACCURACY TO AT SECTION ───
+function cloneModelAccuracyToAT() {
+    // Clone the LSTM progress & insights HTML
+    const srcProgress = document.getElementById('lstmProgress');
+    const dstProgress = document.getElementById('atLstmProgress');
+    if (srcProgress && dstProgress && dstProgress.innerHTML === '') {
+        dstProgress.innerHTML = srcProgress.innerHTML;
+    }
+    const srcInsights = document.getElementById('lstmInsights');
+    const dstInsights = document.getElementById('atLstmInsights');
+    if (srcInsights && dstInsights && dstInsights.innerHTML === '') {
+        dstInsights.innerHTML = srcInsights.innerHTML;
+    }
+
+    if (_atAccuracyCloned) return;
+    _atAccuracyCloned = true;
+
+    // Clone the charts (same data, new canvas IDs)
+    const chartPairs = [
+        ['chartCalib', 'atChartCalib'],
+        ['chartModelMarket', 'atChartModelMarket'],
+        ['chartWinRateTrend', 'atChartWinRateTrend'],
+        ['chartRankTier', 'atChartRankTier'],
+        ['chartEdgeAcc', 'atChartEdgeAcc'],
+    ];
+    chartPairs.forEach(([srcId, dstId]) => {
+        const srcCanvas = document.getElementById(srcId);
+        const dstCanvas = document.getElementById(dstId);
+        if (!srcCanvas || !dstCanvas) return;
+        const srcChart = Chart.getChart(srcCanvas);
+        if (!srcChart) return;
+        // Clone config and data
+        const cfg = JSON.parse(JSON.stringify(srcChart.config));
+        new Chart(dstCanvas, cfg);
     });
 }
 
