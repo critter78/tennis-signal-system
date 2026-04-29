@@ -435,6 +435,67 @@
         .c-good { color:#4caf50; } .c-avg { color:#ffd740; } .c-poor { color:#f44336; }
         .c-fresh { color:#4caf50; } .c-mod { color:#ffd740; } .c-heavy { color:#ff7043; }
         .c-slam-w { color:#ffd740; } .c-slam-f { color:#ce93d8; } .c-slam-sf { color:#90caf9; } .c-slam-qf { color:#a5d6a7; }
+
+        /* ── TOP-LEVEL MODE SWITCHER ── */
+        .mode-switcher { display:flex; margin-bottom:20px; background:#0d1117; border:1px solid #2d3139; border-radius:8px; overflow:hidden; }
+        .mode-btn { flex:1; padding:12px 20px; text-align:center; font-size:13px; font-weight:700; letter-spacing:0.06em; color:#6c757d; cursor:pointer; transition:all 0.2s; border:none; background:transparent; font-family:'IBM Plex Mono',monospace; position:relative; }
+        .mode-btn:first-child { border-right:1px solid #2d3139; }
+        .mode-btn:hover { color:#e0e0e0; background:#1a1d27; }
+        .mode-btn.active { color:#d4740a; background:linear-gradient(180deg,#1a1d27 0%,#1f1a12 100%); }
+        .mode-btn.active::after { content:''; position:absolute; bottom:0; left:15%; right:15%; height:2px; background:#d4740a; border-radius:2px 2px 0 0; }
+        .mode-btn .mode-icon { font-size:16px; margin-right:6px; }
+        .mode-btn .mode-sub { font-size:9px; color:#555; font-weight:400; display:block; margin-top:2px; }
+        .mode-btn.active .mode-sub { color:#d4740a80; }
+
+        /* ── AUTO-TRADER APP ── */
+        #autotrader-app { display:none; }
+        #autotrader-app.active { display:block; }
+        .at-sub-tabs { display:flex; gap:0; margin-bottom:20px; border-bottom:2px solid #2d3139; }
+        .at-sub-tab { padding:10px 20px; font-size:12px; font-weight:600; color:#6c757d; cursor:pointer; letter-spacing:0.04em; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.2s; font-family:'IBM Plex Mono',monospace; background:none; border-left:none; border-right:none; border-top:none; }
+        .at-sub-tab:hover { color:#e0e0e0; }
+        .at-sub-tab.active { color:#d4740a; border-bottom-color:#d4740a; }
+        .at-sub-panel { display:none; }
+        .at-sub-panel.active { display:block; }
+
+        /* AT view toggle */
+        .at-view-toggle { display:flex; gap:0; border:1px solid #2d3139; border-radius:4px; overflow:hidden; }
+        .at-view-btn { padding:5px 12px; font-size:10px; font-weight:600; color:#6c757d; cursor:pointer; background:#1a1d27; border:none; font-family:'IBM Plex Mono',monospace; transition:all 0.15s; }
+        .at-view-btn:not(:last-child) { border-right:1px solid #2d3139; }
+        .at-view-btn:hover { color:#e0e0e0; }
+        .at-view-btn.active { color:#d4740a; background:#22201a; }
+
+        /* AT trade cards */
+        .at-trade-card { background:#0d1117; border:1px solid #2a2d37; border-radius:8px; overflow:hidden; transition:border-color 0.2s; }
+        .at-trade-card:hover { border-color:#d4740a60; }
+        .at-trade-card .at-tc-header { display:flex; justify-content:space-between; align-items:flex-start; padding:12px 14px; border-bottom:1px solid #1e2130; }
+        .at-trade-card .at-tc-match { font-size:13px; font-weight:700; color:#e0e0e0; }
+        .at-trade-card .at-tc-pick { font-size:11px; color:#d4740a; font-weight:700; margin-top:3px; }
+        .at-trade-card .at-tc-status { font-size:10px; font-weight:700; padding:3px 8px; border-radius:4px; }
+        .at-trade-card .at-tc-body { padding:10px 14px; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+        .at-trade-card .at-tc-stat { text-align:center; }
+        .at-trade-card .at-tc-stat .tcs-label { font-size:8px; color:#6c757d; text-transform:uppercase; letter-spacing:0.04em; }
+        .at-trade-card .at-tc-stat .tcs-value { font-size:14px; font-weight:700; margin-top:2px; }
+        .at-trade-card .at-tc-footer { padding:8px 14px; border-top:1px solid #1e2130; display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#555; }
+
+        /* AT open position live card */
+        .at-open-card { background:#0d1117; border:1px solid #2a2d37; border-radius:8px; padding:14px; border-left:3px solid #4caf50; }
+        .at-open-card.losing { border-left-color:#f44336; }
+        .at-open-card .at-oc-row { display:flex; justify-content:space-between; align-items:center; }
+        .at-open-card .at-oc-match { font-size:13px; font-weight:700; color:#e0e0e0; }
+        .at-open-card .at-oc-pick { font-size:11px; color:#d4740a; font-weight:600; }
+        .at-open-card .at-oc-live { display:flex; align-items:center; gap:6px; }
+        .at-open-card .at-oc-price { font-size:18px; font-weight:800; }
+        .at-open-card .at-oc-pnl { font-size:12px; font-weight:700; }
+        .at-open-card .at-oc-meta { display:flex; gap:16px; margin-top:8px; font-size:10px; color:#888; }
+
+        @media (max-width: 600px) {
+            .mode-switcher { border-radius:6px; }
+            .mode-btn { padding:10px 12px; font-size:11px; }
+            .mode-btn .mode-sub { font-size:8px; }
+            .at-sub-tabs { overflow-x:auto; white-space:nowrap; }
+            .at-sub-tab { padding:8px 14px; font-size:10px; flex-shrink:0; }
+            .at-trade-card .at-tc-body { grid-template-columns:repeat(2,1fr); }
+        }
     </style>
 </head>
 <body>
@@ -461,6 +522,20 @@ window.PICKS_DATA = [];
     </div>
 </div>
 
+<!-- TOP-LEVEL MODE SWITCHER -->
+<div class="mode-switcher">
+    <button class="mode-btn active" onclick="switchMode('signals')">
+        <span class="mode-icon">📊</span> SIGNALS DASHBOARD
+        <span class="mode-sub">Analysis · Bets · Performance</span>
+    </button>
+    <button class="mode-btn" onclick="switchMode('autotrader')">
+        <span class="mode-icon">⚡</span> AUTO-TRADER
+        <span class="mode-sub">Execution · Positions · P&L</span>
+    </button>
+</div>
+
+<!-- ═══ SIGNALS DASHBOARD MODE ═══ -->
+<div id="signals-mode">
 <div class="stats-row" id="statsRow"></div>
 
 <div class="tabs">
@@ -470,7 +545,6 @@ window.PICKS_DATA = [];
     <div class="tab" onclick="switchTab('performance')">Performance</div>
     <div class="tab" onclick="switchTab('accuracy')">Model Accuracy</div>
     <div class="tab" onclick="switchTab('players'); loadPlayerCards();">Players</div>
-    <div class="tab" onclick="switchTab('autotrader'); loadAutoTrader();" style="color:#d4740a80">Auto-Trader</div>
 </div>
 
 <!-- SIGNALS -->
@@ -613,33 +687,43 @@ window.PICKS_DATA = [];
     </div>
 </div>
 
-<!-- AUTO-TRADER -->
-<div class="panel" id="panel-autotrader">
+<!-- close signals-mode wrapper -->
+</div><!-- end #signals-mode -->
+
+<!-- ═══ AUTO-TRADER APP (full-page experience) ═══ -->
+<div id="autotrader-app">
+    <!-- AT Header -->
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px">
         <div>
-            <h2 style="margin:0; font-size:18px; color:#e0e0e0">AUTO-TRADER</h2>
+            <h2 style="margin:0; font-size:18px; color:#e0e0e0; display:flex; align-items:center; gap:8px">
+                AUTO-TRADER
+                <span id="at-mode-badge" style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span>
+            </h2>
             <p style="color:#8b949e; font-size:11px; margin:4px 0 0 0">Semi-automatic trade execution — system finds trades, you confirm before execution</p>
         </div>
         <div style="display:flex; gap:8px; align-items:center">
-            <span id="at-mode-badge" style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span>
-            <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px">RUN SCAN</button>
-            <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px">RESET</button>
-            <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:6px 10px; border-radius:6px; font-size:11px; cursor:pointer">SETTINGS</button>
+            <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RUN SCAN</button>
+            <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RESET</button>
+            <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:6px 10px; border-radius:6px; font-size:11px; cursor:pointer; font-family:'IBM Plex Mono',monospace">SETTINGS</button>
         </div>
     </div>
 
-    <!-- Stats Bar -->
-    <div id="at-stats-bar" style="display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:16px">
+    <!-- AT Top Stats Bar -->
+    <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:16px">
         <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
             <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Mode</div>
             <div id="at-stat-mode" style="font-size:15px; font-weight:800; color:#d4740a; margin-top:2px">SEMI</div>
+        </div>
+        <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Open</div>
+            <div id="at-stat-open" style="font-size:15px; font-weight:800; color:#42a5f5; margin-top:2px">0</div>
         </div>
         <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
             <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Pending</div>
             <div id="at-stat-pending" style="font-size:15px; font-weight:800; color:#f59e0b; margin-top:2px">0</div>
         </div>
         <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
-            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Confirmed Today</div>
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Confirmed</div>
             <div id="at-stat-confirmed" style="font-size:15px; font-weight:800; color:#4caf50; margin-top:2px">0</div>
         </div>
         <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:10px; text-align:center">
@@ -750,17 +834,65 @@ window.PICKS_DATA = [];
             </div>
         </div>
         <div style="display:flex; gap:8px; margin-top:12px">
-            <button onclick="saveAutoTraderConfig()" style="background:#4caf50; color:#fff; border:none; padding:6px 16px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer">SAVE CONFIG</button>
-            <button onclick="toggleAutoTraderSettings()" style="background:#333; color:#aaa; border:1px solid #444; padding:6px 16px; border-radius:4px; font-size:11px; cursor:pointer">CLOSE</button>
+            <button onclick="saveAutoTraderConfig()" style="background:#4caf50; color:#fff; border:none; padding:6px 16px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; font-family:'IBM Plex Mono',monospace">SAVE CONFIG</button>
+            <button onclick="toggleAutoTraderSettings()" style="background:#333; color:#aaa; border:1px solid #444; padding:6px 16px; border-radius:4px; font-size:11px; cursor:pointer; font-family:'IBM Plex Mono',monospace">CLOSE</button>
         </div>
     </div>
 
-    <!-- Pending Trades (the main feature) -->
-    <div style="margin-bottom:20px">
-        <h3 style="margin:0 0 10px 0; font-size:13px; color:#e0e0e0; display:flex; align-items:center; gap:8px">
-            PENDING TRADES
-            <span id="at-pending-count" style="font-size:10px; background:#f59e0b25; color:#f59e0b; padding:2px 8px; border-radius:10px; font-weight:700">0</span>
-        </h3>
+    <!-- AT Sub-Tabs -->
+    <div class="at-sub-tabs">
+        <button class="at-sub-tab active" onclick="switchAtTab('dashboard')">Dashboard</button>
+        <button class="at-sub-tab" onclick="switchAtTab('pending')">Pending <span id="at-pending-count" style="font-size:9px; background:#f59e0b25; color:#f59e0b; padding:1px 6px; border-radius:8px; font-weight:700; margin-left:4px">0</span></button>
+        <button class="at-sub-tab" onclick="switchAtTab('history')">Trade History</button>
+        <button class="at-sub-tab" onclick="switchAtTab('performance')">Performance</button>
+    </div>
+
+    <!-- ── AT DASHBOARD SUB-PANEL ── -->
+    <div class="at-sub-panel active" id="at-panel-dashboard">
+        <!-- Open Positions (live prices) -->
+        <div style="margin-bottom:20px">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                <h3 style="margin:0; font-size:13px; color:#e0e0e0; display:flex; align-items:center; gap:8px">
+                    OPEN POSITIONS
+                    <span class="live-dot"></span>
+                    <span style="font-size:9px; color:#4caf50; font-weight:600" id="at-live-status">LIVE</span>
+                </h3>
+                <div style="font-size:10px; color:#555" id="at-last-price-update">—</div>
+            </div>
+            <div id="at-open-positions" style="display:flex; flex-direction:column; gap:8px">
+                <div style="text-align:center; padding:40px 0; color:#6c757d; font-size:12px">No open positions</div>
+            </div>
+        </div>
+        <!-- Quick P&L Summary -->
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:20px">
+            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:12px; text-align:center">
+                <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Total Invested</div>
+                <div id="at-dash-invested" style="font-size:18px; font-weight:800; color:#e0e0e0; margin-top:4px">$0</div>
+            </div>
+            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:12px; text-align:center">
+                <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Unrealized P&L</div>
+                <div id="at-dash-unrealized" style="font-size:18px; font-weight:800; color:#6c757d; margin-top:4px">$0</div>
+            </div>
+            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:12px; text-align:center">
+                <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Realized P&L</div>
+                <div id="at-dash-realized" style="font-size:18px; font-weight:800; color:#6c757d; margin-top:4px">$0</div>
+            </div>
+            <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:6px; padding:12px; text-align:center">
+                <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.5px">Win Rate</div>
+                <div id="at-dash-winrate" style="font-size:18px; font-weight:800; color:#6c757d; margin-top:4px">—</div>
+            </div>
+        </div>
+        <!-- Recent Activity -->
+        <div>
+            <h3 style="margin:0 0 10px 0; font-size:13px; color:#e0e0e0">RECENT ACTIVITY</h3>
+            <div id="at-recent-activity" style="display:flex; flex-direction:column; gap:6px">
+                <div style="text-align:center; padding:30px 0; color:#6c757d; font-size:12px">No activity yet. Run a scan to get started.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── AT PENDING SUB-PANEL ── -->
+    <div class="at-sub-panel" id="at-panel-pending">
         <div id="at-pending-list" style="display:flex; flex-direction:column; gap:8px">
             <div style="text-align:center; padding:40px 0; color:#6c757d; font-size:12px">
                 No pending trades. Click <b>RUN SCAN</b> to check for qualifying signals.
@@ -768,29 +900,110 @@ window.PICKS_DATA = [];
         </div>
     </div>
 
-    <!-- Trade History -->
-    <div>
-        <h3 style="margin:0 0 10px 0; font-size:13px; color:#e0e0e0">TRADE HISTORY</h3>
-        <div id="at-history-list" style="display:flex; flex-direction:column; gap:6px">
-            <div style="text-align:center; padding:30px 0; color:#6c757d; font-size:12px">
-                No trades yet.
+    <!-- ── AT HISTORY SUB-PANEL ── -->
+    <div class="at-sub-panel" id="at-panel-history">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+            <h3 style="margin:0; font-size:13px; color:#e0e0e0">TRADE HISTORY</h3>
+            <div class="at-view-toggle">
+                <button class="at-view-btn active" onclick="switchAtView('table',this)">TABLE</button>
+                <button class="at-view-btn" onclick="switchAtView('cards',this)">CARDS</button>
             </div>
         </div>
+        <!-- Table View -->
+        <div id="at-history-table-view" class="chart-card" style="overflow-x:auto">
+            <table id="at-history-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Match</th>
+                        <th>Pick</th>
+                        <th>Entry</th>
+                        <th>Current</th>
+                        <th>Stake</th>
+                        <th>P&L</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="at-history-tbody"></tbody>
+            </table>
+        </div>
+        <!-- Card View -->
+        <div id="at-history-cards-view" style="display:none; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:12px">
+        </div>
     </div>
-</div>
+
+    <!-- ── AT PERFORMANCE SUB-PANEL ── -->
+    <div class="at-sub-panel" id="at-panel-performance">
+        <!-- Performance Stats Row -->
+        <div id="at-perf-stats" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-bottom:16px"></div>
+        <!-- Equity Curve -->
+        <div class="chart-card" style="margin-bottom:16px">
+            <h3>EQUITY CURVE</h3>
+            <canvas id="atChartEquity" height="140"></canvas>
+        </div>
+        <!-- Daily P&L -->
+        <div class="chart-card" style="margin-bottom:16px">
+            <h3>DAILY P&L</h3>
+            <canvas id="atChartDailyPnl" height="120"></canvas>
+        </div>
+        <!-- Breakdown Charts -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
+            <div class="chart-card"><h3>WIN RATE BY SURFACE</h3><canvas id="atChartSurface" height="140"></canvas></div>
+            <div class="chart-card"><h3>WIN RATE BY EDGE TIER</h3><canvas id="atChartEdgeTier" height="140"></canvas></div>
+            <div class="chart-card"><h3>SIGNAL QUALITY</h3><canvas id="atChartSignalQuality" height="140"></canvas></div>
+            <div class="chart-card"><h3>ENTRY PRICE DISTRIBUTION</h3><canvas id="atChartEntryDist" height="140"></canvas></div>
+        </div>
+    </div>
+</div><!-- end #autotrader-app -->
 
 <script>
-// ─── TAB SWITCHING ───
+// ─── MODE SWITCHING (top-level) ───
+function switchMode(mode) {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.mode-btn[onclick*="${mode}"]`).classList.add('active');
+    const sigMode = document.getElementById('signals-mode');
+    const atApp = document.getElementById('autotrader-app');
+    if (mode === 'autotrader') {
+        sigMode.style.display = 'none';
+        atApp.style.display = 'block';
+        atApp.classList.add('active');
+        loadAutoTrader();
+    } else {
+        sigMode.style.display = 'block';
+        atApp.style.display = 'none';
+        atApp.classList.remove('active');
+        if (_atPollInterval) { clearInterval(_atPollInterval); _atPollInterval = null; }
+        if (_atPricePollInterval) { clearInterval(_atPricePollInterval); _atPricePollInterval = null; }
+    }
+}
+
+// ─── AT SUB-TAB SWITCHING ───
+function switchAtTab(name) {
+    document.querySelectorAll('.at-sub-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.at-sub-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.at-sub-tab[onclick*="${name}"]`).classList.add('active');
+    document.getElementById('at-panel-' + name).classList.add('active');
+    if (name === 'performance') renderAtPerformance();
+    if (name === 'history') renderAtHistoryView();
+}
+
+// ─── AT VIEW TOGGLE (table/cards) ───
+function switchAtView(view, btn) {
+    document.querySelectorAll('.at-view-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tableEl = document.getElementById('at-history-table-view');
+    const cardsEl = document.getElementById('at-history-cards-view');
+    tableEl.style.display = view === 'table' ? 'block' : 'none';
+    cardsEl.style.display = view === 'cards' ? 'grid' : 'none';
+    renderAtHistoryView();
+}
+
+// ─── SIGNALS DASHBOARD TAB SWITCHING ───
 function switchTab(name) {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.getElementById('panel-' + name).classList.add('active');
     document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
-    // Stop auto-trader polling when leaving that tab
-    if (name !== 'autotrader' && typeof _atPollInterval !== 'undefined' && _atPollInterval) {
-        clearInterval(_atPollInterval);
-        _atPollInterval = null;
-    }
 }
 
 // ─── DATA PROCESSING ───
@@ -2482,10 +2695,9 @@ function renderSignals() {
     latest = latest.filter(p => p.outcome === null || p.outcome === undefined);
 
     // Apply filters
-    if (filterType === 'edge') latest = latest.filter(p => p.has_edge && p.market_type !== 'outright');
+    if (filterType === 'edge') latest = latest.filter(p => p.has_edge);
     else if (filterType === 'outright') latest = latest.filter(p => p.market_type === 'outright');
     else if (filterType === 'h2h') latest = latest.filter(p => p.market_type === 'h2h');
-    else latest = latest.filter(p => p.market_type !== 'outright');  // default: hide outrights
     if (filterSurface !== 'all') latest = latest.filter(p => p.surface === filterSurface);
 
     // Sort
@@ -3554,7 +3766,6 @@ function goToPlayerCard(name) {
 
 // ─── AUTO-TRADER ────────────────────────────────────────────────────────────
 
-let _atConfig = null;
 let _atRejectedCount = 0;
 
 function toggleAutoTraderSettings() {
@@ -3566,7 +3777,6 @@ function toggleKellyMode() {
     const on = document.getElementById('at-kelly-toggle').checked;
     document.getElementById('at-kelly-fields').style.display = on ? 'flex' : 'none';
     document.getElementById('at-flat-fields').style.display = on ? 'none' : 'block';
-    // Slider visual
     const slider = document.getElementById('at-kelly-slider');
     const knob = document.getElementById('at-kelly-knob');
     const lblKelly = document.getElementById('at-sizing-label-kelly');
@@ -3585,31 +3795,33 @@ function toggleKellyMode() {
 }
 
 let _atPollInterval = null;
+let _atPricePollInterval = null;
+let _atTradeHistory = [];
+let _atConfig = {};
 
 async function loadAutoTrader() {
     try {
-        // Load config
         const cfgRes = await fetch('/api/auto-trader/config');
         if (cfgRes.ok) {
             _atConfig = await cfgRes.json();
             populateAutoTraderSettings(_atConfig);
         }
-        // Load pending
         await refreshPendingTrades();
-        // Load history
         await loadAutoTraderHistory();
+        renderAtDashboard();
     } catch(e) {
         console.warn('Auto-trader load error:', e);
     }
-
-    // Start auto-refresh polling (every 30s while tab is active)
     if (_atPollInterval) clearInterval(_atPollInterval);
     _atPollInterval = setInterval(async () => {
         try {
             await refreshPendingTrades();
             await loadAutoTraderHistory();
+            renderAtDashboard();
         } catch(e) { console.warn('Auto-refresh error:', e); }
     }, 30000);
+    // Start live price polling (every 15s)
+    startLivePricePolling();
 }
 
 function populateAutoTraderSettings(cfg) {
@@ -3623,12 +3835,11 @@ function populateAutoTraderSettings(cfg) {
         mBadge.style.background = mBadge.style.color.replace(')', ',0.15)').replace('rgb', 'rgba');
     }
     if (mStat) mStat.textContent = mode;
-
     const r = cfg.entry_rules || {};
     const ex = cfg.exit_rules || {};
     const s = cfg.safety || {};
     const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-    const v = (x, d) => x != null ? x : d;  // allows 0
+    const v = (x, d) => x != null ? x : d;
     setVal('at-min-edge', v(r.min_edge, 10));
     setVal('at-min-prob', v(r.min_model_prob, 55));
     setVal('at-min-gap', v(r.min_gap, 5));
@@ -3649,7 +3860,6 @@ function populateAutoTraderSettings(cfg) {
     setVal('at-tp1', v(ex.take_profit_1_price, 85));
     setVal('at-tp2', v(ex.take_profit_2_price, 95));
     setVal('at-trail', v(ex.trailing_stop_pct, 8));
-
     const killEl = document.getElementById('at-stat-kill');
     if (killEl) {
         const isOn = s.kill_switch;
@@ -3700,6 +3910,402 @@ async function saveAutoTraderConfig() {
     } catch(e) {
         alert('Error saving config: ' + e.message);
     }
+}
+
+// ─── AT DASHBOARD RENDERING ───
+function renderAtDashboard() {
+    const trades = _atTradeHistory;
+    const confirmed = trades.filter(t => t.status === 'confirmed');
+    const open = confirmed.filter(t => !t.outcome || t.outcome === 'pending');
+    const closed = confirmed.filter(t => t.outcome === 'win' || t.outcome === 'loss');
+    const wins = closed.filter(t => t.outcome === 'win');
+
+    // Update stat badges
+    const openEl = document.getElementById('at-stat-open');
+    if (openEl) openEl.textContent = open.length;
+
+    // Quick P&L
+    const totalInvested = confirmed.reduce((s,t) => s + (t.actual_stake || t.stake || 0), 0);
+    const realizedPnl = closed.reduce((s,t) => s + (t.pnl || 0), 0);
+    const winRate = closed.length > 0 ? (wins.length / closed.length * 100).toFixed(1) + '%' : '—';
+
+    const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    const setColor = (id, color) => { const el = document.getElementById(id); if (el) el.style.color = color; };
+    setHtml('at-dash-invested', '$' + totalInvested.toFixed(0));
+    setHtml('at-dash-realized', (realizedPnl >= 0 ? '+$' : '-$') + Math.abs(realizedPnl).toFixed(2));
+    setColor('at-dash-realized', realizedPnl >= 0 ? '#4caf50' : '#f44336');
+    setHtml('at-dash-winrate', winRate);
+    setColor('at-dash-winrate', closed.length > 0 && wins.length/closed.length >= 0.5 ? '#4caf50' : '#f44336');
+
+    // Open Positions
+    renderOpenPositions(open);
+
+    // Recent Activity (last 10 trades of any status)
+    const recent = trades.slice(0, 10);
+    const actEl = document.getElementById('at-recent-activity');
+    if (!recent.length) {
+        actEl.innerHTML = '<div style="text-align:center; padding:30px 0; color:#6c757d; font-size:12px">No activity yet. Run a scan to get started.</div>';
+        return;
+    }
+    actEl.innerHTML = recent.map(t => {
+        const statusColor = t.status === 'confirmed' ? '#4caf50' : t.status === 'rejected' ? '#6c757d' : '#f59e0b';
+        const statusLabel = (t.status || 'pending').toUpperCase();
+        const ts = t.timestamp || t.confirmed_at || t.created_at || '';
+        const timeStr = ts ? new Date(ts).toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+        const pnl = t.pnl != null && t.pnl !== 0 ? (t.pnl >= 0 ? '+' : '') + '$' + t.pnl.toFixed(2) : '';
+        const pnlColor = (t.pnl || 0) >= 0 ? '#4caf50' : '#f44336';
+        return `<div style="background:#0d1117; border:1px solid #1a1d24; border-radius:6px; padding:8px 12px; display:flex; align-items:center; gap:10px; font-size:11px">
+            <span style="color:${statusColor}; font-weight:700; min-width:80px">${statusLabel}</span>
+            <span style="color:#d4740a; font-weight:600; min-width:100px">${t.bet_on || '?'}</span>
+            <span style="color:#888; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${(t.match || '').substring(0, 35)}</span>
+            <span style="color:#aaa">$${(t.actual_stake || t.stake || 0).toFixed(0)}</span>
+            ${pnl ? `<span style="color:${pnlColor}; font-weight:700">${pnl}</span>` : ''}
+            <span style="color:#555; font-size:10px">${timeStr}</span>
+        </div>`;
+    }).join('');
+}
+
+// ─── OPEN POSITIONS WITH LIVE PRICES ───
+let _atLivePrices = {};
+
+function renderOpenPositions(openTrades) {
+    const container = document.getElementById('at-open-positions');
+    if (!openTrades || !openTrades.length) {
+        container.innerHTML = '<div style="text-align:center; padding:40px 0; color:#6c757d; font-size:12px">No open positions</div>';
+        const el = document.getElementById('at-dash-unrealized');
+        if (el) { el.textContent = '$0'; el.style.color = '#6c757d'; }
+        return;
+    }
+
+    let totalUnrealized = 0;
+    container.innerHTML = openTrades.map(t => {
+        const entryPrice = t.actual_buy_price || t.poly_price || 0;
+        const currentPrice = _atLivePrices[t.token_id] || _atLivePrices[t.bet_on] || entryPrice;
+        const shares = t.actual_shares || (t.actual_stake || t.stake || 0) / (entryPrice / 100 || 1);
+        const cost = (entryPrice / 100) * shares;
+        const currentVal = (currentPrice / 100) * shares;
+        const unrealizedPnl = currentVal - cost;
+        totalUnrealized += unrealizedPnl;
+        const pnlPct = cost > 0 ? ((currentVal / cost - 1) * 100).toFixed(1) : '0.0';
+        const isLosing = unrealizedPnl < 0;
+        const pnlColor = unrealizedPnl >= 0 ? '#4caf50' : '#f44336';
+        const ts = t.timestamp || t.confirmed_at || '';
+        const timeStr = ts ? new Date(ts).toLocaleString('en-US', {month:'short', day:'numeric'}) : '';
+
+        return `<div class="at-open-card${isLosing ? ' losing' : ''}">
+            <div class="at-oc-row">
+                <div>
+                    <div class="at-oc-match">${(t.match || '?').substring(0, 40)}</div>
+                    <div class="at-oc-pick">PICK: ${t.bet_on || '?'}</div>
+                </div>
+                <div class="at-oc-live">
+                    <div>
+                        <div class="at-oc-price" style="color:${pnlColor}">${currentPrice.toFixed(0)}c</div>
+                        <div class="at-oc-pnl" style="color:${pnlColor}">${unrealizedPnl >= 0 ? '+' : ''}$${unrealizedPnl.toFixed(2)} (${pnlPct}%)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="at-oc-meta">
+                <span>Entry: ${entryPrice.toFixed(0)}c</span>
+                <span>Shares: ${shares.toFixed(1)}</span>
+                <span>Cost: $${cost.toFixed(2)}</span>
+                <span>Value: $${currentVal.toFixed(2)}</span>
+                <span>${timeStr}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    const uEl = document.getElementById('at-dash-unrealized');
+    if (uEl) {
+        uEl.textContent = (totalUnrealized >= 0 ? '+$' : '-$') + Math.abs(totalUnrealized).toFixed(2);
+        uEl.style.color = totalUnrealized >= 0 ? '#4caf50' : '#f44336';
+    }
+}
+
+// ─── LIVE PRICE POLLING ───
+async function fetchLivePrices() {
+    const confirmed = _atTradeHistory.filter(t => t.status === 'confirmed' && (!t.outcome || t.outcome === 'pending'));
+    if (!confirmed.length) return;
+
+    // Collect token_ids from trades
+    const tokenIds = [...new Set(confirmed.map(t => t.token_id).filter(Boolean))];
+    if (!tokenIds.length) return;
+
+    try {
+        // Batch fetch from CLOB API
+        for (const tid of tokenIds) {
+            try {
+                const r = await fetch(`https://clob.polymarket.com/price?token_id=${tid}&side=sell`);
+                if (r.ok) {
+                    const data = await r.json();
+                    _atLivePrices[tid] = parseFloat(data.price || 0) * 100;
+                }
+            } catch(e) { /* individual price fetch failed, skip */ }
+        }
+        // Also try matching by bet_on name from Gamma API
+        document.getElementById('at-last-price-update').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+    } catch(e) {
+        console.warn('Price fetch error:', e);
+    }
+    // Re-render open positions with new prices
+    const open = _atTradeHistory.filter(t => t.status === 'confirmed' && (!t.outcome || t.outcome === 'pending'));
+    renderOpenPositions(open);
+}
+
+function startLivePricePolling() {
+    if (_atPricePollInterval) clearInterval(_atPricePollInterval);
+    fetchLivePrices(); // immediate first fetch
+    _atPricePollInterval = setInterval(fetchLivePrices, 15000);
+}
+
+// ─── AT HISTORY RENDERING (TABLE + CARDS) ───
+function renderAtHistoryView() {
+    const trades = _atTradeHistory.filter(t => t.status === 'confirmed' || t.status === 'rejected');
+    // Table
+    const tbody = document.getElementById('at-history-tbody');
+    if (!trades.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#6c757d">No trades yet</td></tr>';
+    } else {
+        tbody.innerHTML = trades.map(t => {
+            const ts = t.timestamp || t.confirmed_at || t.created_at || '';
+            const dateStr = ts ? new Date(ts).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '—';
+            const entry = (t.actual_buy_price || t.poly_price || 0);
+            const current = _atLivePrices[t.token_id] || entry;
+            const pnl = t.pnl != null ? t.pnl : 0;
+            const pnlStr = t.outcome ? (pnl >= 0 ? '+$' + pnl.toFixed(2) : '-$' + Math.abs(pnl).toFixed(2)) : '—';
+            const pnlClass = pnl >= 0 ? 'w' : 'l';
+            const statusMap = { confirmed: 'OPEN', win: 'WON', loss: 'LOST', rejected: 'REJECTED' };
+            const status = t.outcome === 'win' ? 'WON' : t.outcome === 'loss' ? 'LOST' : t.status === 'rejected' ? 'REJECTED' : 'OPEN';
+            const statusColor = status === 'WON' ? '#4caf50' : status === 'LOST' ? '#f44336' : status === 'REJECTED' ? '#6c757d' : '#42a5f5';
+            return `<tr>
+                <td>${dateStr}</td>
+                <td style="max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${t.match || '?'}</td>
+                <td style="color:#d4740a; font-weight:600">${t.bet_on || '?'}</td>
+                <td>${entry.toFixed(0)}c</td>
+                <td>${current.toFixed(0)}c</td>
+                <td>$${(t.actual_stake || t.stake || 0).toFixed(0)}</td>
+                <td class="${pnlClass}">${pnlStr}</td>
+                <td style="color:${statusColor}; font-weight:700">${status}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    // Cards
+    const cardsEl = document.getElementById('at-history-cards-view');
+    if (!trades.length) {
+        cardsEl.innerHTML = '<div style="text-align:center; padding:40px; color:#6c757d; font-size:12px; grid-column:1/-1">No trades yet</div>';
+    } else {
+        cardsEl.innerHTML = trades.map(t => {
+            const ts = t.timestamp || t.confirmed_at || t.created_at || '';
+            const dateStr = ts ? new Date(ts).toLocaleDateString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+            const entry = (t.actual_buy_price || t.poly_price || 0);
+            const current = _atLivePrices[t.token_id] || entry;
+            const pnl = t.pnl != null ? t.pnl : 0;
+            const status = t.outcome === 'win' ? 'WON' : t.outcome === 'loss' ? 'LOST' : t.status === 'rejected' ? 'REJECTED' : 'OPEN';
+            const statusColor = status === 'WON' ? '#4caf50' : status === 'LOST' ? '#f44336' : status === 'REJECTED' ? '#6c757d' : '#42a5f5';
+            const statusBg = statusColor + '15';
+            const pnlColor = pnl >= 0 ? '#4caf50' : '#f44336';
+            const edge = t.edge || 0;
+            const model = t.model_prob || 0;
+            return `<div class="at-trade-card">
+                <div class="at-tc-header">
+                    <div>
+                        <div class="at-tc-match">${(t.match || '?').substring(0, 35)}</div>
+                        <div class="at-tc-pick">PICK: ${t.bet_on || '?'}</div>
+                    </div>
+                    <span class="at-tc-status" style="color:${statusColor}; background:${statusBg}; border:1px solid ${statusColor}30">${status}</span>
+                </div>
+                <div class="at-tc-body">
+                    <div class="at-tc-stat">
+                        <div class="tcs-label">Entry</div>
+                        <div class="tcs-value" style="color:#e0e0e0">${entry.toFixed(0)}c</div>
+                    </div>
+                    <div class="at-tc-stat">
+                        <div class="tcs-label">Current</div>
+                        <div class="tcs-value" style="color:#e0e0e0">${current.toFixed(0)}c</div>
+                    </div>
+                    <div class="at-tc-stat">
+                        <div class="tcs-label">Stake</div>
+                        <div class="tcs-value" style="color:#e0e0e0">$${(t.actual_stake || t.stake || 0).toFixed(0)}</div>
+                    </div>
+                    <div class="at-tc-stat">
+                        <div class="tcs-label">P&L</div>
+                        <div class="tcs-value" style="color:${pnlColor}">${t.outcome ? (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) : '—'}</div>
+                    </div>
+                </div>
+                <div class="at-tc-footer">
+                    <span>Model: ${model.toFixed(1)}% | Edge: ${edge > 0 ? '+' : ''}${edge.toFixed(1)}%</span>
+                    <span>${dateStr}</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+}
+
+// ─── AT PERFORMANCE CHARTS ───
+let _atPerfCharts = {};
+
+function renderAtPerformance() {
+    const trades = _atTradeHistory.filter(t => t.status === 'confirmed');
+    const closed = trades.filter(t => t.outcome === 'win' || t.outcome === 'loss');
+    const wins = closed.filter(t => t.outcome === 'win');
+
+    // Performance stats row
+    const totalPnl = closed.reduce((s,t) => s + (t.pnl || 0), 0);
+    const avgPnl = closed.length > 0 ? totalPnl / closed.length : 0;
+    const totalStaked = closed.reduce((s,t) => s + (t.actual_stake || t.stake || 0), 0);
+    const roi = totalStaked > 0 ? (totalPnl / totalStaked * 100).toFixed(1) : '0.0';
+    const maxWin = closed.length > 0 ? Math.max(...closed.map(t => t.pnl || 0)) : 0;
+    const maxLoss = closed.length > 0 ? Math.min(...closed.map(t => t.pnl || 0)) : 0;
+    const avgEdge = trades.length > 0 ? (trades.reduce((s,t) => s + Math.abs(t.edge || 0), 0) / trades.length).toFixed(1) : '0.0';
+    // Streak
+    let streak = 0, streakType = '';
+    for (let i = 0; i < closed.length; i++) {
+        if (i === 0) { streakType = closed[i].outcome; streak = 1; }
+        else if (closed[i].outcome === streakType) streak++;
+        else break;
+    }
+
+    const statsEl = document.getElementById('at-perf-stats');
+    const ms = (label, value, color) => `<div class="mini-stat"><div class="ms-label">${label}</div><div class="ms-value" style="color:${color}">${value}</div></div>`;
+    statsEl.innerHTML = [
+        ms('Total Trades', trades.length, '#e0e0e0'),
+        ms('Win Rate', closed.length > 0 ? (wins.length/closed.length*100).toFixed(1)+'%' : '—', wins.length/Math.max(closed.length,1) >= 0.5 ? '#4caf50' : '#f44336'),
+        ms('Total P&L', (totalPnl >= 0 ? '+$' : '-$') + Math.abs(totalPnl).toFixed(2), totalPnl >= 0 ? '#4caf50' : '#f44336'),
+        ms('ROI', roi + '%', parseFloat(roi) >= 0 ? '#4caf50' : '#f44336'),
+        ms('Avg P&L', (avgPnl >= 0 ? '+$' : '-$') + Math.abs(avgPnl).toFixed(2), avgPnl >= 0 ? '#4caf50' : '#f44336'),
+        ms('Best Win', '+$' + maxWin.toFixed(2), '#4caf50'),
+        ms('Worst Loss', '-$' + Math.abs(maxLoss).toFixed(2), '#f44336'),
+        ms('Avg Edge', avgEdge + '%', '#d4740a'),
+        ms('Streak', streak + (streakType === 'win' ? 'W' : streakType === 'loss' ? 'L' : ''), streakType === 'win' ? '#4caf50' : streakType === 'loss' ? '#f44336' : '#6c757d'),
+    ].join('');
+
+    // Equity Curve
+    renderAtEquityCurve(closed);
+    // Daily P&L
+    renderAtDailyPnl(closed);
+    // Surface breakdown
+    renderAtSurfaceChart(closed, wins);
+    // Edge tier breakdown
+    renderAtEdgeTierChart(closed);
+    // Signal quality
+    renderAtSignalQualityChart(trades);
+    // Entry distribution
+    renderAtEntryDistChart(trades);
+}
+
+function renderAtEquityCurve(closed) {
+    const ctx = document.getElementById('atChartEquity');
+    if (!ctx) return;
+    if (_atPerfCharts.equity) _atPerfCharts.equity.destroy();
+    let cumulative = 0;
+    const data = closed.map((t, i) => { cumulative += (t.pnl || 0); return { x: i + 1, y: cumulative }; });
+    _atPerfCharts.equity = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: [{ data: data, borderColor: '#d4740a', backgroundColor: '#d4740a20', fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { type: 'linear', title: { display: true, text: 'Trade #', color: '#6c757d', font: { size: 10 } }, ticks: { color: '#6c757d', font: { size: 9 } }, grid: { color: '#1e2130' } }, y: { title: { display: true, text: 'Cumulative P&L ($)', color: '#6c757d', font: { size: 10 } }, ticks: { color: '#6c757d', font: { size: 9 } }, grid: { color: '#1e2130' } } } }
+    });
+}
+
+function renderAtDailyPnl(closed) {
+    const ctx = document.getElementById('atChartDailyPnl');
+    if (!ctx) return;
+    if (_atPerfCharts.dailyPnl) _atPerfCharts.dailyPnl.destroy();
+    const byDay = {};
+    closed.forEach(t => {
+        const d = (t.timestamp || t.confirmed_at || '').substring(0, 10);
+        if (!d) return;
+        byDay[d] = (byDay[d] || 0) + (t.pnl || 0);
+    });
+    const labels = Object.keys(byDay).sort();
+    const values = labels.map(d => byDay[d]);
+    const colors = values.map(v => v >= 0 ? '#4caf50' : '#f44336');
+    _atPerfCharts.dailyPnl = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 3 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#6c757d', font: { size: 9 }, maxRotation: 45 }, grid: { display: false } }, y: { ticks: { color: '#6c757d', font: { size: 9 } }, grid: { color: '#1e2130' } } } }
+    });
+}
+
+function renderAtSurfaceChart(closed, wins) {
+    const ctx = document.getElementById('atChartSurface');
+    if (!ctx) return;
+    if (_atPerfCharts.surface) _atPerfCharts.surface.destroy();
+    const surfaces = {};
+    closed.forEach(t => {
+        const s = t.surface || 'Unknown';
+        if (!surfaces[s]) surfaces[s] = { total: 0, wins: 0 };
+        surfaces[s].total++;
+        if (t.outcome === 'win') surfaces[s].wins++;
+    });
+    const labels = Object.keys(surfaces);
+    const data = labels.map(s => surfaces[s].total > 0 ? (surfaces[s].wins / surfaces[s].total * 100).toFixed(1) : 0);
+    const surfColors = { 'Hard': '#42a5f5', 'Clay': '#ff7043', 'Grass': '#66bb6a', 'Unknown': '#6c757d' };
+    _atPerfCharts.surface = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ data, backgroundColor: labels.map(s => surfColors[s] || '#6c757d'), borderRadius: 4 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#6c757d', font: { size: 10 } }, grid: { display: false } }, y: { max: 100, ticks: { color: '#6c757d', font: { size: 9 }, callback: v => v + '%' }, grid: { color: '#1e2130' } } } }
+    });
+}
+
+function renderAtEdgeTierChart(closed) {
+    const ctx = document.getElementById('atChartEdgeTier');
+    if (!ctx) return;
+    if (_atPerfCharts.edgeTier) _atPerfCharts.edgeTier.destroy();
+    const tiers = { '0-5%': { t: 0, w: 0 }, '5-10%': { t: 0, w: 0 }, '10-20%': { t: 0, w: 0 }, '20%+': { t: 0, w: 0 } };
+    closed.forEach(t => {
+        const e = Math.abs(t.edge || 0);
+        const tier = e < 5 ? '0-5%' : e < 10 ? '5-10%' : e < 20 ? '10-20%' : '20%+';
+        tiers[tier].t++;
+        if (t.outcome === 'win') tiers[tier].w++;
+    });
+    const labels = Object.keys(tiers);
+    const data = labels.map(l => tiers[l].t > 0 ? (tiers[l].w / tiers[l].t * 100).toFixed(1) : 0);
+    _atPerfCharts.edgeTier = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ data, backgroundColor: ['#6c757d', '#f59e0b', '#d4740a', '#4caf50'], borderRadius: 4 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#6c757d', font: { size: 10 } }, grid: { display: false } }, y: { max: 100, ticks: { color: '#6c757d', font: { size: 9 }, callback: v => v + '%' }, grid: { color: '#1e2130' } } } }
+    });
+}
+
+function renderAtSignalQualityChart(trades) {
+    const ctx = document.getElementById('atChartSignalQuality');
+    if (!ctx) return;
+    if (_atPerfCharts.sigQuality) _atPerfCharts.sigQuality.destroy();
+    // Model prob vs actual outcome scatter
+    const closed = trades.filter(t => t.outcome === 'win' || t.outcome === 'loss');
+    const winData = closed.filter(t => t.outcome === 'win').map(t => ({ x: t.model_prob || 50, y: (t.actual_buy_price || t.poly_price || 50) }));
+    const lossData = closed.filter(t => t.outcome === 'loss').map(t => ({ x: t.model_prob || 50, y: (t.actual_buy_price || t.poly_price || 50) }));
+    _atPerfCharts.sigQuality = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [
+                { label: 'Win', data: winData, backgroundColor: '#4caf5080', borderColor: '#4caf50', pointRadius: 5 },
+                { label: 'Loss', data: lossData, backgroundColor: '#f4433680', borderColor: '#f44336', pointRadius: 5 }
+            ]
+        },
+        options: { responsive: true, plugins: { legend: { labels: { color: '#6c757d', font: { size: 10 } } } }, scales: { x: { title: { display: true, text: 'Model Prob %', color: '#6c757d', font: { size: 10 } }, ticks: { color: '#6c757d', font: { size: 9 } }, grid: { color: '#1e2130' } }, y: { title: { display: true, text: 'Entry Price (c)', color: '#6c757d', font: { size: 10 } }, ticks: { color: '#6c757d', font: { size: 9 } }, grid: { color: '#1e2130' } } } }
+    });
+}
+
+function renderAtEntryDistChart(trades) {
+    const ctx = document.getElementById('atChartEntryDist');
+    if (!ctx) return;
+    if (_atPerfCharts.entryDist) _atPerfCharts.entryDist.destroy();
+    const confirmed = trades.filter(t => t.status === 'confirmed');
+    const buckets = { '10-30c': 0, '30-50c': 0, '50-70c': 0, '70-90c': 0 };
+    confirmed.forEach(t => {
+        const p = t.actual_buy_price || t.poly_price || 0;
+        if (p < 30) buckets['10-30c']++;
+        else if (p < 50) buckets['30-50c']++;
+        else if (p < 70) buckets['50-70c']++;
+        else buckets['70-90c']++;
+    });
+    _atPerfCharts.entryDist = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: Object.keys(buckets), datasets: [{ data: Object.values(buckets), backgroundColor: ['#42a5f5', '#f59e0b', '#d4740a', '#4caf50'], borderWidth: 0 }] },
+        options: { responsive: true, plugins: { legend: { labels: { color: '#6c757d', font: { size: 10 } } } } }
+    });
 }
 
 async function resolveOutcomesNow() {
@@ -3890,7 +4496,7 @@ async function refreshPendingTrades() {
 }
 
 async function confirmTrade(pendingId) {
-    if (!confirm('Confirm this trade? The local executor will place a BUY order on Polymarket.')) return;
+    if (!confirm('Confirm this trade? This will execute a BUY order on Polymarket.')) return;
     try {
         const res = await fetch('/api/auto-trader/confirm', {
             method: 'POST',
@@ -3905,9 +4511,7 @@ async function confirmTrade(pendingId) {
             await loadAutoTraderHistory();
             // Show execution result
             const exec = data.execution || {};
-            if (exec.awaiting === 'local_executor') {
-                alert('Trade confirmed — queued for local executor.\nMake sure the executor is running on your Mac.');
-            } else if (exec.success) {
+            if (exec.success) {
                 alert(`ORDER PLACED on Polymarket!\nPrice: ${(exec.price*100).toFixed(0)}c | Size: ${exec.size} shares | Stake: $${exec.stake}`);
             } else {
                 const trade = data.trade || {};
@@ -3962,34 +4566,12 @@ async function loadAutoTraderHistory() {
     try {
         const res = await fetch('/api/auto-trader/history');
         const data = await res.json();
-        const trades = data.trades || [];
-        const container = document.getElementById('at-history-list');
-
-        if (!trades.length) {
-            container.innerHTML = '<div style="text-align:center; padding:30px 0; color:#6c757d; font-size:12px">No trades yet.</div>';
-            return;
-        }
-
-        container.innerHTML = trades.slice(0, 20).map(t => {
-            const isExit = (t.action || '').includes('exit') || (t.action || '').includes('stop') || (t.action || '').includes('profit') || (t.action || '').includes('trailing');
-            const statusColor = t.status === 'confirmed' ? '#4caf50' : isExit ? '#f59e0b' : '#888';
-            const statusLabel = t.status === 'confirmed' ? 'CONFIRMED' : isExit ? t.action.toUpperCase() : (t.action || 'entry').toUpperCase();
-            const pnl = t.pnl_pct != null ? `${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(1)}%` : '';
-            const pnlColor = (t.pnl_pct || 0) >= 0 ? '#4caf50' : '#f44336';
-            const ts = t.timestamp || t.confirmed_at || t.created_at || '';
-            const timeStr = ts ? new Date(ts).toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
-
-            return `
-            <div style="background:#0d1117; border:1px solid #1a1d24; border-radius:6px; padding:8px 12px; display:flex; align-items:center; gap:10px; font-size:11px">
-                <span style="color:${statusColor}; font-weight:700; min-width:75px">${statusLabel}</span>
-                <span style="color:#e0e0e0; font-weight:600; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${t.bet_on || '?'}</span>
-                <span style="color:#888; white-space:nowrap">${(t.match || '').substring(0, 30)}</span>
-                <span style="color:#aaa">$${(t.stake||0).toFixed(0)}</span>
-                ${pnl ? `<span style="color:${pnlColor}; font-weight:700">${pnl}</span>` : ''}
-                <span style="color:#555; font-size:10px">${timeStr}</span>
-            </div>`;
-        }).join('');
-
+        _atTradeHistory = data.trades || [];
+        // Update confirmed count stat
+        const today = new Date().toISOString().substring(0, 10);
+        const confirmedToday = _atTradeHistory.filter(t => t.status === 'confirmed' && (t.confirmed_at || t.timestamp || '').startsWith(today));
+        const cEl = document.getElementById('at-stat-confirmed');
+        if (cEl) cEl.textContent = confirmedToday.length;
     } catch(e) {
         console.warn('Trade history load error:', e);
     }
