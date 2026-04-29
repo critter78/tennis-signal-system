@@ -166,11 +166,12 @@
         .hdr-names .pa { color: #fff; white-space: nowrap; }
         .hdr-names .pb { color: #fff; white-space: nowrap; }
         .hdr-right { text-align: right; font-size: 11px; line-height: 1.7; }
-        .hdr-tourney { color: #8fa4b8; font-weight: 700; letter-spacing: 0.03em; }
+        .hdr-tourney { color: #8fa4b8; font-weight: 700; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
         .hdr-surface { font-weight: 700; }
         .hdr-date { color: #6c757d; font-size: 10px; }
         .hdr-round { color: #888; font-size: 10px; }
-        .active-tag { display: inline-block; background: #d4740a; color: #fff; font-size: 8px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; margin-top: 3px; }
+        .active-tag { display: inline-block; background: #d4740a; color: #fff; font-size: 8px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; }
+        .badge-row { position: absolute; bottom: -10px; left: 0; display: flex; gap: 4px; z-index: 2; }
         /* v5.1 Tab Bar */
         .v5-tab-bar { display: flex; background: #12141c; border-bottom: 2px solid #2a2d37; padding: 0 6px; }
         .v5-tab-btn { flex: 1; padding: 8px 4px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; font-family: 'IBM Plex Mono', monospace; border-right: 1px solid #2a2d37; }
@@ -2913,10 +2914,9 @@ function renderSignals() {
         <div class="sig-card ${isBet ? 'is-bet' : ''} ${isAutoTrade && !isBet ? 'is-auto' : ''}" id="${cardId}">
             <!-- HEADER with plaque names -->
             <div class="card-hdr">
-                <div>
+                <div style="position:relative">
                     <div class="hdr-names"><span class="pa player-link" data-player="${s.player_a||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_a||''}</span><span class="pb player-link" data-player="${s.player_b||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_b||''}</span></div>
-                    ${isBet ? '<span class="active-tag">ACTIVE BET</span>' : ''}
-                    ${isAutoTrade ? '<span class="active-tag" style="background:#1565c0">AUTO-TRADE</span>' : ''}
+                    ${(isBet || isAutoTrade) ? '<div class="badge-row">' + (isBet ? '<span class="active-tag">ACTIVE BET</span>' : '') + (isAutoTrade ? '<span class="active-tag" style="background:#1565c0">AUTO-TRADE</span>' : '') + '</div>' : ''}
                 </div>
                 <div class="hdr-right">
                     <div class="hdr-tourney">${tourney || ''} ${surface ? '<span class="hdr-surface" style="color:'+sfcColor+'">| '+surface+'</span>' : ''}</div>
