@@ -695,7 +695,37 @@ window.PICKS_DATA = [];
 
 <!-- ═══ AUTO-TRADER APP (full-page experience) ═══ -->
 <div id="autotrader-app">
-    <!-- AT Top Stats Bar (unified) -->
+    <!-- AT Bankroll Tracker (hero card) -->
+    <div id="at-bankroll-hero" style="background:linear-gradient(135deg,#0d1117 60%,#d4740a10); border:1px solid #d4740a30; border-radius:10px; padding:16px 20px; margin-bottom:16px; display:flex; align-items:center; gap:20px; flex-wrap:wrap">
+        <div style="flex:0 0 auto; text-align:center">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px">Starting Bankroll</div>
+            <div style="font-size:22px; font-weight:700; color:#e0e0e0" id="at-bankroll-start">$50</div>
+        </div>
+        <div style="flex:0 0 auto; color:#30363d; font-size:20px">&rarr;</div>
+        <div style="flex:0 0 auto; text-align:center">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px">Current Balance</div>
+            <div style="font-size:22px; font-weight:700" id="at-bankroll-current">$50</div>
+        </div>
+        <div style="flex:0 0 auto; text-align:center; padding:0 12px; border-left:1px solid #1a1d24">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px">ROI</div>
+            <div style="font-size:18px; font-weight:700" id="at-bankroll-roi">0%</div>
+        </div>
+        <div style="flex:1; min-width:200px">
+            <div style="display:flex; justify-content:space-between; font-size:9px; color:#888; margin-bottom:4px">
+                <span>Bankroll Progress</span>
+                <span id="at-bankroll-pct-label">100%</span>
+            </div>
+            <div style="background:#161b22; border-radius:6px; height:12px; overflow:hidden; border:1px solid #1a1d24">
+                <div id="at-bankroll-bar" style="height:100%; border-radius:6px; transition:width 0.6s ease; width:100%; background:linear-gradient(90deg,#d4740a,#f59e0b)"></div>
+            </div>
+        </div>
+        <div style="flex:0 0 auto; text-align:center; padding:0 8px; border-left:1px solid #1a1d24">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px">Win Rate</div>
+            <div style="font-size:18px; font-weight:700; color:#6c757d" id="at-dash-winrate">—</div>
+        </div>
+    </div>
+
+    <!-- AT Top Stats Bar (operational) -->
     <div class="stats-row at-stats-bar" style="margin-bottom:16px">
         <div class="stat-card"><div class="label">Mode</div><div class="value" id="at-stat-mode"><span style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span></div></div>
         <div class="stat-card"><div class="label">Open Positions</div><div class="value" style="color:#42a5f5" id="at-stat-open">0</div></div>
@@ -706,7 +736,6 @@ window.PICKS_DATA = [];
         <div class="stat-card"><div class="label">Total Invested</div><div class="value white" id="at-dash-invested">$0</div></div>
         <div class="stat-card"><div class="label">Unrealized P&L</div><div class="value" id="at-dash-unrealized" style="color:#6c757d">$0</div></div>
         <div class="stat-card"><div class="label">Realized P&L</div><div class="value" id="at-dash-realized" style="color:#6c757d">$0</div></div>
-        <div class="stat-card"><div class="label">Win Rate</div><div class="value" id="at-dash-winrate" style="color:#6c757d">—</div></div>
     </div>
 
     <!-- Settings Panel (hidden by default) -->
@@ -727,7 +756,7 @@ window.PICKS_DATA = [];
             </div>
             <div>
                 <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Bankroll $</label>
-                <input type="number" id="at-bankroll" value="50" step="10" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
+                <input type="number" id="at-bankroll" value="50" step="10" onchange="renderAtDashboard()" style="width:100%; background:#161b22; border:1px solid #30363d; color:#e0e0e0; padding:5px 8px; border-radius:4px; font-size:12px">
             </div>
             <div>
                 <label style="font-size:9px; color:#888; display:block; margin-bottom:3px">Max Stake $</label>
@@ -3964,6 +3993,36 @@ function renderAtDashboard() {
     setHtml('at-dash-winrate', winRate);
     setColor('at-dash-winrate', closed.length > 0 && wins.length/closed.length >= 0.5 ? '#4caf50' : '#f44336');
 
+    // ─── BANKROLL TRACKER ───
+    const bankrollInput = document.getElementById('at-bankroll');
+    const startingBankroll = bankrollInput ? parseFloat(bankrollInput.value) || 50 : 50;
+
+    // Unrealized P&L for open positions (will be updated by live price polling)
+    const openCost = open.reduce((s,t) => s + (t.actual_stake || t.stake || 0), 0);
+
+    // Current balance = starting + realized P&L - amount currently deployed in open positions
+    // (open positions still hold value, so balance = starting + realizedPnl + unrealizedValue - openCost)
+    // Simplified: balance = starting + realizedPnl (conservative — open positions counted at cost)
+    const currentBalance = startingBankroll + realizedPnl;
+    const roi = startingBankroll > 0 ? ((currentBalance - startingBankroll) / startingBankroll * 100) : 0;
+    const barPct = startingBankroll > 0 ? Math.min(Math.max((currentBalance / startingBankroll) * 100, 0), 200) : 100;
+
+    setHtml('at-bankroll-start', '$' + startingBankroll.toFixed(0));
+    setHtml('at-bankroll-current', '$' + currentBalance.toFixed(2));
+    const balColor = currentBalance >= startingBankroll ? '#4caf50' : '#f44336';
+    setColor('at-bankroll-current', balColor);
+    setHtml('at-bankroll-roi', (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%');
+    setColor('at-bankroll-roi', roi >= 0 ? '#4caf50' : '#f44336');
+    setHtml('at-bankroll-pct-label', barPct.toFixed(0) + '%');
+
+    const barEl = document.getElementById('at-bankroll-bar');
+    if (barEl) {
+        barEl.style.width = Math.min(barPct, 100) + '%';
+        barEl.style.background = currentBalance >= startingBankroll
+            ? 'linear-gradient(90deg,#4caf50,#66bb6a)'
+            : 'linear-gradient(90deg,#f44336,#ef5350)';
+    }
+
     // Open Positions
     renderOpenPositions(open);
 
@@ -4556,7 +4615,7 @@ async function refreshPendingTrades() {
 }
 
 async function confirmTrade(pendingId) {
-    if (!confirm('Confirm this trade? This will execute a BUY order on Polymarket.')) return;
+    if (!confirm('Confirm this trade? It will be queued for execution via your local executor.')) return;
     try {
         const res = await fetch('/api/auto-trader/confirm', {
             method: 'POST',
@@ -4569,19 +4628,26 @@ async function confirmTrade(pendingId) {
             if (el) el.textContent = parseInt(el.textContent || 0) + 1;
             await refreshPendingTrades();
             await loadAutoTraderHistory();
-            // Show execution result
+
             const exec = data.execution || {};
-            if (exec.success) {
+            const trade = data.trade || {};
+
+            if (exec.awaiting === 'local_executor') {
+                // Trade queued for local executor — this is the normal flow
+                const betOn = trade.bet_on || '?';
+                const stake = trade.stake || trade.actual_stake || 0;
+                alert(`TRADE CONFIRMED: ${betOn}\nStake: $${stake.toFixed(2)}\n\nQueued for local executor. Make sure your executor is running:\npython3 21_local_executor.py`);
+            } else if (exec.success) {
                 alert(`ORDER PLACED on Polymarket!\nPrice: ${(exec.price*100).toFixed(0)}c | Size: ${exec.size} shares | Stake: $${exec.stake}`);
+            } else if (exec.error) {
+                alert(`Trade confirmed but execution error: ${exec.error}\nThe trade is logged and can be retried.`);
             } else {
-                const trade = data.trade || {};
-                const polyLink = trade.poly_link || trade.slug;
-                alert(`Trade logged but CLOB execution failed: ${exec.error || 'unknown'}\nOpening Polymarket so you can place manually.`);
-                if (polyLink) {
-                    const url = polyLink.startsWith('http') ? polyLink : `https://polymarket.com/event/${polyLink}`;
-                    window.open(url, '_blank');
-                }
+                // Fallback — trade was confirmed regardless
+                alert(`Trade confirmed: ${trade.bet_on || '?'}\nCheck the executor for execution status.`);
             }
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            alert('Confirm failed: ' + (errData.error || res.statusText));
         }
     } catch(e) {
         alert('Error confirming trade: ' + e.message);
