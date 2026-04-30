@@ -4215,6 +4215,23 @@ def comeback_signals():
                 logger.debug(f"Comeback radar: tag {tag} fetch error: {e}")
                 continue
 
+        # 2b. Build a lookup of pre-match prices from picks data (signal cards)
+        # This seeds the peak/initial prices so we can detect drops even on first scan
+        picks_price_map = {}  # slug → {price_a, price_b, player_a, player_b}
+        try:
+            picks = load_picks_jsonl()
+            for p in picks:
+                s = p.get("slug", "")
+                if s and p.get("poly_price_a") and p.get("poly_price_b"):
+                    picks_price_map[s] = {
+                        "price_a": p["poly_price_a"],
+                        "price_b": p["poly_price_b"],
+                        "player_a": p.get("player_a", ""),
+                        "player_b": p.get("player_b", ""),
+                    }
+        except Exception as e:
+            logger.debug(f"Comeback radar: picks lookup failed: {e}")
+
         # 3. Parse prices and detect drops
         signals = []
         new_snapshots = {}
@@ -4292,6 +4309,18 @@ def comeback_signals():
             # Store current snapshot
             snap_key = slug
             prev_snap = snapshots.get(snap_key, {})
+
+            # Seed initial/peak prices from picks data if no prior snapshot exists
+            # This lets us detect drops even on first scan — picks have pre-match prices
+            picks_seed = picks_price_map.get(slug, {})
+            seed_a = picks_seed.get("price_a", price_a)
+            seed_b = picks_seed.get("price_b", price_b)
+
+            initial_a = prev_snap.get("initial_price_a", seed_a)
+            initial_b = prev_snap.get("initial_price_b", seed_b)
+            peak_a = max(price_a, prev_snap.get("peak_a", seed_a))
+            peak_b = max(price_b, prev_snap.get("peak_b", seed_b))
+
             new_snapshots[snap_key] = {
                 "price_a": price_a, "price_b": price_b,
                 "player_a": player_a, "player_b": player_b,
@@ -4301,18 +4330,18 @@ def comeback_signals():
                 "updated": now_iso,
                 "prev_state_a": prev_snap.get("state_a"),
                 "prev_state_b": prev_snap.get("state_b"),
-                "initial_price_a": prev_snap.get("initial_price_a", price_a),
-                "initial_price_b": prev_snap.get("initial_price_b", price_b),
-                "peak_a": max(price_a, prev_snap.get("peak_a", price_a)),
-                "peak_b": max(price_b, prev_snap.get("peak_b", price_b)),
+                "initial_price_a": initial_a,
+                "initial_price_b": initial_b,
+                "peak_a": peak_a,
+                "peak_b": peak_b,
             }
 
             # Check each player for a significant drop from their peak/initial price
             for player, curr_price, initial_price, peak_price, prev_state, opp, opp_price in [
-                (player_a, price_a, prev_snap.get("initial_price_a", price_a),
-                 prev_snap.get("peak_a", price_a), prev_snap.get("state_a"), player_b, price_b),
-                (player_b, price_b, prev_snap.get("initial_price_b", price_b),
-                 prev_snap.get("peak_b", price_b), prev_snap.get("state_b"), player_a, price_a),
+                (player_a, price_a, initial_a,
+                 peak_a, prev_snap.get("state_a"), player_b, price_b),
+                (player_b, price_b, initial_b,
+                 peak_b, prev_snap.get("state_b"), player_a, price_a),
             ]:
                 # Compare current price to the peak (highest seen) — most reliable drop signal
                 set_state, confidence = _infer_set_state(peak_price, curr_price, prev_state)
