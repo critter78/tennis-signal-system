@@ -3522,6 +3522,246 @@ def _auto_resolve_loop():
         _time.sleep(AUTO_RESOLVE_INTERVAL)
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# POSITION MONITOR — background thread, checks every 10 minutes
+# ═══════════════════════════════════════════════════════════════════════
+
+POSITION_MONITOR_INTERVAL = 10 * 60  # 10 minutes
+
+
+def _position_monitor_loop():
+    """Background thread: monitors open auto-trader positions every 10 minutes.
+    Fetches current prices via Gamma API, checks stop-loss/take-profit/trailing-stop,
+    queues exits in pending_trades.json, and sends Telegram alerts."""
+    import time as _time
+    import urllib.request
+    import urllib.parse
+
+    _time.sleep(90)  # Wait 90s after startup before first run
+
+    _GAMMA_HEADERS = {
+        "Accept": "application/json",
+        "User-Agent": "python-requests/2.31.0",
+        "Accept-Encoding": "identity",
+        "Connection": "close",
+    }
+
+    def _gamma_get(url, params=None, timeout=5):
+        if params:
+            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
+            url = f"{url}?{qs}"
+        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
+        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+
+    # Track peak prices across cycles (persists in memory)
+    peak_tracker = {}  # key: match|bet_on → peak price in cents
+
+    while True:
+        try:
+            # Load auto-trader config
+            cfg_path = AUTO_TRADER_CONFIG if AUTO_TRADER_CONFIG.exists() else AUTO_TRADER_CONFIG_LOCAL
+            if not cfg_path.exists():
+                _time.sleep(POSITION_MONITOR_INTERVAL)
+                continue
+            config = json.loads(cfg_path.read_text())
+
+            mode = config.get("mode", "paper")
+            if config.get("safety", {}).get("kill_switch"):
+                logger.debug("[POS-MONITOR] Kill switch is on, skipping")
+                _time.sleep(POSITION_MONITOR_INTERVAL)
+                continue
+
+            # Load open positions from paper_trades.jsonl
+            log_path = LOGS_DIR / "paper_trades.jsonl"
+            persist_log = Path("/data/logs/paper_trades.jsonl")
+            if persist_log.exists():
+                log_path = persist_log
+
+            if not log_path.exists():
+                _time.sleep(POSITION_MONITOR_INTERVAL)
+                continue
+
+            entries = []
+            exit_keys = set()
+            with open(log_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        t = json.loads(line)
+                        if t.get("action") == "entry":
+                            entries.append(t)
+                        elif t.get("action") in ("exit", "stop_loss", "take_profit",
+                                                  "take_profit_partial", "trailing_stop"):
+                            key = t.get("match", "") + "|" + t.get("bet_on", "")
+                            exit_keys.add(key)
+                    except Exception:
+                        continue
+
+            open_positions = [
+                e for e in entries
+                if (e.get("match", "") + "|" + e.get("bet_on", "")) not in exit_keys
+            ]
+
+            if not open_positions:
+                logger.debug("[POS-MONITOR] No open positions")
+                _time.sleep(POSITION_MONITOR_INTERVAL)
+                continue
+
+            logger.info(f"[POS-MONITOR] Checking {len(open_positions)} open positions...")
+
+            exit_rules = config.get("exit_rules", {})
+            stop_loss_pct = exit_rules.get("stop_loss_pct", 15)
+            tp1_price = exit_rules.get("take_profit_1_price", 85)
+            tp2_price = exit_rules.get("take_profit_2_price", 95)
+            trailing_stop_pct = exit_rules.get("trailing_stop_pct", 8)
+            exits_triggered = 0
+
+            for pos in open_positions:
+                slug = pos.get("slug", "")
+                bet_on = pos.get("bet_on", "")
+                match_name = pos.get("match", "?")
+                entry_price = pos.get("entry_price", 50)
+                stake = pos.get("stake", 100)
+                pending_id = pos.get("pending_id", "")
+                pos_key = match_name + "|" + bet_on
+
+                if not slug:
+                    continue
+
+                # Fetch current price from Gamma API
+                try:
+                    events = _gamma_get(
+                        "https://gamma-api.polymarket.com/events",
+                        params={"slug": slug},
+                        timeout=5,
+                    )
+                    if not events:
+                        continue
+                    ev = events[0] if isinstance(events, list) else events
+                    markets = ev.get("markets", [ev])
+
+                    current_price = None
+                    for m in markets:
+                        outcomes_raw = m.get("outcomes", "")
+                        prices_raw = m.get("outcomePrices", "")
+                        try:
+                            outcomes = json.loads(outcomes_raw) if isinstance(outcomes_raw, str) else (outcomes_raw or [])
+                        except (json.JSONDecodeError, TypeError):
+                            outcomes = []
+                        try:
+                            prices_list = json.loads(prices_raw) if isinstance(prices_raw, str) else (prices_raw or [])
+                        except (json.JSONDecodeError, TypeError):
+                            prices_list = []
+
+                        if outcomes and prices_list and len(outcomes) == len(prices_list):
+                            for name, price in zip(outcomes, prices_list):
+                                if str(name).lower().strip() == bet_on.lower().strip():
+                                    current_price = round(float(price) * 100, 1)
+                                    break
+
+                    if current_price is None:
+                        continue
+
+                except Exception as e:
+                    logger.debug(f"[POS-MONITOR] Price fetch failed for {slug}: {e}")
+                    continue
+
+                # Track peak price
+                peak = max(current_price, peak_tracker.get(pos_key, entry_price))
+                peak_tracker[pos_key] = peak
+
+                # Calculate P&L
+                pnl_pct = ((current_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+                pnl_usd = (current_price - entry_price) / 100 * (stake / (entry_price / 100)) if entry_price > 0 else 0
+
+                # ── Exit Rule Checks ──
+                exit_action = None
+                exit_reason = None
+
+                # 1. Stop-loss
+                if pnl_pct <= -stop_loss_pct:
+                    exit_action = "stop_loss"
+                    exit_reason = f"Stop loss: {pnl_pct:.1f}% (limit: -{stop_loss_pct}%)"
+
+                # 2. Take-profit
+                if not exit_action and current_price >= tp1_price:
+                    if current_price >= tp2_price:
+                        exit_action = "take_profit"
+                        exit_reason = f"Take profit T2: {current_price:.0f}c >= {tp2_price}c"
+                    else:
+                        exit_action = "take_profit"
+                        exit_reason = f"Take profit T1: {current_price:.0f}c >= {tp1_price}c"
+
+                # 3. Trailing stop
+                if not exit_action and peak > entry_price:
+                    drop_from_peak = ((peak - current_price) / peak * 100) if peak > 0 else 0
+                    if drop_from_peak >= trailing_stop_pct:
+                        exit_action = "trailing_stop"
+                        exit_reason = f"Trailing stop: dropped {drop_from_peak:.1f}% from peak {peak:.0f}c"
+
+                pnl_sign = "+" if pnl_pct >= 0 else ""
+                logger.info(f"[POS-MONITOR]   {bet_on[:20]:>20} | {current_price:.0f}c (entry {entry_price:.0f}c) | P&L: {pnl_sign}{pnl_pct:.1f}% | Peak: {peak:.0f}c" +
+                            (f" | EXIT: {exit_reason}" if exit_action else ""))
+
+                if exit_action:
+                    exits_triggered += 1
+
+                    # Log the exit to paper_trades.jsonl
+                    exit_record = {
+                        "action": exit_action,
+                        "mode": mode,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "match": match_name,
+                        "bet_on": bet_on,
+                        "entry_price": entry_price,
+                        "exit_price": current_price,
+                        "peak": peak,
+                        "stake": stake,
+                        "pnl_pct": round(pnl_pct, 2),
+                        "pnl_usd": round(pnl_usd, 2),
+                        "reason": exit_reason,
+                        "pending_id": pending_id,
+                        "slug": slug,
+                        "source": "render_monitor",
+                    }
+                    with open(log_path, "a") as f:
+                        f.write(json.dumps(exit_record) + "\n")
+
+                    # Send Telegram alert
+                    pnl_emoji = "✅" if pnl_usd >= 0 else "❌"
+                    try:
+                        telegram_send(
+                            f"{pnl_emoji} POSITION EXIT\n\n"
+                            f"{bet_on}\n"
+                            f"{match_name}\n\n"
+                            f"Status: {exit_action.upper().replace('_', ' ')}\n"
+                            f"Entry: {entry_price:.0f}c → Exit: {current_price:.0f}c\n"
+                            f"P&L: {pnl_sign}${abs(pnl_usd):.2f} ({pnl_sign}{pnl_pct:.1f}%)\n"
+                            f"Reason: {exit_reason}\n\n"
+                            f"⏱ Detected by 10-min monitor"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[POS-MONITOR] Telegram failed: {e}")
+
+                    # Remove from peak tracker
+                    peak_tracker.pop(pos_key, None)
+
+                _time.sleep(0.5)  # Rate limit between API calls
+
+            if exits_triggered:
+                logger.info(f"[POS-MONITOR] Triggered {exits_triggered} exit(s)")
+            else:
+                logger.info(f"[POS-MONITOR] All {len(open_positions)} positions OK")
+
+        except Exception as e:
+            logger.warning(f"[POS-MONITOR] Error: {e}")
+
+        _time.sleep(POSITION_MONITOR_INTERVAL)
+
+
 # ─── Auto-Trader API Endpoints ─────────���────────────────────────────────────
 
 AUTO_TRADER_CONFIG_LOCAL = BASE_DIR / "auto_trader_config.json"
@@ -4616,6 +4856,39 @@ def update_comeback_bet(bet_id):
     return jsonify({"ok": True, "bet": b})
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# BACKGROUND THREAD STARTUP — works with both Gunicorn and direct run
+# ═══════════════════════════════════════════════════════════════════════
+
+_bg_threads_started = False
+
+
+def _start_background_threads():
+    """Start background threads (auto-resolver + position monitor).
+    Safe to call multiple times — only starts once."""
+    global _bg_threads_started
+    if _bg_threads_started:
+        return
+    _bg_threads_started = True
+
+    import threading
+
+    resolver_thread = threading.Thread(target=_auto_resolve_loop, daemon=True)
+    resolver_thread.start()
+    logger.info("[AUTO-RESOLVE] Background resolver started (every 4 hours)")
+
+    monitor_thread = threading.Thread(target=_position_monitor_loop, daemon=True)
+    monitor_thread.start()
+    logger.info("[POS-MONITOR] Background position monitor started (every 10 minutes)")
+
+
+# Start threads on module import (Gunicorn imports the module, doesn't run __main__)
+# Only start if not in Flask debug reloader child process
+import os as _os
+if _os.environ.get("WERKZEUG_RUN_MAIN") != "true" or _os.environ.get("FLASK_ENV") != "development":
+    _start_background_threads()
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV") == "development"
@@ -4624,10 +4897,7 @@ if __name__ == "__main__":
     logger.info(f"Base directory: {BASE_DIR}")
     logger.info(f"Debug mode: {debug}")
 
-    # Start background auto-resolver (runs every 4 hours)
-    import threading
-    resolver_thread = threading.Thread(target=_auto_resolve_loop, daemon=True)
-    resolver_thread.start()
-    logger.info("[AUTO-RESOLVE] Background resolver started (every 4 hours)")
+    # Ensure background threads are running (redundant safety)
+    _start_background_threads()
 
     app.run(host="0.0.0.0", port=port, debug=debug)
