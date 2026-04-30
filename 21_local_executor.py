@@ -82,19 +82,21 @@ def build_clob_client():
         api_passphrase=api_passphrase,
     )
 
-    # Signature type: 0=EOA, 1=POLY_PROXY, 2=POLY_GNOSIS_SAFE
-    sig_type = int(os.environ.get("POLYMARKET_SIGNATURE_TYPE", "0"))
+    # Signature type: 0=EOA, 1=POLY_PROXY (Magic Link only), 2=POLY_GNOSIS_SAFE (most common)
+    sig_type = int(os.environ.get("POLYMARKET_SIGNATURE_TYPE", "2"))
     proxy_addr = os.environ.get("POLYMARKET_PROXY_ADDRESS", "")
 
     log(f"CLOB V2 init: sig_type={sig_type}, proxy={proxy_addr[:10]}..." if proxy_addr else f"CLOB V2 init: sig_type={sig_type}, no proxy")
 
+    # For EOA mode (sig_type=0), don't pass funder — maker must equal signer.
+    # For POLY_PROXY (1) or GNOSIS_SAFE (2), pass the proxy/safe address as funder.
     client = ClobClient(
         host="https://clob.polymarket.com",
         chain_id=137,
         key=pk,
         creds=creds,
         signature_type=sig_type,
-        funder=proxy_addr if proxy_addr else None,
+        funder=proxy_addr if (proxy_addr and sig_type != 0) else None,
     )
 
     # Check server version to confirm V2 is active
