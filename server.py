@@ -647,7 +647,7 @@ def serve_dashboard(is_shared=False, share_expires=None):
                     /* Hide admin/logout links */
                     a[href*="admin"], a[href*="logout"] { display: none !important; }
                     /* Hide Place Bet / I BET THIS buttons */
-                    .sig-bet-btn, .v5-bet-btn, .v5-bet-selector, .v5-card-foot { display: none !important; }
+                    .sig-bet-btn, .v5-bet-btn, .v5-bet-selector { display: none !important; }
                     /* Hide LSTM sections */
                     #lstmProgress, #lstmInsights { display: none !important; }
                     /* Hide header subtitle (picks logged, bets placed, resolved counts) */
