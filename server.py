@@ -644,23 +644,22 @@ def serve_dashboard(is_shared=False, share_expires=None):
                     .mode-switcher { display: none !important; }
                     /* Hide auto-trader app entirely */
                     #autotrader-app { display: none !important; }
-                    /* Hide all tabs except Today's Signals and Players */
-                    .tab { display: none !important; }
-                    .tab.active, .tab[onclick*="signals"], .tab[onclick*="players"] { display: inline-block !important; cursor: pointer; pointer-events: auto; }
-                    /* Hide non-signal/non-player panels */
-                    #panel-overview, #panel-mybets, #panel-performance, #panel-accuracy { display: none !important; }
                     /* Hide admin/logout links */
                     a[href*="admin"], a[href*="logout"] { display: none !important; }
-                    /* Hide Place Bet buttons and bet selectors */
+                    /* Hide Place Bet / I BET THIS buttons */
                     .sig-bet-btn, .v5-bet-btn, .v5-bet-selector, .v5-card-foot { display: none !important; }
                     /* Hide LSTM sections */
                     #lstmProgress, #lstmInsights { display: none !important; }
                     /* Hide header subtitle (picks logged, bets placed, resolved counts) */
                     #headerSub { display: none !important; }
-                    /* Hide personal stat cards (Bets Placed, Win Rate, Total P&L) via nth-child */
-                    .stat-card:nth-child(2), .stat-card:nth-child(4), .stat-card:nth-child(5) { display: none !important; }
                     /* Hide auto-trade and active bet badges */
                     .active-tag { display: none !important; }
+                    /* Only show Today's Signals + Players tabs */
+                    .tab[onclick*="mybets"], .tab[onclick*="performance"], .tab[onclick*="overview"], .tab[onclick*="accuracy"] { display: none !important; }
+                    #panel-mybets, #panel-performance, #panel-overview, #panel-accuracy { display: none !important; }
+                    /* Hide Comeback Radar mode tab */
+                    .mode-tab[onclick*="comeback"] { display: none !important; }
+                    #comeback-mode { display: none !important; }
                 </style>
                 """
 
@@ -688,10 +687,11 @@ def serve_dashboard(is_shared=False, share_expires=None):
 
                     // Also handle via JS after DOM loads as extra safety
                     document.addEventListener('DOMContentLoaded', function() {{
-                        // Disable tab switching to hidden panels
+                        // Only allow Today's Signals + Players
+                        var allowed = ['signals', 'players'];
                         window._origSwitchTab = window.switchTab;
                         window.switchTab = function(name) {{
-                            if (name !== 'signals' && name !== 'players') return;
+                            if (allowed.indexOf(name) === -1) return;
                             if (window._origSwitchTab) window._origSwitchTab(name);
                         }};
                     }});
@@ -702,22 +702,15 @@ def serve_dashboard(is_shared=False, share_expires=None):
                 content = content.replace("<body>", f"<body>\n{expiry_banner}\n<div style='margin-top:40px'>", 1)
                 content = content.replace("</body>", "</div>\n</body>", 1)
 
-                # For shared view: include today's signals + resolved history (for SYS WR buckets)
-                from datetime import date
-                today_str = date.today().isoformat()
-                sensitive_keys = ("myOutcome", "myStake", "myOdds", "actual_shares")
+                # For shared view: include ALL picks (same as main dashboard)
+                # but strip personal bet/trade data
+                sensitive_keys = ("myOutcome", "myStake", "myOdds", "actual_shares",
+                                  "entry_price", "exit_price", "pnl", "shares",
+                                  "trade_id", "clob_order_id")
                 shared_picks = []
                 for p in picks_data:
-                    logged = p.get("logged_at", "")
-                    is_today = logged.startswith(today_str)
-                    is_resolved = p.get("outcome") is not None
-                    if is_today or is_resolved:
-                        clean = {k: v for k, v in p.items() if k not in sensitive_keys}
-                        # For resolved historical (not today): only keep fields needed for SYS WR calc
-                        if not is_today and is_resolved:
-                            clean = {"model_prob": p.get("model_prob"), "outcome": p.get("outcome"),
-                                     "logged_at": logged}
-                        shared_picks.append(clean)
+                    clean = {k: v for k, v in p.items() if k not in sensitive_keys}
+                    shared_picks.append(clean)
                 shared_json = json.dumps(shared_picks, separators=(',', ':'))
                 # Simple string replace on the raw template (has empty PICKS_DATA)
                 content = content.replace(
