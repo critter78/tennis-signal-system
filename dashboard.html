@@ -2954,9 +2954,9 @@ function renderSignals() {
             <div class="card-hdr">
                 <div style="position:relative">
                     <div class="hdr-names"><span class="pa player-link" data-player="${s.player_a||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_a||''}</span><span class="pb player-link" data-player="${s.player_b||''}" onmouseenter="showPlayerOverlay(event, this)" onmouseleave="hidePlayerOverlay()" onclick="goToPlayerCard(this.dataset.player)">${s.player_b||''}</span></div>
-                    ${(isBet || isAutoTrade) ? '<div class="badge-row">' + (isBet ? '<span class="active-tag">ACTIVE BET</span>' : '') + (isAutoTrade ? '<span class="active-tag" style="background:#1565c0">AUTO-TRADE</span>' : '') + '</div>' : ''}
                 </div>
                 <div class="hdr-right">
+                    ${(isBet || isAutoTrade) ? '<div class="badge-row" style="margin-bottom:4px">' + (isBet ? '<span class="active-tag">ACTIVE BET</span>' : '') + (isAutoTrade ? '<span class="active-tag" style="background:#1565c0">AUTO-TRADE</span>' : '') + '</div>' : ''}
                     <div class="hdr-tourney">${tourney || ''} ${surface ? '<span class="hdr-surface" style="color:'+sfcColor+'">| '+surface+'</span>' : ''}</div>
                     ${dateStr ? '<div class="hdr-date">'+dateStr+'</div>' : ''}
                     ${round ? '<div class="hdr-round">'+round+'</div>' : ''}
