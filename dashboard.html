@@ -172,7 +172,7 @@
         .hdr-date { color: #6c757d; font-size: 10px; }
         .hdr-round { color: #888; font-size: 10px; }
         .active-tag { display: inline-block; background: #d4740a; color: #fff; font-size: 8px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; }
-        .badge-row { position: absolute; bottom: -10px; left: 0; display: flex; gap: 4px; z-index: 2; }
+        .badge-row { display: flex; gap: 4px; justify-content: flex-end; }
         /* v5.1 Tab Bar */
         .v5-tab-bar { display: flex; background: #12141c; border-bottom: 2px solid #2a2d37; padding: 0 6px; }
         .v5-tab-btn { flex: 1; padding: 8px 4px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; font-family: 'IBM Plex Mono', monospace; border-right: 1px solid #2a2d37; }
@@ -2957,6 +2957,7 @@ function renderSignals() {
                 </div>
                 <div class="hdr-right">
                     ${(isBet || isAutoTrade) ? '<div class="badge-row" style="margin-bottom:4px">' + (isBet ? '<span class="active-tag">ACTIVE BET</span>' : '') + (isAutoTrade ? '<span class="active-tag" style="background:#1565c0">AUTO-TRADE</span>' : '') + '</div>' : ''}
+
                     <div class="hdr-tourney">${tourney || ''} ${surface ? '<span class="hdr-surface" style="color:'+sfcColor+'">| '+surface+'</span>' : ''}</div>
                     ${dateStr ? '<div class="hdr-date">'+dateStr+'</div>' : ''}
                     ${round ? '<div class="hdr-round">'+round+'</div>' : ''}
