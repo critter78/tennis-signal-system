@@ -3594,7 +3594,8 @@ def _position_monitor_loop():
                         if t.get("action") == "entry":
                             entries.append(t)
                         elif t.get("action") in ("exit", "stop_loss", "take_profit",
-                                                  "take_profit_partial", "trailing_stop"):
+                                                  "take_profit_partial", "trailing_stop",
+                                                  "market_resolved"):
                             key = t.get("match", "") + "|" + t.get("bet_on", "")
                             exit_keys.add(key)
                     except Exception:
