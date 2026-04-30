@@ -3959,6 +3959,19 @@ def auto_trader_exit_report():
     return jsonify({"ok": True, "updated": True})
 
 
+@app.route("/api/auto-trader/cron-scan", methods=["POST"])
+@enable_cors
+def auto_trader_cron_scan():
+    """Cron-triggered auto-trader scan. Authenticated via CRON_SECRET.
+    Runs entry rules, queues pending trades, sends Telegram alerts."""
+    secret = request.headers.get("X-Cron-Secret") or (request.get_json(silent=True) or {}).get("secret")
+    if secret != CRON_SECRET and not check_admin_cookie():
+        logger.warning("Unauthorized /api/auto-trader/cron-scan attempt")
+        return jsonify({"error": "Unauthorized"}), 401
+    # Delegate to the same logic as the manual scan
+    return _do_auto_trader_scan()
+
+
 @app.route("/api/auto-trader/scan", methods=["POST"])
 @enable_cors
 def auto_trader_scan():
@@ -3966,17 +3979,22 @@ def auto_trader_scan():
     if not check_admin_cookie():
         return jsonify({"error": "Unauthorized"}), 401
 
+    # Accept browser-fetched token_id map (bypasses Cloudflare WAF on Render)
+    body = request.get_json(silent=True) or {}
+    token_id_map = body.get("token_id_map")
+    if token_id_map and isinstance(token_id_map, dict):
+        cache_path = LOGS_DIR / "token_id_cache.json"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(token_id_map))
+        logger.info(f"[AUTO-TRADER] Wrote token_id cache: {len(token_id_map)} markets")
+
+    return _do_auto_trader_scan()
+
+
+def _do_auto_trader_scan():
+    """Shared scan logic: run 20_auto_trader.py, load pending, send Telegram alerts."""
     try:
         import subprocess
-
-        # Accept browser-fetched token_id map (bypasses Cloudflare WAF on Render)
-        body = request.get_json(silent=True) or {}
-        token_id_map = body.get("token_id_map")
-        if token_id_map and isinstance(token_id_map, dict):
-            cache_path = LOGS_DIR / "token_id_cache.json"
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json.dumps(token_id_map))
-            logger.info(f"[AUTO-TRADER] Wrote token_id cache: {len(token_id_map)} markets")
 
         logger.info(f"[AUTO-TRADER] Starting scan subprocess...")
         result = subprocess.run(

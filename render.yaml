@@ -28,6 +28,22 @@ services:
       - key: WEB_SERVICE_URL
         value: "https://tennis-betting-server.onrender.com"
 
+  # ─── AUTO-TRADER CRON — scans for new picks every 2 hours ──────────────
+  - type: cron
+    name: auto-trader-scan-2h
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    schedule: "30 1,3,5,7,9,11,13,15,17,19,21,23 * * *"
+    startCommand: python3 run_auto_trader_cron.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: CRON_SECRET
+        sync: false  # Must match the web service's CRON_SECRET
+      - key: WEB_SERVICE_URL
+        value: "https://tennis.critterlabs.io"
+
   # ─── V2 CONVICTION SIGNAL — tennisv2.critterlabs.io ──────────────────────
   # Parallel/isolated from v1. Ranks by model_prob (not edge).
   # Auto-sell thresholds: 85c sell-half, 95c sell-all.
