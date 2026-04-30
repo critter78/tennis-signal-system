@@ -275,14 +275,20 @@ def validate_share_token(token):
 
 
 def cleanup_expired_shares():
-    """Remove expired share tokens."""
+    """Remove share tokens that expired more than 4 hours ago.
+    Keeps recently-expired tokens visible in admin so the user can review them,
+    then auto-purges after 4 hours."""
     shares = load_shares()
     now = datetime.utcnow()
-    active = {k: v for k, v in shares.items()
-              if datetime.fromisoformat(v["expires_at"]) > now}
-    if len(active) != len(shares):
-        save_shares(active)
-    return active
+    grace_period = timedelta(hours=4)
+    # Keep tokens that are either still active OR expired less than 4 hours ago
+    kept = {k: v for k, v in shares.items()
+            if datetime.fromisoformat(v["expires_at"]) + grace_period > now}
+    if len(kept) != len(shares):
+        purged = len(shares) - len(kept)
+        logger.info(f"[SHARE-CLEANUP] Purged {purged} expired share links (>4h past expiry)")
+        save_shares(kept)
+    return kept
 
 
 # ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
@@ -920,7 +926,10 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
 </div>
 
 <div class="section">
-    <h2>ACTIVE SHARE LINKS</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <h2 style="margin:0">ACTIVE SHARE LINKS</h2>
+        <button class="revoke-btn" style="font-size:10px;padding:6px 14px" onclick="clearExpiredShares()">CLEAR ALL EXPIRED</button>
+    </div>
     <div id="sharesTable"></div>
 </div>
 
@@ -981,6 +990,20 @@ async function revokeShare(token) {
     loadShares();
 }
 
+async function deleteShare(token) {
+    await fetch('/admin/revoke-share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+    });
+    loadShares();
+}
+
+async function clearExpiredShares() {
+    await fetch('/admin/clear-expired-shares', { method: 'POST' });
+    loadShares();
+}
+
 async function loadShares() {
     const res = await fetch('/admin/shares');
     const data = await res.json();
@@ -1006,7 +1029,7 @@ async function loadShares() {
             '<td style="font-size:10px">' + remaining + '</td>' +
             '<td>' + info.views + '</td>' +
             '<td>' + status + '</td>' +
-            '<td style="display:flex;gap:6px">' + (isActive ? '<button class="copy-btn" style="margin:0;font-size:9px;padding:4px 8px" onclick="copyShareLink(\\''+token+'\\')">COPY LINK</button><button class="revoke-btn" onclick="revokeShare(\\''+token+'\\')">REVOKE</button>' : '') + '</td>' +
+            '<td style="display:flex;gap:6px">' + (isActive ? '<button class="copy-btn" style="margin:0;font-size:9px;padding:4px 8px" onclick="copyShareLink(\\''+token+'\\')">COPY LINK</button><button class="revoke-btn" onclick="revokeShare(\\''+token+'\\')">REVOKE</button>' : '<button class="revoke-btn" style="opacity:0.7;font-size:9px;padding:4px 8px" onclick="deleteShare(\\''+token+'\\')">DELETE</button>') + '</td>' +
             '</tr>';
     }
     html += '</tbody></table>';
@@ -1333,10 +1356,12 @@ def admin_create_share():
 
 @app.route("/admin/shares", methods=["GET"])
 def admin_list_shares():
-    """List all share tokens."""
+    """List all share tokens (auto-purges links >4h past expiry)."""
     if not check_admin_cookie():
         return jsonify({"error": "Unauthorized"}), 401
 
+    # Auto-purge links expired more than 4 hours ago
+    cleanup_expired_shares()
     shares = load_shares()
     return jsonify({"shares": shares})
 
@@ -1357,6 +1382,21 @@ def admin_revoke_share():
         return jsonify({"status": "revoked"})
 
     return jsonify({"error": "Token not found"}), 404
+
+
+@app.route("/admin/clear-expired-shares", methods=["POST"])
+def admin_clear_expired_shares():
+    """Delete all expired share tokens at once."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    shares = load_shares()
+    now = datetime.utcnow()
+    active = {k: v for k, v in shares.items()
+              if datetime.fromisoformat(v["expires_at"]) > now}
+    removed = len(shares) - len(active)
+    save_shares(active)
+    return jsonify({"status": "cleared", "removed": removed})
 
 
 # ─── EXISTING API ROUTES ─────────────────────────────────────────────────────
