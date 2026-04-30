@@ -332,8 +332,14 @@ def get_latest_betting_card():
     return None
 
 
-def load_picks_jsonl():
-    """Load all picks from picks.jsonl as a list of dicts."""
+def load_picks_jsonl(enrich=True):
+    """Load all picks from picks.jsonl as a list of dicts.
+
+    Args:
+        enrich: If True, backfill serve data from parquet (requires pandas ~100MB).
+                Set False for lightweight callers (background threads, APIs, comeback radar)
+                to avoid OOM on Render 512MB free tier.
+    """
     picks = []
     try:
         if PICKS_FILE.exists():
@@ -347,7 +353,8 @@ def load_picks_jsonl():
     except Exception as e:
         logger.error(f"Error loading picks: {e}")
     # Enrich picks missing serve data from parquet files
-    if picks:
+    # Only when explicitly requested (dashboard render) — pandas import = ~100MB
+    if enrich and picks:
         picks = _enrich_serve_data(picks)
     return picks
 
@@ -567,7 +574,7 @@ def get_system_status():
             mtime = os.path.getmtime(last_card)
             last_card_time = datetime.fromtimestamp(mtime).isoformat()
 
-        picks_count = len(load_picks_jsonl())
+        picks_count = len(load_picks_jsonl(enrich=False))
         model_exists = (MODELS_DIR / "latest_model.json").exists()
 
         return {
@@ -1376,9 +1383,9 @@ def latest_card():
 @app.route("/api/picks", methods=["GET"])
 @enable_cors
 def api_picks():
-    """Return all picks as JSON array."""
+    """Return all picks as JSON array (no serve enrichment — saves ~100MB)."""
     try:
-        picks = load_picks_jsonl()
+        picks = load_picks_jsonl(enrich=False)
         return jsonify({"picks": picks, "count": len(picks)})
     except Exception as e:
         logger.error(f"Error in /api/picks: {e}")
@@ -1731,7 +1738,7 @@ def _resolve_bet_outcomes(bets):
     Same logic as the frontend renderMyBets() but done server-side so that
     enrich_bets_with_trades has outcome info for P&L calculations.
     """
-    picks = load_picks_jsonl()
+    picks = load_picks_jsonl(enrich=False)
     if not picks:
         return bets
 
@@ -2127,8 +2134,8 @@ def _run_inline_resolver(prefetched_markets=None):
     logger.info("Running inline outcome resolution...")
     output_lines = []
 
-    # Load picks
-    picks = load_picks_jsonl()
+    # Load picks (no serve enrichment needed for resolution)
+    picks = load_picks_jsonl(enrich=False)
     if not picks:
         return {"status": "success", "message": "No picks found.", "output": "No picks found."}
 
@@ -2972,8 +2979,8 @@ def api_resolve_slugs():
         return jsonify({"error": "Unauthorized"}), 401
     try:
         slugs = set()
-        # From picks
-        picks = load_picks_jsonl()
+        # From picks (no serve enrichment needed for slug resolution)
+        picks = load_picks_jsonl(enrich=False)
         for p in picks:
             if p.get("outcome") is not None:
                 continue
@@ -4511,7 +4518,7 @@ def comeback_signals():
         # This seeds the peak/initial prices so we can detect drops even on first scan
         picks_price_map = {}  # slug → {price_a, price_b, player_a, player_b}
         try:
-            picks = load_picks_jsonl()
+            picks = load_picks_jsonl(enrich=False)
             for p in picks:
                 s = p.get("slug", "")
                 if s and p.get("poly_price_a") and p.get("poly_price_b"):
@@ -4643,7 +4650,7 @@ def comeback_signals():
                 # Look up player rank from picks data
                 player_rank = None
                 try:
-                    picks = load_picks_jsonl()
+                    picks = load_picks_jsonl(enrich=False)
                     name_lower = player.lower().strip()
                     for p in reversed(picks):
                         pa = (p.get("player_a", "") or "").lower()
