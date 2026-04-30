@@ -3603,6 +3603,10 @@ def _position_monitor_loop():
             open_positions = [
                 e for e in entries
                 if (e.get("match", "") + "|" + e.get("bet_on", "")) not in exit_keys
+                # Also skip entries that were already exited inline (by exit-report API)
+                and not e.get("exit_action")
+                and not e.get("exit_at")
+                and not e.get("outcome")
             ]
 
             if not open_positions:
@@ -3613,10 +3617,10 @@ def _position_monitor_loop():
             logger.info(f"[POS-MONITOR] Checking {len(open_positions)} open positions...")
 
             exit_rules = config.get("exit_rules", {})
-            stop_loss_pct = exit_rules.get("stop_loss_pct", 15)
+            stop_loss_pct = max(exit_rules.get("stop_loss_pct", 15), 5)  # Min 5%
             tp1_price = exit_rules.get("take_profit_1_price", 85)
             tp2_price = exit_rules.get("take_profit_2_price", 95)
-            trailing_stop_pct = exit_rules.get("trailing_stop_pct", 8)
+            trailing_stop_pct = max(exit_rules.get("trailing_stop_pct", 8), 3)  # Min 3%
             exits_triggered = 0
 
             for pos in open_positions:
@@ -3669,6 +3673,50 @@ def _position_monitor_loop():
                     logger.debug(f"[POS-MONITOR] Price fetch failed for {slug}: {e}")
                     continue
 
+                # Skip already-resolved markets (price is 0c or 100c)
+                # These matches are over — log as resolved, don't treat as stop-loss
+                if current_price <= 0.5 or current_price >= 99.5:
+                    resolved_outcome = "win" if current_price >= 99.5 else "loss"
+                    pnl_pct_r = ((current_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+                    pnl_usd_r = (current_price - entry_price) / 100 * (stake / (entry_price / 100)) if entry_price > 0 else 0
+                    logger.info(f"[POS-MONITOR]   {bet_on[:20]:>20} | RESOLVED ({resolved_outcome}) | {entry_price:.0f}c → {current_price:.0f}c")
+
+                    # Log resolution (not stop-loss)
+                    exit_record = {
+                        "action": "market_resolved",
+                        "mode": mode,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "match": match_name,
+                        "bet_on": bet_on,
+                        "entry_price": entry_price,
+                        "exit_price": current_price,
+                        "stake": stake,
+                        "pnl_pct": round(pnl_pct_r, 2),
+                        "pnl_usd": round(pnl_usd_r, 2),
+                        "reason": f"Market resolved: {resolved_outcome}",
+                        "pending_id": pending_id,
+                        "slug": slug,
+                        "source": "render_monitor",
+                    }
+                    with open(log_path, "a") as f:
+                        f.write(json.dumps(exit_record) + "\n")
+
+                    pnl_emoji = "✅" if pnl_usd_r >= 0 else "❌"
+                    pnl_sign = "+" if pnl_usd_r >= 0 else ""
+                    try:
+                        telegram_send(
+                            f"{pnl_emoji} MATCH RESOLVED\n\n"
+                            f"{bet_on}\n"
+                            f"{match_name}\n\n"
+                            f"Result: {resolved_outcome.upper()}\n"
+                            f"Entry: {entry_price:.0f}c → Final: {current_price:.0f}c\n"
+                            f"P&L: {pnl_sign}${abs(pnl_usd_r):.2f} ({pnl_sign}{pnl_pct_r:.1f}%)"
+                        )
+                    except Exception:
+                        pass
+                    peak_tracker.pop(pos_key, None)
+                    continue
+
                 # Track peak price
                 peak = max(current_price, peak_tracker.get(pos_key, entry_price))
                 peak_tracker[pos_key] = peak
@@ -3681,7 +3729,7 @@ def _position_monitor_loop():
                 exit_action = None
                 exit_reason = None
 
-                # 1. Stop-loss
+                # 1. Stop-loss (only for in-play price drops, not resolved markets)
                 if pnl_pct <= -stop_loss_pct:
                     exit_action = "stop_loss"
                     exit_reason = f"Stop loss: {pnl_pct:.1f}% (limit: -{stop_loss_pct}%)"
