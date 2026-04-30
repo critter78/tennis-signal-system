@@ -59,3 +59,29 @@ cards/
 # OS
 .DS_Store
 Thumbs.db
+# Large data files
+data/polymarket/*.parquet
+data/polymarket/pm_tennis_markets_hist.json
+executor.log
+
+# Debug/test scripts (local only)
+check_*.py
+test_*.py
+fix_*.py
+patch_*.py
+debug_*.py
+22_setup_eoa_wallet.py
+23_swap_usdc.py
+# Large data files
+data/polymarket/*.parquet
+data/polymarket/pm_tennis_markets_hist.json
+executor.log
+
+# Debug/test scripts (local only)
+check_*.py
+test_*.py
+fix_*.py
+patch_*.py
+debug_*.py
+22_setup_eoa_wallet.py
+23_swap_usdc.py

@@ -1,696 +1,380 @@
 #!/usr/bin/env python3
 """
-Live ATP/WTA Rankings Fetcher
-
-Fetches current world rankings from multiple reliable sources.
-Primary: live-tennis.eu (server-rendered, accurate live rankings)
-Fallback: Tennis Explorer, ATP/WTA official sites
+09_rankings_fetcher.py — Live ATP/WTA Rankings Fetcher
+Pulls current rankings from Sofascore's public JSON API.
+Caches to disk (rankings_cache.json) so we only hit the API once per day.
 
 Usage:
-    python3 09_rankings_fetcher.py                # Fetch and cache rankings
-    python3 09_rankings_fetcher.py --status        # Show cache status
-    python3 09_rankings_fetcher.py --lookup "Sinner"  # Look up a player
+    from 09_rankings_fetcher import load_cached_rankings, lookup_player_rank
 
-Called by 04_betting_card.py to get accurate rankings for signal cards.
+    cache = load_cached_rankings()      # loads from disk or fetches fresh
+    rank, tour = lookup_player_rank("Emma Navarro", cache)
+    # → (8, "WTA")
 """
 
 import json
-import re
+import os
+import sys
 import time
-import argparse
+import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
+from difflib import SequenceMatcher
 
-import requests
+BASE_DIR = Path(__file__).parent.resolve()
+# Use /data on Render (persistent disk), fall back to repo-relative for local dev
+_PERSISTENT = Path("/data")
+if _PERSISTENT.exists() and _PERSISTENT.is_dir():
+    DATA_DIR = _PERSISTENT / "data"
+else:
+    DATA_DIR = Path(os.environ.get("DATA_DIR", str(BASE_DIR / "data")))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_FILE = DATA_DIR / "rankings_cache.json"
+CACHE_MAX_AGE_HOURS = 12  # re-fetch if older than this
 
-# Use persistent disk on Render, fall back to repo-relative for local dev
-_PERSISTENT = Path("/data/data")
-CACHE_DIR = _PERSISTENT if _PERSISTENT.exists() else Path("data")
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-RANKINGS_CACHE = CACHE_DIR / "live_rankings.json"
-CACHE_MAX_AGE_HOURS = 12  # Re-fetch if cache is older than this
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+    "Accept": "application/json",
+    "Accept-Encoding": "identity",
+    "Connection": "close",
 }
 
+# Sofascore public API endpoints (no auth required)
+_SOFASCORE_ATP = "https://api.sofascore.com/api/v1/rankings/type/6"
+_SOFASCORE_WTA = "https://api.sofascore.com/api/v1/rankings/type/7"
 
-def _normalize_name(name):
-    """Normalize a player name for lookup matching."""
-    name = name.strip().lower()
-    name = re.sub(r'\s+', ' ', name)
-    # Handle "Last, First" format
-    if ',' in name:
-        parts = name.split(',', 1)
-        name = f"{parts[1].strip()} {parts[0].strip()}"
-    # Remove single-letter initials with dots (e.g., "B. Shelton" -> "shelton", "Shelton B." -> "shelton")
-    name = re.sub(r'\b[a-z]\.\s*', '', name).strip()
-    return name
+# Fallback: alternative endpoint format
+_SOFASCORE_ATP_ALT = "https://api.sofascore.com/api/v1/rankings/atp-singles"
+_SOFASCORE_WTA_ALT = "https://api.sofascore.com/api/v1/rankings/wta-singles"
 
-
-def _last_name(name):
-    """Extract last name from a full name. Handles 'First Last' and 'Last First' formats."""
-    clean = name.strip()
-    # Remove initials like "B." or "J."
-    clean = re.sub(r'\b[A-Za-z]\.\s*', '', clean).strip()
-    parts = clean.split()
-    if not parts:
-        return ""
-    # If only one word left (after removing initials), that's the last name
-    if len(parts) == 1:
-        return parts[0].lower()
-    # Standard assumption: last word is last name
-    return parts[-1].lower()
+# JeffSackmann CSV fallback (updated weekly, very reliable)
+_SACKMANN_ATP = "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_rankings_current.csv"
+_SACKMANN_WTA = "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_rankings_current.csv"
+# Player name lookup files
+_SACKMANN_ATP_PLAYERS = "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_players.csv"
+_SACKMANN_WTA_PLAYERS = "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_players.csv"
 
 
-def _all_name_keys(name):
-    """Generate multiple normalized keys for a player name to improve matching."""
-    keys = set()
-    norm = _normalize_name(name)
-    keys.add(norm)
-    # Also add reversed version (for "Last First" -> "First Last" and vice versa)
-    parts = norm.split()
-    if len(parts) == 2:
-        keys.add(f"{parts[1]} {parts[0]}")
-    return keys
+def _fetch_json(url, timeout=15):
+    """Fetch JSON from a URL with proper headers."""
+    req = urllib.request.Request(url, headers=_HEADERS)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
 
 
-# ─── PRIMARY SOURCE: live-tennis.eu ──────────────────────────────────────────
+def _parse_sofascore_rankings(data, tour="ATP"):
+    """Parse Sofascore rankings JSON into a clean list."""
+    rankings = []
+    rows = data.get("rankings", [])
+    for row in rows:
+        rank = row.get("ranking") or row.get("position")
+        team = row.get("team") or row.get("rowTeam") or {}
+        player_name = team.get("name") or team.get("shortName", "")
+        points = row.get("points") or row.get("ranking_points", 0)
 
-def fetch_from_live_tennis():
-    """
-    Fetch rankings from live-tennis.eu — server-rendered HTML with accurate
-    live rankings that update in real-time during tournaments.
-    Returns dict of normalized_name -> {rank, name, tour}
-    """
-    rankings = {}
+        if not player_name or not rank:
+            continue
 
-    for tour, url in [
-        ("ATP", "https://live-tennis.eu/en/atp-live-ranking"),
-        ("WTA", "https://live-tennis.eu/en/wta-live-ranking"),
-    ]:
-        try:
-            r = requests.get(url, headers=HEADERS, timeout=15)
-            r.raise_for_status()
-            html = r.text
-            found = 0
-
-            # live-tennis.eu uses a table with class "live-ranking"
-            # Each row has: rank, move, player name, points
-            # Multiple regex strategies for robustness
-
-            patterns = [
-                # Pattern 1: table row with rank number and player link
-                re.compile(
-                    r'<td[^>]*>\s*(\d{1,4})\s*</td>'
-                    r'.*?<a[^>]*href="[^"]*player[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
-                    re.DOTALL
-                ),
-                # Pattern 2: rank in first td, player name in link
-                re.compile(
-                    r'<td[^>]*class="[^"]*"[^>]*>\s*(\d{1,4})\s*</td>'
-                    r'(?:.*?<td[^>]*>.*?</td>){0,3}?'
-                    r'.*?<a[^>]*>\s*([A-Z][a-zA-Z\s\.\-\']+?)\s*</a>',
-                    re.DOTALL
-                ),
-                # Pattern 3: broader — any number followed by a name link
-                re.compile(
-                    r'>(\d{1,4})</td>'
-                    r'.*?<a[^>]*>([A-Z][a-zA-Z\.\s\-\']{2,40})</a>',
-                    re.DOTALL
-                ),
-            ]
-
-            for pattern in patterns:
-                for match in pattern.finditer(html):
-                    rank = int(match.group(1))
-                    name = match.group(2).strip()
-                    # Sanity checks
-                    if rank < 1 or rank > 500:
-                        continue
-                    if len(name) < 3 or len(name) > 50:
-                        continue
-                    # Skip if name looks like a number or HTML
-                    if name.isdigit() or '<' in name:
-                        continue
-                    for key in _all_name_keys(name):
-                        if key not in rankings:
-                            rankings[key] = {"rank": rank, "name": name, "tour": tour}
-                    found += 1
-                if found > 30:
-                    break  # Good pattern found
-
-            print(f"    live-tennis.eu {tour}: {found} rankings")
-            time.sleep(0.5)  # Be polite
-
-        except Exception as e:
-            print(f"    [warn] live-tennis.eu {tour}: {e}")
+        # Normalize name: "Sinner J." → keep as-is, we also store full name
+        rankings.append({
+            "rank": int(rank),
+            "name": player_name.strip(),
+            "points": int(points) if points else 0,
+            "tour": tour,
+        })
 
     return rankings
 
 
-# ─── FALLBACK 1: Tennis Explorer ─────────────────────────────────────────────
-
-def fetch_from_tennis_explorer():
-    """
-    Fetch rankings from Tennis Explorer — server-rendered HTML, reliable fallback.
-    """
-    rankings = {}
-
-    for tour, base_url in [
-        ("ATP", "https://www.tennisexplorer.com/ranking/atp-men/"),
-        ("WTA", "https://www.tennisexplorer.com/ranking/wta-women/"),
-    ]:
-        for page_suffix in ["", "?page=2", "?page=3", "?page=4", "?page=5"]:
-            try:
-                url = base_url + page_suffix
-                r = requests.get(url, headers=HEADERS, timeout=15)
-                r.raise_for_status()
-                html = r.text
-                found_on_page = 0
-
-                patterns = [
-                    re.compile(
-                        r'<td[^>]*class="[^"]*rank[^"]*"[^>]*>\s*(\d+)\.?\s*</td>'
-                        r'.*?<a[^>]*href="/player/[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
-                        re.DOTALL
-                    ),
-                    re.compile(
-                        r'<td[^>]*>\s*(\d{1,4})\.?\s*</td>\s*<td[^>]*>.*?'
-                        r'<a[^>]*href="/player/[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
-                        re.DOTALL
-                    ),
-                    re.compile(r'>(\d{1,3})\.\s*</.*?<a[^>]*href="/player/[^"]*"[^>]*>([^<]{3,40})</a>', re.DOTALL),
-                ]
-
-                for pattern in patterns:
-                    for match in pattern.finditer(html):
-                        rank = int(match.group(1))
-                        name = match.group(2).strip()
-                        if name and rank <= 500 and len(name) > 2:
-                            for key in _all_name_keys(name):
-                                if key not in rankings:
-                                    rankings[key] = {"rank": rank, "name": name, "tour": tour}
-                            found_on_page += 1
-                    if found_on_page > 10:
-                        break
-
-                if found_on_page == 0 and page_suffix:
-                    break
-
-            except Exception as e:
-                print(f"    [warn] Tennis Explorer {tour} page {page_suffix or '1'}: {e}")
-                break
-
-            time.sleep(0.5)
-
-        tour_count = sum(1 for v in rankings.values() if v["tour"] == tour)
-        print(f"    Tennis Explorer {tour}: {tour_count} rankings")
-
-    return rankings
+def _fetch_csv_text(url, timeout=15):
+    """Fetch raw CSV text from a URL."""
+    req = urllib.request.Request(url, headers=_HEADERS)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", errors="replace")
 
 
-# ─── FALLBACK 2: ATP/WTA official sites ──────────────────────────────────────
-
-def fetch_atp_rankings(max_rank=200):
-    """Fetch from ATP official site — often returns empty due to JS rendering."""
-    rankings = {}
-
-    for api_url in [
-        "https://www.atptour.com/en/-/www/rank/singles",
-        "https://www.atptour.com/-/ajax/RankingsController/GetRankings?rankDate=&countryCode=&rankRange=1-200&rankType=rankSingles",
-    ]:
-        try:
-            r = requests.get(api_url, headers={**HEADERS, "Accept": "application/json,text/html"}, timeout=12)
-            if r.status_code == 200:
-                try:
-                    data = r.json() if "json" in r.headers.get("content-type", "") else json.loads(r.text)
-                except (json.JSONDecodeError, ValueError):
-                    continue
-
-                items = data if isinstance(data, list) else data.get("rankings", data.get("data", data.get("Rows", [])))
-                if not isinstance(items, list):
-                    continue
-
-                for item in items[:max_rank]:
-                    name = (item.get("playerName") or item.get("Player") or item.get("name")
-                            or item.get("fullName") or item.get("PlayerName") or "").strip()
-                    rank = (item.get("ranking") or item.get("Rank") or item.get("rank")
-                            or item.get("sglRank") or item.get("Position") or 0)
-                    if name and rank:
-                        rankings[_normalize_name(name)] = {"rank": int(rank), "name": name, "tour": "ATP"}
-                if len(rankings) >= 50:
-                    print(f"    ATP API returned {len(rankings)} rankings")
-                    return rankings
-        except Exception as e:
-            pass
-
-    return rankings
-
-
-def fetch_wta_rankings(max_rank=200):
-    """Fetch from WTA official site."""
-    rankings = {}
-
-    for url in [
-        "https://www.wtatennis.com/rankings/singles",
-        "https://api.wtatennis.com/tennis/v2/content/rankings/singles",
-    ]:
-        try:
-            r = requests.get(url, headers={**HEADERS, "Accept": "application/json,text/html"}, timeout=12)
-            if r.status_code == 200:
-                # Try JSON parse
-                try:
-                    data = r.json() if "json" in r.headers.get("content-type", "") else json.loads(r.text)
-                except (json.JSONDecodeError, ValueError):
-                    # Try HTML parsing
-                    html = r.text
-                    pattern = re.compile(r'"rank"\s*:\s*(\d+).*?"(?:player|name|fullName)"\s*:\s*"([^"]+)"', re.DOTALL)
-                    for match in pattern.finditer(html):
-                        rank = int(match.group(1))
-                        name = match.group(2).strip()
-                        if name and rank <= max_rank:
-                            rankings[_normalize_name(name)] = {"rank": rank, "name": name, "tour": "WTA"}
-                    continue
-
-                items = data if isinstance(data, list) else data.get("rankings", data.get("data", []))
-                if isinstance(items, list):
-                    for item in items[:max_rank]:
-                        name = (item.get("playerName") or item.get("name") or item.get("fullName") or "").strip()
-                        rank = item.get("ranking") or item.get("rank") or item.get("position") or 0
-                        if name and rank:
-                            rankings[_normalize_name(name)] = {"rank": int(rank), "name": name, "tour": "WTA"}
-
-                if len(rankings) >= 50:
-                    print(f"    WTA API returned {len(rankings)} rankings")
-                    return rankings
-        except Exception as e:
-            pass
-
-    return rankings
-
-
-# ─── FALLBACK 3: Flashscore/Livesport API ────────────────────────────────────
-
-def fetch_from_flashscore():
-    """Fetch from Flashscore's internal API."""
-    rankings = {}
-
-    for tour, url in [
-        ("ATP", "https://www.flashscore.com/tennis/atp-singles/rankings/"),
-        ("WTA", "https://www.flashscore.com/tennis/wta-singles/rankings/"),
-    ]:
-        try:
-            r = requests.get(url, headers={**HEADERS, "x-fsign": "SW9D1eZo"}, timeout=12)
-            if r.status_code == 200:
-                html = r.text
-                pattern = re.compile(r'"rank"\s*:\s*(\d+).*?"name"\s*:\s*"([^"]+)"', re.DOTALL)
-                for match in pattern.finditer(html):
-                    rank = int(match.group(1))
-                    name = match.group(2).strip()
-                    if name and rank <= 500:
-                        rankings[_normalize_name(name)] = {"rank": rank, "name": name, "tour": tour}
-        except Exception as e:
-            print(f"    [warn] Flashscore {tour}: {e}")
-
-    return rankings
-
-
-# ─── FALLBACK 4: Sackman GitHub CSVs (reliable, updated weekly) ─────────────
-
-def _fetch_sackman_players(tour):
-    """Fetch player ID → name mapping from Sackman's players CSV."""
-    import csv
-    from io import StringIO
-
-    urls = {
-        "ATP": "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_players.csv",
-        "WTA": "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_players.csv",
-    }
-    url = urls.get(tour)
-    if not url:
-        return {}
-
+def _load_sackmann_players(url, timeout=15):
+    """Load JeffSackmann player ID → name mapping from CSV.
+    CSV format: player_id,name_first,name_last,hand,dob,ioc,height,wikidata_id"""
     try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        r.raise_for_status()
-        reader = csv.DictReader(StringIO(r.text))
+        text = _fetch_csv_text(url, timeout)
         players = {}
-        for row in reader:
-            pid = row.get("player_id", "").strip()
-            first = row.get("name_first", "").strip()
-            last = row.get("name_last", "").strip()
-            if pid and last:
-                full_name = f"{first} {last}".strip()
-                players[pid] = full_name
+        for line in text.strip().split("\n")[1:]:  # skip header
+            parts = line.split(",")
+            if len(parts) >= 3:
+                pid = parts[0].strip()
+                first = parts[1].strip()
+                last = parts[2].strip()
+                if pid and last:
+                    players[pid] = f"{first} {last}".strip()
         return players
     except Exception as e:
-        print(f"    [warn] Sackman players {tour}: {e}")
+        print(f"  [rankings] Failed to load player names: {e}", file=sys.stderr)
         return {}
 
 
-def fetch_from_sackman_github():
-    """
-    Fetch current rankings from Jeff Sackman's GitHub tennis data.
-    Rankings CSV format: ranking_date,rank,player_id,points (NO player names)
-    Players CSV format: player_id,name_first,name_last,hand,dob,ioc,height,wikidata_id
-    We join the two to get rank + player name.
-    """
-    import csv
-    from io import StringIO
+def _fetch_sackmann_rankings(rankings_url, players_url, tour="ATP"):
+    """Fetch rankings from JeffSackmann GitHub CSV files.
+    Rankings CSV format: ranking_date,rank,player,points
+    Player IDs need to be resolved to names via the players file."""
+    # Load player name mapping
+    player_names = _load_sackmann_players(players_url)
+
+    text = _fetch_csv_text(rankings_url)
+    lines = text.strip().split("\n")
+    if len(lines) < 2:
+        return {}
+
+    # Find the most recent ranking date (first column, sorted desc)
+    # The file has all dates — we want only the latest
     rankings = {}
+    latest_date = None
 
-    sources = [
-        ("ATP", "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_rankings_current.csv"),
-        ("WTA", "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_rankings_current.csv"),
-    ]
+    for line in lines[1:]:  # skip header
+        parts = line.split(",")
+        if len(parts) < 4:
+            continue
+        date_str = parts[0].strip()
+        rank = parts[1].strip()
+        player_id = parts[2].strip()
+        points = parts[3].strip()
 
-    for tour, url in sources:
+        if not latest_date:
+            latest_date = date_str
+
+        # Only process the latest date's rankings
+        if date_str != latest_date:
+            break
+
+        # Resolve player ID to name
+        name = player_names.get(player_id, "")
+        if not name:
+            continue
+
         try:
-            # Step 1: Fetch player ID → name mapping
-            players = _fetch_sackman_players(tour)
-            if not players:
-                print(f"    [warn] Sackman GitHub {tour}: Could not load players file")
-                continue
+            key = name.lower().strip()
+            rankings[key] = {
+                "rank": int(rank),
+                "name": name,
+                "tour": tour,
+                "points": int(points) if points else 0,
+            }
+        except (ValueError, TypeError):
+            continue
 
-            # Step 2: Fetch rankings CSV
-            r = requests.get(url, headers=HEADERS, timeout=15)
-            r.raise_for_status()
-            text = r.text
-
-            reader = csv.reader(StringIO(text))
-            found = 0
-
-            # Get the latest ranking date (last rows in the file are most recent)
-            rows = list(reader)
-
-            # Detect and skip header if present
-            if rows and any(c.isalpha() for c in rows[0][0]):
-                rows = rows[1:]
-
-            # Find the most recent ranking date
-            if not rows:
-                continue
-
-            latest_date = rows[-1][0] if rows else None
-            if not latest_date:
-                continue
-
-            # Only use rows from the most recent date
-            for row in rows:
-                if len(row) < 4:
-                    continue
-                if row[0] != latest_date:
-                    continue
-
-                try:
-                    rank = int(row[1])
-                    player_id = row[2].strip()
-                    name = players.get(player_id, "")
-
-                    if not name or rank < 1 or rank > 500:
-                        continue
-
-                    for key in _all_name_keys(name):
-                        if key not in rankings:
-                            rankings[key] = {"rank": rank, "name": name, "tour": tour}
-                    found += 1
-                except (ValueError, IndexError):
-                    continue
-
-            print(f"    Sackman GitHub {tour}: {found} rankings (date: {latest_date})")
-
-        except Exception as e:
-            print(f"    [warn] Sackman GitHub {tour}: {e}")
-
+    print(f"  [rankings] Sackmann {tour}: {len(rankings)} players (date: {latest_date})")
     return rankings
 
 
-# ─── ORCHESTRATOR ─────────────────────────────────────────────────────────────
-
-def fetch_and_cache_rankings():
-    """Fetch rankings from all sources (best first) and cache them."""
-    CACHE_DIR.mkdir(exist_ok=True)
-
-    print("  Fetching live rankings...")
+def fetch_live_rankings():
+    """Fetch fresh ATP + WTA rankings.
+    Tries Sofascore API first, falls back to JeffSackmann GitHub CSVs.
+    Returns dict with 'rankings' (name→{rank,tour,points}), 'count', 'fetched_at'."""
     all_rankings = {}
+    errors = []
+    source = "unknown"
 
-    # ── Step 1: PRIMARY — live-tennis.eu (most accurate, real-time) ──
-    print("  [1/5] Primary: live-tennis.eu...")
-    lt = fetch_from_live_tennis()
-    if lt:
-        all_rankings.update(lt)
+    # ── ATTEMPT 1: Sofascore API (most current) ──
+    for tour, urls in [("ATP", [_SOFASCORE_ATP, _SOFASCORE_ATP_ALT]),
+                       ("WTA", [_SOFASCORE_WTA, _SOFASCORE_WTA_ALT])]:
+        fetched = False
+        for url in urls:
+            try:
+                data = _fetch_json(url)
+                parsed = _parse_sofascore_rankings(data, tour)
+                if parsed:
+                    for p in parsed:
+                        key = p["name"].lower().strip()
+                        all_rankings[key] = {
+                            "rank": p["rank"],
+                            "name": p["name"],
+                            "tour": tour,
+                            "points": p["points"],
+                        }
+                    print(f"  [rankings] Fetched {len(parsed)} {tour} rankings from Sofascore")
+                    source = "sofascore"
+                    fetched = True
+                    break
+            except Exception as e:
+                errors.append(f"Sofascore {tour}: {e}")
+                continue
 
-    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
-    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
+        if not fetched:
+            print(f"  [rankings] Sofascore {tour} failed, trying Sackmann fallback...",
+                  file=sys.stderr)
 
-    # ── Step 2: Tennis Explorer (current data, reliable scraping) ──
-    if atp_count < 50 or wta_count < 50:
-        print(f"  [2/5] Tennis Explorer (ATP={atp_count}, WTA={wta_count})...")
-        te = fetch_from_tennis_explorer()
-        for key, val in te.items():
-            if key not in all_rankings:
-                all_rankings[key] = val
-    else:
-        print(f"  [2/5] Skipped Tennis Explorer (ATP={atp_count}, WTA={wta_count} sufficient)")
+        time.sleep(1)
 
-    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
-    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
+    # ── ATTEMPT 2: JeffSackmann CSVs (weekly, very reliable) ──
+    if len(all_rankings) < 50:  # Sofascore failed or returned too few
+        print("  [rankings] Falling back to JeffSackmann GitHub CSVs...")
+        for tour, rank_url, player_url in [
+            ("ATP", _SACKMANN_ATP, _SACKMANN_ATP_PLAYERS),
+            ("WTA", _SACKMANN_WTA, _SACKMANN_WTA_PLAYERS),
+        ]:
+            try:
+                sack_rankings = _fetch_sackmann_rankings(rank_url, player_url, tour)
+                if sack_rankings:
+                    # Only add if we don't already have this tour from Sofascore
+                    tour_count = sum(1 for v in all_rankings.values() if v["tour"] == tour)
+                    if tour_count < 10:
+                        all_rankings.update(sack_rankings)
+                        source = "sackmann" if source == "unknown" else f"{source}+sackmann"
+            except Exception as e:
+                errors.append(f"Sackmann {tour}: {e}")
+            time.sleep(1)
 
-    # ── Step 3: ATP/WTA official APIs ──
-    if atp_count < 50:
-        print(f"  [3/5] Fallback: ATP official API...")
-        atp_off = fetch_atp_rankings()
-        for key, val in atp_off.items():
-            if key not in all_rankings:
-                all_rankings[key] = val
+    if not all_rankings:
+        print(f"  [rankings] ALL SOURCES FAILED: {errors}", file=sys.stderr)
 
-    if wta_count < 50:
-        print(f"  [3/5] Fallback: WTA official API...")
-        wta_off = fetch_wta_rankings()
-        for key, val in wta_off.items():
-            if key not in all_rankings:
-                all_rankings[key] = val
-
-    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
-    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
-
-    # ── Step 4: FALLBACK — Flashscore ──
-    if atp_count < 30 or wta_count < 30:
-        print(f"  [4/5] Fallback: Flashscore...")
-        fs = fetch_from_flashscore()
-        for key, val in fs.items():
-            if key not in all_rankings:
-                all_rankings[key] = val
-    else:
-        print(f"  [4/5] Skipped Flashscore (ATP={atp_count}, WTA={wta_count} sufficient)")
-
-    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
-    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
-
-    # ── Step 5: LAST RESORT — Sackman GitHub (can be stale, use only to fill gaps) ──
-    if atp_count < 30 or wta_count < 30:
-        print(f"  [5/5] Last resort: Sackman GitHub (ATP={atp_count}, WTA={wta_count})...")
-        sg = fetch_from_sackman_github()
-        for key, val in sg.items():
-            if key not in all_rankings:
-                all_rankings[key] = val
-    else:
-        print(f"  [5/5] Skipped Sackman GitHub (ATP={atp_count}, WTA={wta_count} sufficient)")
-
-    atp_count = sum(1 for v in all_rankings.values() if v.get("tour") == "ATP")
-    wta_count = sum(1 for v in all_rankings.values() if v.get("tour") == "WTA")
-
-    # Build a last-name index for fuzzy matching
-    lastname_index = {}
-    for norm_name, data in all_rankings.items():
-        last = _last_name(norm_name)
-        if last and len(last) > 2:
-            if last not in lastname_index:
-                lastname_index[last] = []
-            lastname_index[last].append(data)
-
-    cache = {
-        "fetched_at": datetime.utcnow().isoformat(),
-        "count": len(all_rankings),
-        "atp_count": atp_count,
-        "wta_count": wta_count,
+    result = {
         "rankings": all_rankings,
-        "lastname_index": lastname_index,
+        "count": len(all_rankings),
+        "source": source,
+        "fetched_at": datetime.utcnow().isoformat() + "Z",
+        "errors": errors if not all_rankings else [],
     }
-
-    with open(RANKINGS_CACHE, 'w') as f:
-        json.dump(cache, f, indent=2)
-
-    print(f"  Cached {len(all_rankings)} rankings (ATP={atp_count}, WTA={wta_count}) to {RANKINGS_CACHE}")
-    return cache
+    return result
 
 
-def load_cached_rankings():
-    """Load cached rankings, re-fetching if stale."""
-    if RANKINGS_CACHE.exists():
+def save_cache(data):
+    """Save rankings cache to disk."""
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CACHE_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"  [rankings] Cache saved: {len(data.get('rankings', {}))} players → {CACHE_FILE}")
+
+
+def load_cached_rankings(max_age_hours=CACHE_MAX_AGE_HOURS):
+    """Load rankings from cache file. Re-fetches if stale or missing."""
+    if CACHE_FILE.exists():
         try:
-            with open(RANKINGS_CACHE) as f:
-                cache = json.load(f)
+            with open(CACHE_FILE) as f:
+                data = json.load(f)
 
-            fetched_at = datetime.fromisoformat(cache.get("fetched_at", "2000-01-01"))
-            age_hours = (datetime.utcnow() - fetched_at).total_seconds() / 3600
+            fetched_at = data.get("fetched_at", "")
+            if fetched_at:
+                try:
+                    fetched_dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+                    age = datetime.now(fetched_dt.tzinfo) - fetched_dt
+                    if age < timedelta(hours=max_age_hours):
+                        count = data.get("count", len(data.get("rankings", {})))
+                        print(f"  [rankings] Using cached rankings ({count} players, {age.seconds//3600}h old)")
+                        return data
+                    else:
+                        print(f"  [rankings] Cache stale ({age.seconds//3600}h old), refreshing...")
+                except (ValueError, TypeError):
+                    pass
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"  [rankings] Cache read error: {e}", file=sys.stderr)
 
-            if age_hours < CACHE_MAX_AGE_HOURS:
-                return cache
-            else:
-                print(f"  Rankings cache is {age_hours:.1f}h old, refreshing...")
-        except (json.JSONDecodeError, KeyError, ValueError):
-            print("  Rankings cache corrupted, refreshing...")
-
-    return fetch_and_cache_rankings()
+    # Fetch fresh
+    print("  [rankings] Fetching fresh rankings from Sofascore...")
+    data = fetch_live_rankings()
+    if data.get("count", 0) > 0:
+        save_cache(data)
+    return data
 
 
 def lookup_player_rank(player_name, cache=None):
-    """
-    Look up a player's current world ranking.
+    """Look up a player's current world ranking.
+    Returns (rank, tour) or (None, None) if not found.
 
-    Args:
-        player_name: Full player name (e.g., "Jannik Sinner")
-        cache: Pre-loaded cache dict, or None to load from file
-
-    Returns:
-        (rank, tour) tuple, or (None, None) if not found
+    Uses fuzzy matching to handle name variations:
+    - "E. Maia" → "Emiliana Arango Maia" (if exists)
+    - "Navarro" → "Emma Navarro"
     """
     if cache is None:
         cache = load_cached_rankings()
 
     rankings = cache.get("rankings", {})
-    lastname_index = cache.get("lastname_index", {})
+    if not rankings:
+        return None, None
 
-    # Try all name variants (normal + reversed)
-    for norm in _all_name_keys(player_name):
-        if norm in rankings:
-            r = rankings[norm]
-            return r["rank"], r["tour"]
+    name = player_name.strip()
+    name_lower = name.lower()
 
-    # Direct single-word key match: if Tennis Explorer stored "shelton" (after
-    # stripping initial from "Shelton B."), try matching the last word directly
-    # Require at least 4 chars to avoid false positives (e.g., "tu", "li")
-    parts = _normalize_name(player_name).split()
-    if len(parts) >= 2:
-        # Try just the last word as a key (e.g., "shelton" from "ben shelton")
-        last_word = parts[-1]
-        if len(last_word) >= 4 and last_word in rankings:
-            r = rankings[last_word]
-            return r["rank"], r["tour"]
-        # Also try just the first word (in case name order is reversed)
-        first_word = parts[0]
-        if len(first_word) >= 4 and first_word in rankings:
-            r = rankings[first_word]
-            return r["rank"], r["tour"]
+    # 1. Exact match
+    if name_lower in rankings:
+        r = rankings[name_lower]
+        return r["rank"], r["tour"]
 
-    # Last name match via index (most reliable for fuzzy matching)
-    last = _last_name(player_name)
-    if last in lastname_index:
-        candidates = lastname_index[last]
-        if len(candidates) == 1:
-            return candidates[0]["rank"], candidates[0]["tour"]
-        else:
-            # Multiple players with same last name — try first name
-            first = player_name.strip().split()[0].lower() if player_name.strip().split() else ""
-            for c in candidates:
-                # Check if first name appears in stored name (handles "B. Shelton" vs "Ben Shelton")
-                if first and (first in c["name"].lower() or first[0] == c["name"].lower()[0]):
-                    return c["rank"], c["tour"]
-            # If still ambiguous, return the highest-ranked one
-            best = min(candidates, key=lambda x: x["rank"])
-            return best["rank"], best["tour"]
+    # 2. Last name match (most common for Polymarket names)
+    parts = name.split()
+    last_name = parts[-1].lower() if parts else ""
+    first_name = parts[0].lower() if len(parts) > 1 else ""
 
-    # Partial last name match — very strict to avoid gendered name collisions
-    # e.g. "medvedeva" (WTA) must NOT match "medvedev" (ATP)
-    # Only allow if one name fully contains the other AND they share the same length
-    # (handles minor transliteration variants like "djokovic"/"djokovich")
-    if len(last) >= 5:
-        for ln, candidates in lastname_index.items():
-            if len(ln) >= 5 and ln != last:
-                # Only match if exact same length and differ by at most 1 trailing char
-                # This catches transliteration (e.g. tsitsipas/tsitsipa) but NOT
-                # gendered variants (medvedev/medvedeva — different lengths)
-                if len(ln) == len(last) and ln[:-1] == last[:-1]:
-                    best = min(candidates, key=lambda x: x["rank"])
-                    return best["rank"], best["tour"]
+    # Collect all matches by last name
+    last_matches = []
+    for key, r in rankings.items():
+        key_parts = key.split()
+        key_last = key_parts[-1].lower() if key_parts else ""
+        if key_last == last_name:
+            last_matches.append(r)
+
+    if len(last_matches) == 1:
+        return last_matches[0]["rank"], last_matches[0]["tour"]
+
+    # Multiple last name matches — try first name too
+    if len(last_matches) > 1 and first_name:
+        for r in last_matches:
+            r_parts = r["name"].lower().split()
+            r_first = r_parts[0] if r_parts else ""
+            if r_first.startswith(first_name) or first_name.startswith(r_first):
+                return r["rank"], r["tour"]
+            # Check first initial match (e.g., "E" matches "Emma")
+            if len(first_name) == 1 and r_first.startswith(first_name):
+                return r["rank"], r["tour"]
+        # Still ambiguous — return highest ranked
+        best = min(last_matches, key=lambda x: x["rank"])
+        return best["rank"], best["tour"]
+
+    # 3. Fuzzy match (for name variations)
+    best_score = 0
+    best_match = None
+    for key, r in rankings.items():
+        score = SequenceMatcher(None, name_lower, key).ratio()
+        if score > best_score:
+            best_score = score
+            best_match = r
+
+    if best_score >= 0.70:
+        return best_match["rank"], best_match["tour"]
 
     return None, None
 
 
-def show_status():
-    """Show rankings cache status."""
-    if not RANKINGS_CACHE.exists():
-        print("  No rankings cache found. Run: python3 09_rankings_fetcher.py")
-        return
-
-    with open(RANKINGS_CACHE) as f:
-        cache = json.load(f)
-
-    fetched_at = cache.get("fetched_at", "unknown")
-    count = cache.get("count", 0)
-    rankings = cache.get("rankings", {})
-
-    atp_count = sum(1 for r in rankings.values() if r.get("tour") == "ATP")
-    wta_count = sum(1 for r in rankings.values() if r.get("tour") == "WTA")
-
-    age = "unknown"
-    try:
-        dt = datetime.fromisoformat(fetched_at)
-        age_hours = (datetime.utcnow() - dt).total_seconds() / 3600
-        age = f"{age_hours:.1f} hours ago"
-    except ValueError:
-        pass
-
-    print(f"\n  Rankings Cache Status:")
-    print(f"  Fetched: {fetched_at} ({age})")
-    print(f"  Total: {count} players")
-    print(f"  ATP: {atp_count}")
-    print(f"  WTA: {wta_count}")
-
-    # Show top 10 ATP and WTA
-    atp_top = sorted(
-        [(k, v) for k, v in rankings.items() if v.get("tour") == "ATP"],
-        key=lambda x: x[1]["rank"]
-    )[:10]
-    wta_top = sorted(
-        [(k, v) for k, v in rankings.items() if v.get("tour") == "WTA"],
-        key=lambda x: x[1]["rank"]
-    )[:10]
-
-    if atp_top:
-        print(f"\n  Top 10 ATP:")
-        for _, r in atp_top:
-            print(f"    #{r['rank']:>3} {r['name']}")
-
-    if wta_top:
-        print(f"\n  Top 10 WTA:")
-        for _, r in wta_top:
-            print(f"    #{r['rank']:>3} {r['name']}")
-    print()
-
-
+# ── CLI for testing / manual refresh ──
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Fetch live ATP/WTA rankings")
-    parser.add_argument("--status", action="store_true", help="Show cache status")
-    parser.add_argument("--lookup", type=str, help="Look up a player's ranking")
-    parser.add_argument("--refresh", action="store_true", help="Force refresh cache")
+    import argparse
+    parser = argparse.ArgumentParser(description="Fetch/lookup tennis rankings")
+    parser.add_argument("--refresh", action="store_true", help="Force refresh from API")
+    parser.add_argument("--lookup", type=str, help="Look up a player by name")
+    parser.add_argument("--top", type=int, default=0, help="Print top N rankings")
     args = parser.parse_args()
 
-    if args.status:
-        show_status()
-    elif args.lookup:
-        cache = load_cached_rankings()
-        rank, tour = lookup_player_rank(args.lookup, cache)
-        if rank:
-            print(f"  {args.lookup}: #{rank} ({tour})")
-        else:
-            print(f"  {args.lookup}: not found in rankings cache")
-    elif args.refresh:
-        fetch_and_cache_rankings()
+    if args.refresh:
+        data = fetch_live_rankings()
+        save_cache(data)
+        print(f"\nFetched {data['count']} rankings")
     else:
-        cache = load_cached_rankings()
-        show_status()
+        data = load_cached_rankings()
+
+    if args.lookup:
+        rank, tour = lookup_player_rank(args.lookup, data)
+        if rank:
+            print(f"{args.lookup}: #{rank} ({tour})")
+        else:
+            print(f"{args.lookup}: NOT FOUND")
+            # Show close matches
+            rankings = data.get("rankings", {})
+            last = args.lookup.split()[-1].lower()
+            close = [(k, v["rank"]) for k, v in rankings.items() if last in k][:5]
+            if close:
+                print(f"  Close matches: {close}")
+
+    if args.top:
+        rankings = data.get("rankings", {})
+        sorted_r = sorted(rankings.values(), key=lambda x: x["rank"])
+        for r in sorted_r[:args.top]:
+            print(f"  #{r['rank']:>4}  {r['name']:<30}  {r['tour']}  {r['points']}pts")

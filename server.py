@@ -1899,7 +1899,9 @@ def api_live_prices():
             picks_path = BASE_DIR / "logs" / "picks.jsonl"
 
         slugs = set()
-        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        # Include picks from last 7 days so visible signals always get fresh prices
+        from datetime import timedelta
+        cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
         if picks_path.exists():
             with open(picks_path) as f:
                 for line in f:
@@ -1908,9 +1910,8 @@ def api_live_prices():
                         continue
                     try:
                         pick = json.loads(line)
-                        # Only fetch prices for today's picks, not all 500+
                         logged = pick.get("logged_at", "")
-                        if not logged.startswith(today_str):
+                        if logged and logged[:10] < cutoff:
                             continue
                         slug = pick.get("slug", "")
                         if slug:
