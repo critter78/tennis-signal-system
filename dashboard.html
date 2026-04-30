@@ -1132,13 +1132,23 @@ const pnlStr = totalPnl >= 0 ? `+$${totalPnl.toFixed(0)}` : `-$${Math.abs(totalP
 const avgEdge = withEdge.length > 0 ? (withEdge.reduce((s, p) => s + Math.abs(p.edge), 0) / withEdge.length).toFixed(1) + '%' : '—';
 const bestEdge = picks.length > 0 ? Math.max(...picks.map(p => Math.abs(p.edge || 0))).toFixed(1) + '%' : '—';
 
+// Model Win Rate — highlighted card with W-L record
+const wrColor = resolved.length > 0 && wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336';
+const winRateCard = resolved.length > 0
+    ? `<div class="stat-card" style="border-color:${wrColor}50;background:linear-gradient(135deg,#1a1d27 60%,${wrColor}08)">
+        <div class="label">Model Win Rate</div>
+        <div class="value" style="color:${wrColor}">${winRate}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:2px;font-weight:600"><span style="color:#4caf50">${wins.length}W</span> <span style="color:#6c757d">—</span> <span style="color:#f44336">${losses.length}L</span> <span style="color:#6c757d;font-weight:400">(${resolved.length} resolved)</span></div>
+    </div>`
+    : statCard('Model Win Rate', '—', 'white');
+
 document.getElementById('statsRow').innerHTML = [
     statCard('Total Signals', picks.length, 'white'),
-    statCard('Bets Placed', myBets.length, 'amber'),
-    statCard('Signals (Edge)', withEdge.length, 'amber'),
-    statCard('Win Rate', winRate, resolved.length > 0 && wins.length/resolved.length >= 0.5 ? 'green' : 'red'),
+    winRateCard,
+    statCard('Resolved', resolved.length, 'white'),
     statCard('Total P&L', totalPnl === 0 ? '—' : pnlStr, totalPnl >= 0 ? 'green' : 'red'),
-    statCard('Avg Edge (All)', avgEdge, 'amber'),
+    statCard('Signals (Edge)', withEdge.length, 'amber'),
+    statCard('Avg Edge', avgEdge, 'amber'),
     statCard('Best Edge', bestEdge, 'green'),
 ].join('');
 
