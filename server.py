@@ -646,8 +646,11 @@ def serve_dashboard(is_shared=False, share_expires=None):
                     #autotrader-app { display: none !important; }
                     /* Hide admin/logout links */
                     a[href*="admin"], a[href*="logout"] { display: none !important; }
-                    /* Hide Place Bet / I BET THIS buttons */
-                    .sig-bet-btn, .v5-bet-btn, .v5-bet-selector { display: none !important; }
+                    /* Hide Place Bet / I BET THIS buttons (keep v5-bet-selector visible — it shows EDGE PICK/BET info) */
+                    .sig-bet-btn, .v5-bet-btn { display: none !important; }
+                    /* Make bet-option divs non-clickable and hide personal bet highlighting */
+                    .v5-bet-selector .bet-option { pointer-events: none; cursor: default; }
+                    .v5-bet-selector .bet-option.active-bet { border-color: inherit; background: inherit; }
                     /* Hide LSTM sections */
                     #lstmProgress, #lstmInsights { display: none !important; }
                     /* Hide header subtitle (picks logged, bets placed, resolved counts) */
