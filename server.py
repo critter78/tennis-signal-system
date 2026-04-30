@@ -4229,6 +4229,25 @@ def comeback_signals():
                 continue
 
             player_a, player_b = outcomes[0], outcomes[1]
+            question = mkt["question"]
+
+            # ── Filter: only keep head-to-head match markets ──
+            # H2H markets have "vs" or "v" in the question AND player names as outcomes
+            # Futures/outrights have "Will X win..." with Yes/No outcomes — skip those
+            is_h2h = " vs " in question or " v " in question
+            is_yes_no = player_a.lower() in ("yes", "no") and player_b.lower() in ("yes", "no")
+
+            if not is_h2h:
+                continue  # Skip futures, outrights, "Will X win tournament?" markets
+
+            # If outcomes are Yes/No but question has "vs", extract player names from question
+            if is_yes_no:
+                extracted_a, extracted_b = _extract_player_names(question)
+                if extracted_a and extracted_b:
+                    player_a, player_b = extracted_a, extracted_b
+                else:
+                    continue  # Can't determine player names
+
             try:
                 price_a = round(float(prices_list[0]) * 100, 1)
                 price_b = round(float(prices_list[1]) * 100, 1)
@@ -4311,11 +4330,14 @@ def comeback_signals():
                 is_comeback_king = player.lower().strip() in COMEBACK_KINGS
                 king_rate = COMEBACK_KINGS.get(player.lower().strip())
 
+                poly_link = f"https://polymarket.com/event/{slug}" if slug else ""
+
                 signals.append({
                     "player": player,
                     "opponent": opp,
                     "slug": slug,
                     "question": mkt["question"],
+                    "poly_link": poly_link,
                     "set_state": set_state,
                     "poly_price": curr_price,
                     "fair_price": fair_price_c,
@@ -4373,6 +4395,162 @@ def comeback_model():
                                      "fair_price_c": round(prob * 100)}
     kings = {name: {"rate": round(r*100,1)} for name, r in COMEBACK_KINGS.items()}
     return jsonify({"model": table, "comeback_kings": kings, "total_matches": 21260})
+
+
+# ── COMEBACK BET TRACKING ──
+_COMEBACK_BETS_FILE = LOGS_DIR / "comeback_bets.jsonl"
+
+
+def _load_comeback_bets():
+    """Load all comeback bets from JSONL file."""
+    bets = []
+    if _COMEBACK_BETS_FILE.exists():
+        for line in _COMEBACK_BETS_FILE.read_text().strip().split("\n"):
+            if line.strip():
+                try:
+                    bets.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    return bets
+
+
+def _append_comeback_bet(bet):
+    """Append a single comeback bet to the JSONL file."""
+    _COMEBACK_BETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_COMEBACK_BETS_FILE, "a") as f:
+        f.write(json.dumps(bet) + "\n")
+
+
+def _save_comeback_bets(bets):
+    """Rewrite the entire comeback bets file (for updates)."""
+    _COMEBACK_BETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_COMEBACK_BETS_FILE, "w") as f:
+        for b in bets:
+            f.write(json.dumps(b) + "\n")
+
+
+@app.route("/api/comeback/bets", methods=["GET"])
+@enable_cors
+def get_comeback_bets():
+    """Return all logged comeback bets with performance stats."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    bets = _load_comeback_bets()
+
+    # Calculate performance stats
+    total = len(bets)
+    resolved = [b for b in bets if b.get("outcome") in ("win", "loss")]
+    wins = [b for b in resolved if b["outcome"] == "win"]
+    losses = [b for b in resolved if b["outcome"] == "loss"]
+    pending = [b for b in bets if b.get("outcome") not in ("win", "loss")]
+
+    total_pnl = sum(b.get("pnl_usd", 0) for b in resolved)
+    win_rate = round(len(wins) / len(resolved) * 100, 1) if resolved else 0
+
+    return jsonify({
+        "bets": bets,
+        "stats": {
+            "total": total,
+            "wins": len(wins),
+            "losses": len(losses),
+            "pending": len(pending),
+            "win_rate": win_rate,
+            "total_pnl": round(total_pnl, 2),
+        },
+    })
+
+
+@app.route("/api/comeback/bets", methods=["POST"])
+@enable_cors
+def log_comeback_bet():
+    """Log a new comeback bet from a signal card."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(force=True) if request.is_json else {}
+    if not data:
+        try:
+            data = json.loads(request.data.decode()) if request.data else {}
+        except Exception:
+            data = {}
+
+    required = ["player", "opponent", "slug", "entry_price", "fair_price", "edge", "set_state"]
+    missing = [f for f in required if f not in data]
+    if missing:
+        return jsonify({"error": f"Missing fields: {missing}"}), 400
+
+    bet = {
+        "bet_id": f"cb_{int(datetime.now().timestamp()*1000)}",
+        "player": data["player"],
+        "opponent": data["opponent"],
+        "slug": data["slug"],
+        "question": data.get("question", ""),
+        "poly_link": data.get("poly_link", ""),
+        "entry_price": data["entry_price"],
+        "fair_price": data["fair_price"],
+        "edge": data["edge"],
+        "set_state": data["set_state"],
+        "strength": data.get("strength", ""),
+        "rank": data.get("rank"),
+        "rank_tier": data.get("rank_tier", ""),
+        "is_comeback_king": data.get("is_comeback_king", False),
+        "stake_usd": data.get("stake_usd", 5.0),
+        "outcome": None,
+        "exit_price": None,
+        "pnl_usd": None,
+        "logged_at": datetime.now().isoformat(),
+        "resolved_at": None,
+        "notes": data.get("notes", ""),
+    }
+
+    _append_comeback_bet(bet)
+    logger.info(f"Comeback bet logged: {bet['player']} @ {bet['entry_price']}c (edge +{bet['edge']}c)")
+
+    return jsonify({"ok": True, "bet": bet})
+
+
+@app.route("/api/comeback/bets/<bet_id>", methods=["PUT"])
+@enable_cors
+def update_comeback_bet(bet_id):
+    """Update a comeback bet outcome (win/loss/cancel)."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(force=True) if request.is_json else {}
+    if not data:
+        try:
+            data = json.loads(request.data.decode()) if request.data else {}
+        except Exception:
+            data = {}
+
+    bets = _load_comeback_bets()
+    found = False
+    for b in bets:
+        if b.get("bet_id") == bet_id:
+            if "outcome" in data:
+                b["outcome"] = data["outcome"]  # "win", "loss", "cancel"
+            if "exit_price" in data:
+                b["exit_price"] = data["exit_price"]
+            if "pnl_usd" in data:
+                b["pnl_usd"] = data["pnl_usd"]
+            elif b.get("exit_price") and b.get("entry_price") and b.get("stake_usd"):
+                # Auto-calculate P&L
+                entry_p = b["entry_price"] / 100
+                exit_p = b["exit_price"] / 100
+                shares = b["stake_usd"] / entry_p if entry_p > 0 else 0
+                b["pnl_usd"] = round(shares * (exit_p - entry_p), 2)
+            if "notes" in data:
+                b["notes"] = data["notes"]
+            b["resolved_at"] = datetime.now().isoformat()
+            found = True
+            break
+
+    if not found:
+        return jsonify({"error": "Bet not found"}), 404
+
+    _save_comeback_bets(bets)
+    return jsonify({"ok": True, "bet": b})
 
 
 if __name__ == "__main__":

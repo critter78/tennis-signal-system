@@ -482,6 +482,29 @@
         .cb-live-dot { width:8px; height:8px; border-radius:50%; background:#4caf50; display:inline-block; animation:cb-pulse 2s infinite; }
         @keyframes cb-pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
         .cb-summary { background:#0d1117; border:1px solid #2d3139; border-radius:8px; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:12px; color:#6c757d; }
+        .cb-sub-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid #2d3139; }
+        .cb-sub-tab { padding:8px 18px; font-size:11px; font-weight:600; color:#6c757d; cursor:pointer; letter-spacing:0.04em; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.2s; font-family:'IBM Plex Mono',monospace; background:none; border-left:none; border-right:none; border-top:none; }
+        .cb-sub-tab:hover { color:#e0e0e0; }
+        .cb-sub-tab.active { color:#4caf50; border-bottom-color:#4caf50; }
+        .cb-sub-panel { display:none; }
+        .cb-sub-panel.active { display:block; }
+        .cb-bet-card { background:#0d1117; border:1px solid #2d3139; border-radius:10px; padding:14px 18px; margin-bottom:10px; position:relative; }
+        .cb-bet-card.cb-bet-win { border-left:3px solid #4caf50; }
+        .cb-bet-card.cb-bet-loss { border-left:3px solid #ef5350; }
+        .cb-bet-card.cb-bet-pending { border-left:3px solid #ff9800; }
+        .cb-bet-actions { display:flex; gap:6px; margin-top:10px; }
+        .cb-bet-btn { font-size:10px; font-weight:600; padding:4px 12px; border-radius:5px; cursor:pointer; font-family:'IBM Plex Mono',monospace; border:1px solid; transition:all 0.15s; }
+        .cb-bet-btn-win { background:#4caf5015; color:#4caf50; border-color:#4caf5040; }
+        .cb-bet-btn-win:hover { background:#4caf5030; }
+        .cb-bet-btn-loss { background:#ef535015; color:#ef5350; border-color:#ef535040; }
+        .cb-bet-btn-loss:hover { background:#ef535030; }
+        .cb-bet-btn-cancel { background:#55555515; color:#888; border-color:#55555540; }
+        .cb-bet-btn-cancel:hover { background:#55555530; }
+        .cb-log-btn { font-size:10px; font-weight:700; padding:5px 14px; border-radius:6px; cursor:pointer; font-family:'IBM Plex Mono',monospace; background:#4caf5015; color:#4caf50; border:1px solid #4caf5040; transition:all 0.15s; white-space:nowrap; }
+        .cb-log-btn:hover { background:#4caf5030; }
+        .cb-log-btn:disabled { opacity:0.4; cursor:default; }
+        .cb-perf-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }
+        @media (max-width:600px) { .cb-perf-grid { grid-template-columns:repeat(3,1fr); } }
 
         /* ── AUTO-TRADER APP ── */
         #autotrader-app { display:none; }
@@ -1046,19 +1069,61 @@ window.PICKS_DATA = [];
         </div>
     </div>
 
-    <div id="cb-signals-container">
-        <div class="cb-empty">
-            <div class="cb-empty-icon">📡</div>
-            <div style="font-size:14px; color:#6c757d; margin-bottom:8px;">Scanning for live comeback edges...</div>
-            <div style="font-size:11px; color:#444;">Hit SCAN NOW or wait for auto-refresh (every 60s)</div>
+    <!-- Sub-tabs: Signals / My Bets -->
+    <div class="cb-sub-tabs">
+        <button class="cb-sub-tab active" onclick="switchCbTab('signals')">SIGNALS</button>
+        <button class="cb-sub-tab" onclick="switchCbTab('mybets')">MY BETS</button>
+    </div>
+
+    <!-- Signals panel -->
+    <div class="cb-sub-panel active" id="cb-panel-signals">
+        <div id="cb-signals-container">
+            <div class="cb-empty">
+                <div class="cb-empty-icon">📡</div>
+                <div style="font-size:14px; color:#6c757d; margin-bottom:8px;">Scanning for live comeback edges...</div>
+                <div style="font-size:11px; color:#444;">Hit SCAN NOW or wait for auto-refresh (every 60s)</div>
+            </div>
+        </div>
+
+        <div class="cb-summary" id="cb-summary" style="display:none;">
+            <div>
+                <span style="color:#e0e0e0; font-weight:600;" id="cb-summary-text">—</span>
+            </div>
+            <div id="cb-scan-time" style="font-size:10px; color:#555;">—</div>
         </div>
     </div>
 
-    <div class="cb-summary" id="cb-summary" style="display:none;">
-        <div>
-            <span style="color:#e0e0e0; font-weight:600;" id="cb-summary-text">—</span>
+    <!-- My Bets panel -->
+    <div class="cb-sub-panel" id="cb-panel-mybets">
+        <div class="cb-perf-grid" id="cb-perf-stats">
+            <div class="cb-metric">
+                <div class="cb-metric-label">Total Bets</div>
+                <div class="cb-metric-val" id="cbp-total">0</div>
+            </div>
+            <div class="cb-metric">
+                <div class="cb-metric-label">Win Rate</div>
+                <div class="cb-metric-val" style="color:#4caf50;" id="cbp-wr">—</div>
+            </div>
+            <div class="cb-metric">
+                <div class="cb-metric-label">P&L</div>
+                <div class="cb-metric-val" id="cbp-pnl">$0</div>
+            </div>
+            <div class="cb-metric">
+                <div class="cb-metric-label">Wins</div>
+                <div class="cb-metric-val" style="color:#4caf50;" id="cbp-wins">0</div>
+            </div>
+            <div class="cb-metric">
+                <div class="cb-metric-label">Pending</div>
+                <div class="cb-metric-val" style="color:#ff9800;" id="cbp-pending">0</div>
+            </div>
         </div>
-        <div id="cb-scan-time" style="font-size:10px; color:#555;">—</div>
+        <div id="cb-bets-container">
+            <div class="cb-empty">
+                <div class="cb-empty-icon">📝</div>
+                <div style="font-size:14px; color:#6c757d; margin-bottom:8px;">No comeback bets logged yet</div>
+                <div style="font-size:11px; color:#444;">Click LOG BET on any signal card to start tracking</div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1248,7 +1313,170 @@ function renderComebackCard(s) {
         </div>
 
         <div class="cb-insight">${insight}</div>
+
+        <div style="margin-top:10px; display:flex; justify-content:flex-end; align-items:center; gap:8px;">
+            <button class="cb-log-btn" onclick='logComebackBet(${JSON.stringify(s).replace(/'/g,"&#39;")})' id="cb-log-${s.slug}">LOG BET</button>
+            ${s.poly_link ? `<a href="${s.poly_link}" target="_blank" rel="noopener" style="font-size:11px; color:#42a5f5; text-decoration:none; padding:5px 12px; border:1px solid #42a5f530; border-radius:6px; background:#42a5f510;">View on Polymarket →</a>` : ''}
+        </div>
     </div>`;
+}
+
+// ─── COMEBACK SUB-TAB SWITCHING ───
+function switchCbTab(name) {
+    document.querySelectorAll('.cb-sub-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.cb-sub-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.cb-sub-tab[onclick*="${name}"]`).classList.add('active');
+    document.getElementById('cb-panel-' + name).classList.add('active');
+    if (name === 'mybets') loadComebackBets();
+}
+
+// ─── LOG COMEBACK BET ───
+async function logComebackBet(signal) {
+    const btn = document.getElementById('cb-log-' + signal.slug);
+    if (btn) { btn.textContent = 'LOGGING...'; btn.disabled = true; }
+    try {
+        const res = await fetch('/api/comeback/bets', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                player: signal.player,
+                opponent: signal.opponent,
+                slug: signal.slug,
+                question: signal.question,
+                poly_link: signal.poly_link,
+                entry_price: signal.poly_price,
+                fair_price: signal.fair_price,
+                edge: signal.edge,
+                set_state: signal.set_state,
+                strength: signal.strength,
+                rank: signal.rank,
+                rank_tier: signal.rank_tier,
+                is_comeback_king: signal.is_comeback_king,
+                stake_usd: 5.0,
+            }),
+        });
+        if (!res.ok) throw new Error(res.statusText);
+        if (btn) { btn.textContent = '✓ LOGGED'; btn.style.color = '#4caf50'; }
+    } catch (e) {
+        console.error('Log bet error:', e);
+        if (btn) { btn.textContent = 'FAILED'; btn.style.color = '#ef5350'; btn.disabled = false; }
+    }
+}
+
+// ─── LOAD COMEBACK BETS ───
+async function loadComebackBets() {
+    try {
+        const res = await fetch('/api/comeback/bets', { credentials: 'include' });
+        if (!res.ok) throw new Error(res.statusText);
+        const data = await res.json();
+        const bets = data.bets || [];
+        const stats = data.stats || {};
+
+        // Update perf stats
+        const el = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+        el('cbp-total', stats.total || 0);
+        el('cbp-wr', stats.total > 0 ? (stats.win_rate + '%') : '—');
+        el('cbp-wins', stats.wins || 0);
+        el('cbp-pending', stats.pending || 0);
+        const pnlEl = document.getElementById('cbp-pnl');
+        if (pnlEl) {
+            const pnl = stats.total_pnl || 0;
+            pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+            pnlEl.style.color = pnl >= 0 ? '#4caf50' : '#ef5350';
+        }
+
+        const container = document.getElementById('cb-bets-container');
+        if (!container) return;
+        if (bets.length === 0) {
+            container.innerHTML = `<div class="cb-empty"><div class="cb-empty-icon">📝</div><div style="font-size:14px; color:#6c757d; margin-bottom:8px;">No comeback bets logged yet</div><div style="font-size:11px; color:#444;">Click LOG BET on any signal card to start tracking</div></div>`;
+            return;
+        }
+
+        // Sort: pending first, then by logged_at desc
+        bets.sort((a, b) => {
+            const aPend = !a.outcome ? 0 : 1;
+            const bPend = !b.outcome ? 0 : 1;
+            if (aPend !== bPend) return aPend - bPend;
+            return (b.logged_at || '').localeCompare(a.logged_at || '');
+        });
+
+        container.innerHTML = bets.map(renderComebackBetCard).join('');
+    } catch (e) {
+        console.error('Load comeback bets error:', e);
+    }
+}
+
+function renderComebackBetCard(b) {
+    const isPending = !b.outcome || b.outcome === null;
+    const statusClass = isPending ? 'cb-bet-pending' : (b.outcome === 'win' ? 'cb-bet-win' : 'cb-bet-loss');
+    const statusText = isPending ? 'PENDING' : b.outcome.toUpperCase();
+    const statusColor = isPending ? '#ff9800' : (b.outcome === 'win' ? '#4caf50' : '#ef5350');
+    const pnlText = b.pnl_usd != null ? ((b.pnl_usd >= 0 ? '+$' : '-$') + Math.abs(b.pnl_usd).toFixed(2)) : '—';
+    const pnlColor = b.pnl_usd != null ? (b.pnl_usd >= 0 ? '#4caf50' : '#ef5350') : '#6c757d';
+    const loggedDate = b.logged_at ? new Date(b.logged_at).toLocaleDateString() + ' ' + new Date(b.logged_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—';
+
+    return `
+    <div class="cb-bet-card ${statusClass}">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+                <div style="font-size:14px; font-weight:700; color:#e0e0e0;">${b.player} <span style="font-size:11px; color:#6c757d; font-weight:400;">vs ${b.opponent}</span></div>
+                <div style="font-size:10px; color:#555; margin-top:2px;">Down ${b.set_state} · ${b.rank_tier || '—'} · ${loggedDate}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px; font-weight:700; color:${statusColor};">${statusText}</div>
+                <div style="font-size:13px; font-weight:700; color:${pnlColor}; margin-top:2px;">${pnlText}</div>
+            </div>
+        </div>
+        <div style="display:flex; gap:16px; margin-top:10px; font-size:11px; color:#6c757d;">
+            <span>Entry: <strong style="color:#e0e0e0;">${b.entry_price}c</strong></span>
+            <span>Fair: <strong style="color:#4caf50;">${b.fair_price}c</strong></span>
+            <span>Edge: <strong style="color:#4caf50;">+${b.edge}c</strong></span>
+            <span>Stake: <strong style="color:#e0e0e0;">$${(b.stake_usd||5).toFixed(2)}</strong></span>
+            ${b.exit_price ? `<span>Exit: <strong style="color:#e0e0e0;">${b.exit_price}c</strong></span>` : ''}
+        </div>
+        ${isPending ? `
+        <div class="cb-bet-actions">
+            <button class="cb-bet-btn cb-bet-btn-win" onclick="resolveComebackBet('${b.bet_id}','win')">✓ WIN</button>
+            <button class="cb-bet-btn cb-bet-btn-loss" onclick="resolveComebackBet('${b.bet_id}','loss')">✗ LOSS</button>
+            <button class="cb-bet-btn cb-bet-btn-cancel" onclick="resolveComebackBet('${b.bet_id}','cancel')">CANCEL</button>
+            ${b.poly_link ? `<a href="${b.poly_link}" target="_blank" rel="noopener" style="font-size:10px; color:#42a5f5; text-decoration:none; padding:4px 10px; border:1px solid #42a5f530; border-radius:5px; margin-left:auto;">Polymarket →</a>` : ''}
+        </div>` : ''}
+    </div>`;
+}
+
+// ─── RESOLVE COMEBACK BET ───
+async function resolveComebackBet(betId, outcome) {
+    let exitPrice = null;
+    if (outcome === 'win') {
+        exitPrice = 100; // full payout
+    } else if (outcome === 'loss') {
+        exitPrice = 0;
+    }
+
+    // For win/loss, prompt for actual exit price if desired
+    if (outcome !== 'cancel') {
+        const input = prompt(`Exit price in cents (default: ${exitPrice}c)?`, exitPrice);
+        if (input === null) return; // cancelled
+        exitPrice = parseFloat(input) || exitPrice;
+    }
+
+    try {
+        const body = { outcome };
+        if (exitPrice !== null) body.exit_price = exitPrice;
+
+        const res = await fetch(`/api/comeback/bets/${betId}`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error(res.statusText);
+        loadComebackBets(); // refresh
+    } catch (e) {
+        console.error('Resolve bet error:', e);
+        alert('Failed to update bet: ' + e.message);
+    }
 }
 
 // ─── AT SUB-TAB SWITCHING ───
