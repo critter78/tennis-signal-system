@@ -4254,6 +4254,25 @@ def comeback_signals():
             except (ValueError, TypeError):
                 continue
 
+            # ── Filter: skip completed / effectively resolved markets ──
+            # If either side is >= 95c or <= 2c, the match is decided
+            if price_a >= 95 or price_b >= 95 or price_a <= 2 or price_b <= 2:
+                continue
+
+            # Skip markets whose end_date is in the past (already finished)
+            end_date_str = mkt.get("end_date", "")
+            if end_date_str:
+                try:
+                    # Gamma returns ISO format like "2026-04-29T23:00:00Z"
+                    clean = end_date_str.replace("Z", "+00:00")
+                    end_dt = datetime.fromisoformat(clean)
+                    from datetime import timezone
+                    now_utc = datetime.now(timezone.utc)
+                    if end_dt < now_utc:
+                        continue
+                except Exception:
+                    pass  # If we can't parse it, keep the market
+
             # Skip very low volume markets
             if mkt["volume"] < 5000:
                 continue
