@@ -1117,46 +1117,51 @@ const withEdge = picks.filter(p => p.has_edge);
 const wins = resolved.filter(p => p.outcome === 'win');
 const losses = resolved.filter(p => p.outcome === 'loss');
 
+// Edge-only stats (model signal quality — only picks where model found an edge)
+const edgeResolved = resolved.filter(p => p.has_edge);
+const edgeWins = edgeResolved.filter(p => p.outcome === 'win');
+const edgeLosses = edgeResolved.filter(p => p.outcome === 'loss');
+
 // ─── HEADER ───
 document.getElementById('headerSub').textContent =
-    `${picks.length} total picks logged | ${myBets.length} bets placed | ${resolved.length} resolved | Last updated: ${new Date().toLocaleDateString()}`;
+    `${picks.length} total picks logged | ${withEdge.length} edge signals | ${edgeResolved.length} resolved | Last updated: ${new Date().toLocaleDateString()}`;
 
 // ─── STAT CARDS ───
 function statCard(label, value, cls) {
     return `<div class="stat-card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`;
 }
 
-const winRate = resolved.length > 0 ? (wins.length / resolved.length * 100).toFixed(1) + '%' : '—';
-const totalPnl = resolved.reduce((s, p) => s + (p.pnl || 0), 0);
+const winRate = edgeResolved.length > 0 ? (edgeWins.length / edgeResolved.length * 100).toFixed(1) + '%' : '—';
+const totalPnl = edgeResolved.reduce((s, p) => s + (p.pnl || 0), 0);
 const pnlStr = totalPnl >= 0 ? `+$${totalPnl.toFixed(0)}` : `-$${Math.abs(totalPnl).toFixed(0)}`;
 const avgEdge = withEdge.length > 0 ? (withEdge.reduce((s, p) => s + Math.abs(p.edge), 0) / withEdge.length).toFixed(1) + '%' : '—';
 const bestEdge = picks.length > 0 ? Math.max(...picks.map(p => Math.abs(p.edge || 0))).toFixed(1) + '%' : '—';
 
-// Model Win Rate — highlighted card with W-L record
-const wrColor = resolved.length > 0 && wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336';
-const winRateCard = resolved.length > 0
+// Model Win Rate — highlighted card, filtered to EDGE picks only
+const wrColor = edgeResolved.length > 0 && edgeWins.length/edgeResolved.length >= 0.5 ? '#4caf50' : '#f44336';
+const winRateCard = edgeResolved.length > 0
     ? `<div class="stat-card" style="border-color:${wrColor}50;background:linear-gradient(135deg,#1a1d27 60%,${wrColor}08)">
-        <div class="label">Model Win Rate</div>
+        <div class="label">Model Win Rate (Edge)</div>
         <div class="value" style="color:${wrColor}">${winRate}</div>
-        <div style="font-size:10px;color:#aaa;margin-top:2px;font-weight:600"><span style="color:#4caf50">${wins.length}W</span> <span style="color:#6c757d">—</span> <span style="color:#f44336">${losses.length}L</span> <span style="color:#6c757d;font-weight:400">(${resolved.length} resolved)</span></div>
+        <div style="font-size:10px;color:#aaa;margin-top:2px;font-weight:600"><span style="color:#4caf50">${edgeWins.length}W</span> <span style="color:#6c757d">—</span> <span style="color:#f44336">${edgeLosses.length}L</span> <span style="color:#6c757d;font-weight:400">(${edgeResolved.length} resolved)</span></div>
     </div>`
-    : statCard('Model Win Rate', '—', 'white');
+    : statCard('Model Win Rate (Edge)', '—', 'white');
 
 document.getElementById('statsRow').innerHTML = [
     statCard('Total Signals', picks.length, 'white'),
     winRateCard,
-    statCard('Resolved', resolved.length, 'white'),
-    statCard('Total P&L', totalPnl === 0 ? '—' : pnlStr, totalPnl >= 0 ? 'green' : 'red'),
-    statCard('Signals (Edge)', withEdge.length, 'amber'),
+    statCard('Edge Signals', withEdge.length, 'amber'),
+    statCard('P&L (Edge)', totalPnl === 0 ? '—' : pnlStr, totalPnl >= 0 ? 'green' : 'red'),
     statCard('Avg Edge', avgEdge, 'amber'),
     statCard('Best Edge', bestEdge, 'green'),
+    statCard('Bets Placed', myBets.length, 'white'),
 ].join('');
 
 // ─── QUICK STATS ───
-const avgEdgeWin = wins.length > 0 ? (wins.reduce((s,p) => s + Math.abs(p.edge||0), 0) / wins.length).toFixed(1) + '%' : '—';
-const avgEdgeLoss = losses.length > 0 ? (losses.reduce((s,p) => s + Math.abs(p.edge||0), 0) / losses.length).toFixed(1) + '%' : '—';
-const biggestWin = wins.length > 0 ? '$' + Math.max(...wins.map(p => p.pnl || 0)).toFixed(0) : '—';
-const biggestLoss = losses.length > 0 ? '-$' + Math.abs(Math.min(...losses.map(p => p.pnl || 0))).toFixed(0) : '—';
+const avgEdgeWin = edgeWins.length > 0 ? (edgeWins.reduce((s,p) => s + Math.abs(p.edge||0), 0) / edgeWins.length).toFixed(1) + '%' : '—';
+const avgEdgeLoss = edgeLosses.length > 0 ? (edgeLosses.reduce((s,p) => s + Math.abs(p.edge||0), 0) / edgeLosses.length).toFixed(1) + '%' : '—';
+const biggestWin = edgeWins.length > 0 ? '$' + Math.max(...edgeWins.map(p => p.pnl || 0)).toFixed(0) : '—';
+const biggestLoss = edgeLosses.length > 0 ? '-$' + Math.abs(Math.min(...edgeLosses.map(p => p.pnl || 0))).toFixed(0) : '—';
 
 document.getElementById('quickStats').innerHTML = [
     `<div class="mini-stat"><div class="ms-label">Avg Edge (Winners)</div><div class="ms-value" style="color:#4caf50">${avgEdgeWin}</div></div>`,
@@ -1176,7 +1181,7 @@ Chart.defaults.font.size = 10;
     const el = document.getElementById('lstmProgress');
     if (!el) return;
 
-    const resolvedCount = resolved.length;
+    const resolvedCount = edgeResolved.length;
     const barMax = 1000;
 
     // Phases of LSTM accuracy
@@ -1287,7 +1292,7 @@ Chart.defaults.font.size = 10;
                 ${phaseCardsHtml}
             </div>
         </div>
-        ${resolvedCount > 0 ? '<div style="border-top:1px solid #2d3139; padding-top:8px; margin-top:12px; font-size:10px; color:#aaa">Win rate: <strong style="color:' + (wins.length/resolved.length >= 0.5 ? '#4caf50' : '#f44336') + '">' + (wins.length/resolved.length*100).toFixed(1) + '%</strong> (' + wins.length + 'W-' + losses.length + 'L) | PnL: <strong style="color:' + (totalPnl >= 0 ? '#4caf50' : '#f44336') + '">$' + totalPnl.toFixed(0) + '</strong></div>' : ''}
+        ${resolvedCount > 0 ? '<div style="border-top:1px solid #2d3139; padding-top:8px; margin-top:12px; font-size:10px; color:#aaa">Edge win rate: <strong style="color:' + (edgeWins.length/edgeResolved.length >= 0.5 ? '#4caf50' : '#f44336') + '">' + (edgeWins.length/edgeResolved.length*100).toFixed(1) + '%</strong> (' + edgeWins.length + 'W-' + edgeLosses.length + 'L) | PnL: <strong style="color:' + (totalPnl >= 0 ? '#4caf50' : '#f44336') + '">$' + totalPnl.toFixed(0) + '</strong></div>' : ''}
     `;
 })();
 
