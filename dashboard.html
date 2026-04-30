@@ -442,13 +442,46 @@
         /* ── TOP-LEVEL MODE SWITCHER ── */
         .mode-switcher { display:flex; margin-bottom:20px; background:#0d1117; border:1px solid #2d3139; border-radius:8px; overflow:hidden; }
         .mode-btn { flex:1; padding:12px 20px; text-align:center; font-size:13px; font-weight:700; letter-spacing:0.06em; color:#6c757d; cursor:pointer; transition:all 0.2s; border:none; background:transparent; font-family:'IBM Plex Mono',monospace; position:relative; }
-        .mode-btn:first-child { border-right:1px solid #2d3139; }
+        .mode-btn { border-right:1px solid #2d3139; }
+        .mode-btn:last-child { border-right:none; }
         .mode-btn:hover { color:#e0e0e0; background:#1a1d27; }
         .mode-btn.active { color:#d4740a; background:linear-gradient(180deg,#1a1d27 0%,#1f1a12 100%); }
         .mode-btn.active::after { content:''; position:absolute; bottom:0; left:15%; right:15%; height:2px; background:#d4740a; border-radius:2px 2px 0 0; }
         .mode-btn .mode-icon { font-size:16px; margin-right:6px; }
         .mode-btn .mode-sub { font-size:9px; color:#555; font-weight:400; display:block; margin-top:2px; }
         .mode-btn.active .mode-sub { color:#d4740a80; }
+
+        /* ── COMEBACK RADAR ── */
+        #comeback-mode { display:none; }
+        .cb-card { background:#0d1117; border:1px solid #2d3139; border-radius:10px; padding:16px 20px; margin-bottom:12px; position:relative; }
+        .cb-card.cb-strong { border-left:3px solid #4caf50; }
+        .cb-card.cb-moderate { border-left:3px solid #ff9800; }
+        .cb-card.cb-weak { border-left:3px solid #555; }
+        .cb-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+        .cb-player-name { font-size:15px; font-weight:700; color:#e0e0e0; }
+        .cb-player-rank { font-size:11px; font-weight:400; color:#6c757d; margin-left:6px; }
+        .cb-tourney-info { font-size:11px; color:#6c757d; margin-top:2px; }
+        .cb-score { font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:600; color:#e0e0e0; text-align:right; }
+        .cb-set-won { color:#4caf50; }
+        .cb-set-lost { color:#ef5350; }
+        .cb-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+        .cb-metric { background:#161b22; border-radius:6px; padding:8px 10px; text-align:center; }
+        .cb-metric-label { font-size:9px; color:#6c757d; text-transform:uppercase; letter-spacing:0.5px; }
+        .cb-metric-val { font-size:16px; font-weight:700; color:#e0e0e0; }
+        .cb-edge-bar-wrap { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+        .cb-edge-track { flex:1; height:6px; background:#1a1d27; border-radius:3px; position:relative; overflow:visible; }
+        .cb-edge-fill { height:100%; border-radius:3px; }
+        .cb-edge-marker { position:absolute; top:-3px; width:2px; height:12px; background:#4caf50; border-radius:1px; }
+        .cb-badge { font-size:10px; font-weight:700; padding:3px 10px; border-radius:10px; white-space:nowrap; }
+        .cb-badge-strong { background:#4caf5025; color:#4caf50; border:1px solid #4caf5050; }
+        .cb-badge-moderate { background:#ff980025; color:#ff9800; border:1px solid #ff980050; }
+        .cb-badge-weak { background:#55555525; color:#888; border:1px solid #55555550; }
+        .cb-insight { font-size:11px; color:#6c757d; line-height:1.5; margin-top:8px; }
+        .cb-empty { text-align:center; padding:60px 20px; color:#555; }
+        .cb-empty-icon { font-size:48px; margin-bottom:12px; }
+        .cb-live-dot { width:8px; height:8px; border-radius:50%; background:#4caf50; display:inline-block; animation:cb-pulse 2s infinite; }
+        @keyframes cb-pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+        .cb-summary { background:#0d1117; border:1px solid #2d3139; border-radius:8px; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:12px; color:#6c757d; }
 
         /* ── AUTO-TRADER APP ── */
         #autotrader-app { display:none; }
@@ -493,8 +526,10 @@
 
         @media (max-width: 600px) {
             .mode-switcher { border-radius:6px; }
-            .mode-btn { padding:10px 12px; font-size:11px; }
-            .mode-btn .mode-sub { font-size:8px; }
+            .mode-btn { padding:8px 8px; font-size:10px; }
+            .mode-btn .mode-sub { font-size:7px; }
+            .mode-btn .mode-icon { margin-right:3px; }
+            .cb-metrics { grid-template-columns:repeat(2,1fr); }
             .at-sub-tabs { overflow-x:auto; white-space:nowrap; }
             .at-sub-tab { padding:8px 14px; font-size:10px; flex-shrink:0; }
             .at-trade-card .at-tc-body { grid-template-columns:repeat(2,1fr); }
@@ -534,6 +569,10 @@ window.PICKS_DATA = [];
     <button class="mode-btn" onclick="switchMode('autotrader')">
         <span class="mode-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M20 8a8 8 0 0 0-14-2"></path><path d="M4 16a8 8 0 0 0 14 2"></path><path d="M20 4v4h-4"></path><path d="M4 20v-4h4"></path><path d="M12 8 L10 12h2.5L11 16"></path></svg></span> AUTO-TRADER
         <span class="mode-sub">Execution · Positions · P&L</span>
+    </button>
+    <button class="mode-btn" onclick="switchMode('comeback')">
+        <span class="mode-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg></span> COMEBACK RADAR
+        <span class="mode-sub">In-Play · Edge · Live Signals</span>
     </button>
 </div>
 
@@ -974,25 +1013,242 @@ window.PICKS_DATA = [];
     </div>
 </div><!-- end #autotrader-app -->
 
+<!-- ═══ COMEBACK RADAR MODE ═══ -->
+<div id="comeback-mode">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span class="cb-live-dot"></span>
+            <span style="font-size:18px; font-weight:700; color:#e0e0e0; letter-spacing:0.04em;">COMEBACK RADAR</span>
+            <span style="font-size:10px; color:#6c757d; padding:3px 8px; background:#161b22; border-radius:4px;">BETA</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span id="cb-last-scan" style="font-size:10px; color:#555;">—</span>
+            <button onclick="loadComebackSignals()" style="padding:6px 14px; font-size:11px; font-weight:600; background:#161b22; color:#6c757d; border:1px solid #2d3139; border-radius:6px; cursor:pointer; font-family:'IBM Plex Mono',monospace;">SCAN NOW</button>
+        </div>
+    </div>
+
+    <div style="background:#0d1117; border:1px solid #2d3139; border-radius:8px; padding:12px 16px; margin-bottom:16px; display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:120px;">
+            <div style="font-size:9px; color:#6c757d; text-transform:uppercase; letter-spacing:0.5px;">Active Markets</div>
+            <div style="font-size:20px; font-weight:700; color:#e0e0e0;" id="cb-stat-markets">—</div>
+        </div>
+        <div style="flex:1; min-width:120px;">
+            <div style="font-size:9px; color:#6c757d; text-transform:uppercase; letter-spacing:0.5px;">Signals Found</div>
+            <div style="font-size:20px; font-weight:700; color:#4caf50;" id="cb-stat-signals">—</div>
+        </div>
+        <div style="flex:1; min-width:120px;">
+            <div style="font-size:9px; color:#6c757d; text-transform:uppercase; letter-spacing:0.5px;">Strong Edge</div>
+            <div style="font-size:20px; font-weight:700; color:#4caf50;" id="cb-stat-strong">—</div>
+        </div>
+        <div style="flex:1; min-width:120px;">
+            <div style="font-size:9px; color:#6c757d; text-transform:uppercase; letter-spacing:0.5px;">Model Basis</div>
+            <div style="font-size:14px; font-weight:600; color:#6c757d;">21,260 matches</div>
+        </div>
+    </div>
+
+    <div id="cb-signals-container">
+        <div class="cb-empty">
+            <div class="cb-empty-icon">📡</div>
+            <div style="font-size:14px; color:#6c757d; margin-bottom:8px;">Scanning for live comeback edges...</div>
+            <div style="font-size:11px; color:#444;">Hit SCAN NOW or wait for auto-refresh (every 60s)</div>
+        </div>
+    </div>
+
+    <div class="cb-summary" id="cb-summary" style="display:none;">
+        <div>
+            <span style="color:#e0e0e0; font-weight:600;" id="cb-summary-text">—</span>
+        </div>
+        <div id="cb-scan-time" style="font-size:10px; color:#555;">—</div>
+    </div>
+</div>
+
 <script>
 // ─── MODE SWITCHING (top-level) ───
+let _cbPollInterval = null;
+
 function switchMode(mode) {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
     document.querySelector(`.mode-btn[onclick*="${mode}"]`).classList.add('active');
     const sigMode = document.getElementById('signals-mode');
     const atApp = document.getElementById('autotrader-app');
-    if (mode === 'autotrader') {
-        sigMode.style.display = 'none';
-        atApp.style.display = 'block';
-        atApp.classList.add('active');
-        loadAutoTrader();
-    } else {
-        sigMode.style.display = 'block';
-        atApp.style.display = 'none';
-        atApp.classList.remove('active');
+    const cbMode = document.getElementById('comeback-mode');
+
+    sigMode.style.display = 'none';
+    atApp.style.display = 'none';
+    atApp.classList.remove('active');
+    cbMode.style.display = 'none';
+
+    // Clear polling for inactive modes
+    if (mode !== 'autotrader') {
         if (_atPollInterval) { clearInterval(_atPollInterval); _atPollInterval = null; }
         if (_atPricePollInterval) { clearInterval(_atPricePollInterval); _atPricePollInterval = null; }
     }
+    if (mode !== 'comeback') {
+        if (_cbPollInterval) { clearInterval(_cbPollInterval); _cbPollInterval = null; }
+    }
+
+    if (mode === 'autotrader') {
+        atApp.style.display = 'block';
+        atApp.classList.add('active');
+        loadAutoTrader();
+    } else if (mode === 'comeback') {
+        cbMode.style.display = 'block';
+        loadComebackSignals();
+        _cbPollInterval = setInterval(loadComebackSignals, 60000);
+    } else {
+        sigMode.style.display = 'block';
+    }
+}
+
+// ─── COMEBACK RADAR ───
+async function loadComebackSignals() {
+    const scanBtn = document.querySelector('#comeback-mode button[onclick*="loadComebackSignals"]');
+    if (scanBtn) { scanBtn.textContent = 'SCANNING...'; scanBtn.disabled = true; }
+
+    try {
+        const res = await fetch('/api/comeback/signals', { credentials: 'include' });
+        if (!res.ok) throw new Error(res.statusText);
+        const data = await res.json();
+
+        const signals = data.signals || [];
+        const activeMarkets = data.active_markets || 0;
+        const scannedAt = data.scanned_at || '';
+
+        // Update stats
+        const elMkts = document.getElementById('cb-stat-markets');
+        const elSigs = document.getElementById('cb-stat-signals');
+        const elStrong = document.getElementById('cb-stat-strong');
+        if (elMkts) elMkts.textContent = activeMarkets;
+        if (elSigs) elSigs.textContent = signals.length;
+        if (elStrong) elStrong.textContent = signals.filter(s => s.strength === 'strong').length;
+
+        const scanTime = scannedAt ? new Date(scannedAt).toLocaleTimeString() : '—';
+        const elLastScan = document.getElementById('cb-last-scan');
+        if (elLastScan) elLastScan.textContent = 'Last scan: ' + scanTime;
+
+        const container = document.getElementById('cb-signals-container');
+        if (!container) return;
+
+        if (signals.length === 0) {
+            container.innerHTML = `
+                <div class="cb-empty">
+                    <div class="cb-empty-icon">📡</div>
+                    <div style="font-size:14px; color:#6c757d; margin-bottom:8px;">No comeback edges detected right now</div>
+                    <div style="font-size:11px; color:#444;">${activeMarkets} active tennis markets being monitored. Signals appear when a player's price drops significantly (set loss detected).</div>
+                </div>`;
+        } else {
+            container.innerHTML = signals.map(s => renderComebackCard(s)).join('');
+        }
+
+        // Summary
+        const summary = document.getElementById('cb-summary');
+        const summaryText = document.getElementById('cb-summary-text');
+        const scanTimeEl = document.getElementById('cb-scan-time');
+        if (summary && signals.length > 0) {
+            summary.style.display = 'flex';
+            const strong = signals.filter(s => s.strength === 'strong').length;
+            const moderate = signals.filter(s => s.strength === 'moderate').length;
+            summaryText.innerHTML = `${signals.length} signal${signals.length !== 1 ? 's' : ''} · <span style="color:#4caf50">${strong} strong</span> · <span style="color:#ff9800">${moderate} moderate</span> · ${activeMarkets} markets`;
+            if (scanTimeEl) scanTimeEl.textContent = 'Scanned: ' + scanTime;
+        } else if (summary) {
+            summary.style.display = 'none';
+        }
+
+    } catch (e) {
+        console.error('Comeback radar error:', e);
+        const container = document.getElementById('cb-signals-container');
+        if (container) {
+            container.innerHTML = `
+                <div class="cb-empty">
+                    <div class="cb-empty-icon">⚠️</div>
+                    <div style="font-size:14px; color:#ef5350; margin-bottom:8px;">Scan failed: ${e.message}</div>
+                    <div style="font-size:11px; color:#444;">Try again in a moment</div>
+                </div>`;
+        }
+    } finally {
+        if (scanBtn) { scanBtn.textContent = 'SCAN NOW'; scanBtn.disabled = false; }
+    }
+}
+
+function renderComebackCard(s) {
+    const strengthClass = s.strength === 'strong' ? 'cb-strong' : (s.strength === 'moderate' ? 'cb-moderate' : 'cb-weak');
+    const badgeClass = s.strength === 'strong' ? 'cb-badge-strong' : (s.strength === 'moderate' ? 'cb-badge-moderate' : 'cb-badge-weak');
+    const badgeText = s.strength === 'strong' ? 'STRONG EDGE' : (s.strength === 'moderate' ? 'MODERATE EDGE' : 'WEAK EDGE');
+
+    // Edge bar: poly price position and fair value marker
+    const polyPct = Math.min(s.poly_price, 100);
+    const fairPct = Math.min(s.fair_price, 100);
+    const fillColor = s.strength === 'strong' ? '#4caf50' : (s.strength === 'moderate' ? '#ff9800' : '#555');
+
+    // Extract tournament from question
+    const question = s.question || '';
+    let tourney = '—';
+    if (question.includes(':')) tourney = question.split(':')[0].trim();
+
+    // Rank display
+    const rankDisplay = s.rank ? `#${s.rank}` : 'NR';
+
+    // Comeback king badge
+    const kingBadge = s.is_comeback_king ?
+        `<span style="font-size:9px; padding:2px 6px; background:#ffd74025; color:#ffd740; border-radius:4px; border:1px solid #ffd74050; margin-left:6px;">👑 ${s.king_comeback_rate}% CB RATE</span>` : '';
+
+    // Insight line
+    let insight = `${s.rank_tier} player down ${s.set_state} — fair value ${s.fair_price}c based on 21,260 ATP matches.`;
+    if (s.is_comeback_king) {
+        insight += ` Known comeback king with personal ${s.king_comeback_rate}% rate.`;
+    }
+    insight += ` Price dropped from peak ${s.peak_price}c to ${s.poly_price}c.`;
+    if (s.confidence < 0.7) {
+        insight += ' ⚠️ Lower confidence on set state inference.';
+    }
+
+    return `
+    <div class="cb-card ${strengthClass}">
+        <div class="cb-header">
+            <div>
+                <div>
+                    <span class="cb-player-name">${s.player}</span>
+                    <span class="cb-player-rank">${rankDisplay}</span>
+                    ${kingBadge}
+                </div>
+                <div class="cb-tourney-info">${tourney} · vs ${s.opponent}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:12px; font-weight:700; color:#e0e0e0;">Down ${s.set_state}</div>
+                <div style="font-size:10px; color:#555; margin-top:2px;">Vol: $${(s.volume/1000).toFixed(0)}k</div>
+            </div>
+        </div>
+
+        <div class="cb-metrics">
+            <div class="cb-metric">
+                <div class="cb-metric-label">Set State</div>
+                <div class="cb-metric-val">${s.set_state}</div>
+            </div>
+            <div class="cb-metric">
+                <div class="cb-metric-label">Fair Value</div>
+                <div class="cb-metric-val" style="color:#4caf50;">${s.fair_price}c</div>
+            </div>
+            <div class="cb-metric">
+                <div class="cb-metric-label">Poly Price</div>
+                <div class="cb-metric-val" style="color:#ef5350;">${s.poly_price}c</div>
+            </div>
+            <div class="cb-metric">
+                <div class="cb-metric-label">Edge</div>
+                <div class="cb-metric-val" style="color:#4caf50;">+${s.edge}c</div>
+            </div>
+        </div>
+
+        <div class="cb-edge-bar-wrap">
+            <span style="font-size:10px; color:#6c757d; min-width:40px;">Poly ${s.poly_price}c</span>
+            <div class="cb-edge-track">
+                <div class="cb-edge-fill" style="width:${polyPct}%; background:${fillColor};"></div>
+                <div class="cb-edge-marker" style="left:${fairPct}%;"></div>
+            </div>
+            <span class="cb-badge ${badgeClass}">${badgeText}</span>
+        </div>
+
+        <div class="cb-insight">${insight}</div>
+    </div>`;
 }
 
 // ─── AT SUB-TAB SWITCHING ───

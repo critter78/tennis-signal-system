@@ -2849,6 +2849,96 @@ def _run_inline_resolver(prefetched_markets=None):
             total_pnl = sum(p.get("pnl", 0) for p in all_resolved)
             output_lines.append(f"Record: {wins}W-{losses}L | PnL: ${total_pnl:+,.0f}")
 
+        # ── Phase 2b: Resolve AUTO-TRADER trades (paper_trades.jsonl) ──
+        at_resolutions = 0
+        try:
+            at_log_path = LOGS_DIR / "paper_trades.jsonl"
+            if at_log_path.exists():
+                at_trades = []
+                with open(at_log_path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            at_trades.append(json.loads(line))
+
+                at_unresolved = [t for t in at_trades if t.get("status") == "confirmed"
+                                 and t.get("outcome") is None]
+                if at_unresolved:
+                    output_lines.append(f"\nPhase 2b: {len(at_unresolved)} unresolved auto-trader trades")
+
+                    for trade in at_unresolved:
+                        # Try slug-based resolution first
+                        tslug = trade.get("slug", "")
+                        if not tslug:
+                            tpl = trade.get("poly_link", "")
+                            if "/event/" in tpl:
+                                tslug = tpl.split("/event/")[-1].split("?")[0].split("/")[0]
+
+                        resolved_parsed = None
+
+                        # Check slug cache from Phase 0
+                        if tslug and tslug in slug_resolved_cache:
+                            resolved_parsed = slug_resolved_cache[tslug]
+
+                        # Check against bulk-fetched resolved markets by player names
+                        if not resolved_parsed:
+                            match_str = trade.get("match", "")
+                            parts = re.split(r'\s+vs\.?\s+', match_str)
+                            if len(parts) == 2:
+                                t_a_last = parts[0].strip().split()[-1].lower()
+                                t_b_last = parts[1].strip().split()[-1].lower()
+                                if len(t_a_last) > 2 and len(t_b_last) > 2:
+                                    for rm in unique_resolved:
+                                        rm_words = rm.get("_words", set())
+                                        if t_a_last in rm_words and t_b_last in rm_words:
+                                            resolved_parsed = rm
+                                            break
+
+                        # Individual slug lookup if we have a slug but no cache hit
+                        if not resolved_parsed and tslug:
+                            try:
+                                events = _get_event_by_slug(tslug)
+                                if events:
+                                    ev = events[0] if isinstance(events, list) else events
+                                    markets = ev.get("markets", [])
+                                    for m in (markets if markets else [ev]):
+                                        parsed = _parse_resolved_market(m)
+                                        if parsed:
+                                            resolved_parsed = parsed
+                                            break
+                            except Exception:
+                                pass
+
+                        if resolved_parsed:
+                            # Use _resolve_bet helper — same logic as bets
+                            if _resolve_bet(trade, resolved_parsed):
+                                # Recalculate PnL based on actual stake, not $100 notional
+                                stake = trade.get("actual_stake", trade.get("stake", 0))
+                                entry_price = trade.get("actual_buy_price",
+                                              trade.get("entry_price",
+                                              trade.get("poly_price", 50)))
+                                price_dec = entry_price / 100 if entry_price > 1 else entry_price
+                                if trade["outcome"] == "win":
+                                    trade["pnl"] = round(stake * (1 - price_dec) / price_dec, 2)
+                                elif trade["outcome"] == "loss":
+                                    trade["pnl"] = round(-stake, 2)
+                                # else void: pnl = 0 (already set by _resolve_bet)
+                                at_resolutions += 1
+
+                if at_resolutions > 0:
+                    with open(at_log_path, "w") as f:
+                        for t in at_trades:
+                            row = {k: v for k, v in t.items() if k != "_words"}
+                            f.write(json.dumps(row) + "\n")
+                    at_resolved_all = [t for t in at_trades if t.get("outcome") in ("win", "loss")]
+                    at_wins = sum(1 for t in at_resolved_all if t["outcome"] == "win")
+                    at_pnl = sum(t.get("pnl", 0) for t in at_resolved_all)
+                    output_lines.append(f"Auto-trader: resolved {at_resolutions} trades | "
+                                        f"{at_wins}W-{len(at_resolved_all)-at_wins}L | PnL: ${at_pnl:+,.2f}")
+
+        except Exception as e:
+            output_lines.append(f"[warn] Auto-trader resolution: {e}")
+
         # ── Phase 3: Auto-enrich tracked bets with Polymarket trade data ──
         try:
             bets_data = load_bets()
@@ -3798,6 +3888,77 @@ def auto_trader_execution_report():
     return jsonify({"ok": True, "updated": True})
 
 
+@app.route("/api/auto-trader/exit-report", methods=["POST"])
+@enable_cors
+def auto_trader_exit_report():
+    """Local executor reports a position exit (stop loss / take profit / trailing stop)."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    body = request.get_json(silent=True) or {}
+    pending_id = body.get("pending_id")
+    exit_action = body.get("exit_action", "exit")
+    exit_price = body.get("exit_price", 0)
+    pnl_usd = body.get("pnl_usd", 0)
+    pnl_pct = body.get("pnl_pct", 0)
+    success = body.get("success", False)
+
+    if not pending_id:
+        return jsonify({"error": "pending_id required"}), 400
+
+    log_path = LOGS_DIR / "paper_trades.jsonl"
+    if not log_path.exists():
+        return jsonify({"error": "No trade log found"}), 404
+
+    trades = []
+    updated = False
+    with open(log_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                trades.append(json.loads(line))
+
+    for t in trades:
+        if t.get("pending_id") == pending_id:
+            t["exit_action"] = exit_action
+            t["exit_price"] = exit_price
+            t["exit_at"] = datetime.utcnow().isoformat() + "Z"
+            t["pnl"] = pnl_usd
+            t["pnl_pct"] = pnl_pct
+            if success:
+                t["outcome"] = "win" if pnl_usd >= 0 else "loss"
+                t["sell_order"] = body.get("sell_order")
+            else:
+                t["exit_error"] = "sell_failed"
+            updated = True
+
+            # Update Telegram if we have msg_id
+            tg_msg_id = t.get("telegram_msg_id")
+            if tg_msg_id:
+                bet_on = t.get("bet_on", "?")
+                match_name = t.get("match", "?")
+                pnl_sign = "+" if pnl_usd >= 0 else ""
+                try:
+                    telegram_edit(tg_msg_id,
+                        f"POLYMARKET TENNIS BETTING SIGNAL\n\n"
+                        f"{bet_on}\n{match_name}\n\n"
+                        f"Status: EXITED ({exit_action})\n"
+                        f"Exit price: {exit_price:.0f}c | P&L: {pnl_sign}${pnl_usd:.2f} ({pnl_sign}{pnl_pct:.1f}%)")
+                except Exception as e:
+                    logger.warning(f"[EXIT-REPORT] Telegram edit failed: {e}")
+            break
+
+    if not updated:
+        return jsonify({"error": f"Trade {pending_id} not found"}), 404
+
+    with open(log_path, "w") as f:
+        for t in trades:
+            f.write(json.dumps(t) + "\n")
+
+    logger.info(f"[EXIT-REPORT] {pending_id}: {exit_action} | P&L: ${pnl_usd:+.2f}")
+    return jsonify({"ok": True, "updated": True})
+
+
 @app.route("/api/auto-trader/scan", methods=["POST"])
 @enable_cors
 def auto_trader_scan():
@@ -3887,6 +4048,331 @@ def auto_trader_history():
         return jsonify({"trades": trades})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# COMEBACK RADAR — live in-play edge detection via Poly price drops
+# ═══════════════════════════════════════════════════════════════════════
+
+# Fair comeback probabilities by rank tier and set state (from 21,260 ATP matches 2018-2026)
+COMEBACK_FAIR_VALUE = {
+    # (rank_tier, set_state) → fair probability (0-1)
+    # Bo5 states
+    ("top10", "0-1"): 0.50, ("top10", "1-2"): 0.35, ("top10", "0-2"): 0.21,
+    ("11-30", "0-1"): 0.33, ("11-30", "1-2"): 0.25, ("11-30", "0-2"): 0.09,
+    ("31-50", "0-1"): 0.24, ("31-50", "1-2"): 0.21, ("31-50", "0-2"): 0.08,
+    ("51-100","0-1"): 0.18, ("51-100","1-2"): 0.18, ("51-100","0-2"): 0.05,
+    ("100+",  "0-1"): 0.15, ("100+",  "1-2"): 0.16, ("100+",  "0-2"): 0.04,
+    # Bo3 states (only 0-1 possible)
+    ("top10", "0-1b3"): 0.32, ("11-30", "0-1b3"): 0.24,
+    ("31-50", "0-1b3"): 0.20, ("51-100","0-1b3"): 0.18, ("100+","0-1b3"): 0.14,
+}
+
+# Known comeback kings: personal override rates when down 0-1 in Bo5
+COMEBACK_KINGS = {
+    "novak djokovic": 0.49, "jannik sinner": 0.43, "carlos alcaraz": 0.44,
+    "alexander zverev": 0.38, "daniil medvedev": 0.35, "rafael nadal": 0.42,
+    "stefanos tsitsipas": 0.31, "andrey rublev": 0.30, "ben shelton": 0.32,
+    "matteo berrettini": 0.33, "holger rune": 0.44, "felix auger-aliassime": 0.41,
+    "nick kyrgios": 0.35, "dominic thiem": 0.32, "grigor dimitrov": 0.29,
+    "lorenzo musetti": 0.46, "nuno borges": 0.36, "cameron norrie": 0.33,
+}
+
+# Price snapshot file for tracking drops
+_COMEBACK_SNAPSHOT_FILE = LOGS_DIR / "comeback_snapshots.json"
+_COMEBACK_SIGNALS_FILE = LOGS_DIR / "comeback_signals.json"
+
+def _rank_tier(rank_val):
+    """Convert numeric rank to tier string."""
+    try:
+        r = int(float(rank_val))
+    except (ValueError, TypeError):
+        return "100+"
+    if r <= 10: return "top10"
+    if r <= 30: return "11-30"
+    if r <= 50: return "31-50"
+    if r <= 100: return "51-100"
+    return "100+"
+
+def _get_fair_value(player_name, rank, set_state):
+    """Look up fair comeback probability for a player at a given set state."""
+    tier = _rank_tier(rank)
+    # Check if player is a known comeback king (boost for 0-1 state)
+    name_lower = player_name.lower().strip() if player_name else ""
+    if name_lower in COMEBACK_KINGS and set_state == "0-1":
+        return COMEBACK_KINGS[name_lower]
+    return COMEBACK_FAIR_VALUE.get((tier, set_state), 0.15)
+
+def _infer_set_state(prev_price, curr_price, prev_state=None):
+    """Infer the trailing player's set state from the magnitude of the price drop.
+    Returns (set_state, confidence) or (None, 0) if no significant drop."""
+    if prev_price is None or curr_price is None:
+        return None, 0
+    drop = prev_price - curr_price
+    drop_pct = (drop / prev_price * 100) if prev_price > 0 else 0
+
+    # Significant drop thresholds (calibrated to typical set-loss price movements)
+    if drop_pct >= 55:
+        # Massive drop: likely went from competitive to 0-2 down
+        return "0-2", 0.7
+    elif drop_pct >= 25:
+        # Big drop: lost a set. Check if previously already down
+        if prev_state == "0-1":
+            return "1-2", 0.8  # was 0-1, now dropped more → 1-2 or 0-2
+        elif prev_state == "1-1":
+            return "1-2", 0.85
+        else:
+            return "0-1", 0.8
+    elif drop_pct >= 12:
+        # Moderate drop: could be losing a close set or break in current set
+        if prev_state is None:
+            return "0-1", 0.5  # lower confidence
+    return None, 0
+
+def _extract_player_names(question):
+    """Extract two player names from a Polymarket question string."""
+    q = question.strip()
+    # Pattern: "Tournament: Player A vs Player B"
+    if ":" in q:
+        q = q.split(":", 1)[1].strip()
+    q = q.replace("?", "").strip()
+    parts = q.split(" vs ")
+    if len(parts) == 2:
+        return parts[0].strip(), parts[1].strip()
+    parts = q.split(" v ")
+    if len(parts) == 2:
+        return parts[0].strip(), parts[1].strip()
+    return None, None
+
+
+@app.route("/api/comeback/signals", methods=["GET"])
+@enable_cors
+def comeback_signals():
+    """Get current comeback radar signals. Called by dashboard every 60s.
+    Fetches active tennis markets, detects price drops, calculates edge."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    import urllib.request, urllib.parse
+    _GAMMA_HEADERS = {
+        "Accept": "application/json",
+        "User-Agent": "python-requests/2.31.0",
+        "Accept-Encoding": "identity",
+        "Connection": "close",
+    }
+    def _gamma_get(url, params=None, timeout=8):
+        if params:
+            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k,v in params.items())
+            url = f"{url}?{qs}"
+        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
+        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+
+    try:
+        # 1. Load previous price snapshots
+        snapshots = {}
+        if _COMEBACK_SNAPSHOT_FILE.exists():
+            try:
+                snapshots = json.loads(_COMEBACK_SNAPSHOT_FILE.read_text())
+            except Exception:
+                snapshots = {}
+
+        # 2. Fetch active tennis markets from Gamma
+        active_markets = []
+        for tag in ["tennis", "atp", "wta"]:
+            try:
+                events = _gamma_get(
+                    "https://gamma-api.polymarket.com/events",
+                    params={"tag_slug": tag, "closed": "false", "active": "true",
+                            "limit": "50", "order": "volume", "ascending": "false"},
+                    timeout=8,
+                )
+                for ev in (events if isinstance(events, list) else [events]):
+                    markets = ev.get("markets", [ev])
+                    for m in markets:
+                        active_markets.append({
+                            "slug": ev.get("slug", m.get("slug", "")),
+                            "question": m.get("question", ""),
+                            "market_id": m.get("id", m.get("conditionId", "")),
+                            "outcomes": m.get("outcomes", ""),
+                            "outcome_prices": m.get("outcomePrices", ""),
+                            "volume": float(m.get("volume", 0) or 0),
+                            "end_date": m.get("endDate", ev.get("endDate", "")),
+                        })
+            except Exception as e:
+                logger.debug(f"Comeback radar: tag {tag} fetch error: {e}")
+                continue
+
+        # 3. Parse prices and detect drops
+        signals = []
+        new_snapshots = {}
+        now_iso = datetime.now().isoformat()
+
+        for mkt in active_markets:
+            slug = mkt["slug"]
+            if not slug:
+                continue
+
+            # Parse outcomes and prices
+            outcomes_raw = mkt["outcomes"]
+            prices_raw = mkt["outcome_prices"]
+            try:
+                outcomes = json.loads(outcomes_raw) if isinstance(outcomes_raw, str) else (outcomes_raw or [])
+            except (json.JSONDecodeError, TypeError):
+                outcomes = []
+            try:
+                prices_list = json.loads(prices_raw) if isinstance(prices_raw, str) else (prices_raw or [])
+            except (json.JSONDecodeError, TypeError):
+                prices_list = []
+
+            if len(outcomes) != 2 or len(prices_list) != 2:
+                continue
+
+            player_a, player_b = outcomes[0], outcomes[1]
+            try:
+                price_a = round(float(prices_list[0]) * 100, 1)
+                price_b = round(float(prices_list[1]) * 100, 1)
+            except (ValueError, TypeError):
+                continue
+
+            # Skip very low volume markets
+            if mkt["volume"] < 5000:
+                continue
+
+            # Store current snapshot
+            snap_key = slug
+            prev_snap = snapshots.get(snap_key, {})
+            new_snapshots[snap_key] = {
+                "price_a": price_a, "price_b": price_b,
+                "player_a": player_a, "player_b": player_b,
+                "question": mkt["question"],
+                "volume": mkt["volume"],
+                "market_id": mkt["market_id"],
+                "updated": now_iso,
+                "prev_state_a": prev_snap.get("state_a"),
+                "prev_state_b": prev_snap.get("state_b"),
+                "initial_price_a": prev_snap.get("initial_price_a", price_a),
+                "initial_price_b": prev_snap.get("initial_price_b", price_b),
+                "peak_a": max(price_a, prev_snap.get("peak_a", price_a)),
+                "peak_b": max(price_b, prev_snap.get("peak_b", price_b)),
+            }
+
+            # Check each player for a significant drop from their peak/initial price
+            for player, curr_price, initial_price, peak_price, prev_state, opp, opp_price in [
+                (player_a, price_a, prev_snap.get("initial_price_a", price_a),
+                 prev_snap.get("peak_a", price_a), prev_snap.get("state_a"), player_b, price_b),
+                (player_b, price_b, prev_snap.get("initial_price_b", price_b),
+                 prev_snap.get("peak_b", price_b), prev_snap.get("state_b"), player_a, price_a),
+            ]:
+                # Compare current price to the peak (highest seen) — most reliable drop signal
+                set_state, confidence = _infer_set_state(peak_price, curr_price, prev_state)
+                if not set_state:
+                    continue
+
+                # Look up player rank from picks data
+                player_rank = None
+                try:
+                    picks = load_picks_jsonl()
+                    name_lower = player.lower().strip()
+                    for p in reversed(picks):
+                        pa = (p.get("player_a", "") or "").lower()
+                        pb = (p.get("player_b", "") or "").lower()
+                        if name_lower in pa or pa in name_lower:
+                            player_rank = p.get("rank")
+                            break
+                        if name_lower in pb or pb in name_lower:
+                            player_rank = p.get("rank")
+                            break
+                except Exception:
+                    pass
+
+                # Calculate fair value
+                fair_value = _get_fair_value(player, player_rank, set_state)
+                fair_price_c = round(fair_value * 100)
+                edge_c = fair_price_c - curr_price
+
+                # Only signal if meaningful edge (>= 5c)
+                if edge_c < 5:
+                    continue
+
+                # Determine signal strength
+                if edge_c >= 15:
+                    strength = "strong"
+                elif edge_c >= 8:
+                    strength = "moderate"
+                else:
+                    strength = "weak"
+
+                # Store inferred state for next scan
+                state_key = "state_a" if player == player_a else "state_b"
+                new_snapshots[snap_key][state_key] = set_state
+
+                tier = _rank_tier(player_rank)
+                is_comeback_king = player.lower().strip() in COMEBACK_KINGS
+                king_rate = COMEBACK_KINGS.get(player.lower().strip())
+
+                signals.append({
+                    "player": player,
+                    "opponent": opp,
+                    "slug": slug,
+                    "question": mkt["question"],
+                    "set_state": set_state,
+                    "poly_price": curr_price,
+                    "fair_price": fair_price_c,
+                    "edge": edge_c,
+                    "strength": strength,
+                    "confidence": confidence,
+                    "rank": player_rank,
+                    "rank_tier": tier,
+                    "is_comeback_king": is_comeback_king,
+                    "king_comeback_rate": round(king_rate * 100, 1) if king_rate else None,
+                    "initial_price": round(initial_price, 1),
+                    "peak_price": round(peak_price, 1),
+                    "volume": mkt["volume"],
+                    "market_id": mkt["market_id"],
+                    "scanned_at": now_iso,
+                })
+
+        # 4. Save updated snapshots
+        try:
+            _COMEBACK_SNAPSHOT_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _COMEBACK_SNAPSHOT_FILE.write_text(json.dumps(new_snapshots, indent=2))
+        except Exception as e:
+            logger.warning(f"Comeback: snapshot save failed: {e}")
+
+        # 5. Save active signals
+        try:
+            _COMEBACK_SIGNALS_FILE.write_text(json.dumps(signals, indent=2))
+        except Exception:
+            pass
+
+        # Sort: strongest edge first
+        signals.sort(key=lambda s: s["edge"], reverse=True)
+
+        return jsonify({
+            "signals": signals,
+            "active_markets": len(active_markets),
+            "scanned_at": now_iso,
+        })
+
+    except Exception as e:
+        logger.error(f"Comeback radar error: {e}")
+        return jsonify({"error": str(e), "signals": []}), 500
+
+
+@app.route("/api/comeback/model", methods=["GET"])
+@enable_cors
+def comeback_model():
+    """Return the comeback fair value lookup table for reference."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    table = {}
+    for (tier, state), prob in COMEBACK_FAIR_VALUE.items():
+        table[f"{tier}_{state}"] = {"tier": tier, "state": state, "fair_prob": prob,
+                                     "fair_price_c": round(prob * 100)}
+    kings = {name: {"rate": round(r*100,1)} for name, r in COMEBACK_KINGS.items()}
+    return jsonify({"model": table, "comeback_kings": kings, "total_matches": 21260})
 
 
 if __name__ == "__main__":
