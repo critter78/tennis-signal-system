@@ -16,7 +16,7 @@ import json
 import os
 import sys
 import time
-import urllib.request
+import requests as _req
 from datetime import datetime, timedelta
 from pathlib import Path
 from difflib import SequenceMatcher
@@ -57,9 +57,9 @@ _SACKMANN_WTA_PLAYERS = "https://raw.githubusercontent.com/JeffSackmann/tennis_w
 
 def _fetch_json(url, timeout=15):
     """Fetch JSON from a URL with proper headers."""
-    req = urllib.request.Request(url, headers=_HEADERS)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+    resp = _req.get(url, headers=_HEADERS, timeout=timeout)
+    resp.raise_for_status()
+        return resp.json()
 
 
 def _parse_sofascore_rankings(data, tour="ATP"):
@@ -88,9 +88,9 @@ def _parse_sofascore_rankings(data, tour="ATP"):
 
 def _fetch_csv_text(url, timeout=15):
     """Fetch raw CSV text from a URL."""
-    req = urllib.request.Request(url, headers=_HEADERS)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+    resp = _req.get(url, headers=_HEADERS, timeout=timeout)
+    resp.raise_for_status()
+        return resp.text
 
 
 def _load_sackmann_players(url, timeout=15):
