@@ -5,9 +5,9 @@ Pulls current rankings from official ATP Tour and WTA Tour websites.
 Caches to disk (rankings_cache.json) so we only hit the sites once per day.
 
 Priority order:
-  1. Official ATP Tour (atptour.com) + WTA Tour (wtatennis.com)
+  1. Official ATP Tour + WTA Tour websites (most current, authoritative)
   2. Sofascore API (real-time, but may block server IPs)
-  3. TML match data (extract ranks from recent matches)
+  3. TML match data (last resort — infer approximate rank from recent results)
 
 Usage:
     from 09_rankings_fetcher import load_cached_rankings, lookup_player_rank
@@ -71,67 +71,242 @@ _SOFASCORE_WTA = "https://api.sofascore.com/api/v1/rankings/type/7"
 _SOFASCORE_ATP_ALT = "https://api.sofascore.com/api/v1/rankings/atp-singles"
 _SOFASCORE_WTA_ALT = "https://api.sofascore.com/api/v1/rankings/wta-singles"
 
-# ── TML match data (last resort — extract ranks from recent matches) ──
-_TML_DATA_DIR = BASE_DIR / "data" / "raw"
+# ── TML match database (last resort — NOT Sackmann) ──
+_TML_BASE = "https://stats.tennismylife.org"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SOURCE 1: Official ATP Tour + WTA Tour websites
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _fetch_atp_rankings(top_n=200):
-    """Fetch current ATP singles rankings from atptour.com.
-    Tries multiple approaches: JSON API, then HTML scraping."""
+def _parse_atp_html(html):
+    """Parse ATP rankings from atptour.com HTML.
+
+    Known structure (verified May 2026):
+        <table class="mega-table">
+          <tbody>
+            <tr>
+              <td class="rank bold heavy tiny-cell">1</td>
+              <td class="player bold heavy large-cell">
+                <ul class="player-stats">
+                  <li class="name">
+                    <a href="/en/players/jannik-sinner/s0ag/overview">
+                      <span class="lastName">J. Sinner</span>
+                    </a>
+                  </li>
+                </ul>
+              </td>
+              <td class="points center bold extrabold small-cell">
+                <a href="...">13,350</a>
+              </td>
+            </tr>
+    """
+    if not _HAS_BS4:
+        return {}
+
+    soup = BeautifulSoup(html, "html.parser")
     rankings = {}
 
-    # Approach A: ATP internal JSON API (powers their rankings page)
-    for api_url in [
-        "https://www.atptour.com/en/-/ajax/RankingsController/Rankings?rankRange=1-200&rankDate=&region=&is498=true",
-        "https://www.atptour.com/en/rankings/singles?rankRange=1-200&ajax=true",
-    ]:
-        try:
-            resp = _req.get(api_url, headers=_BROWSER_HEADERS, timeout=20)
-            if resp.status_code == 200:
-                try:
-                    data = resp.json()
-                    if isinstance(data, list):
-                        for item in data:
-                            name = item.get("playerName", "") or item.get("name", "")
-                            rank = item.get("sglRank", 0) or item.get("rank", 0) or item.get("ranking", 0)
-                            points = item.get("points", 0) or item.get("sglPts", 0)
-                            if name and rank:
-                                key = name.lower().strip()
-                                rankings[key] = {"rank": int(rank), "name": name.strip(), "tour": "ATP", "points": int(points) if points else 0}
-                    elif isinstance(data, dict):
-                        rows = data.get("rankings", []) or data.get("data", []) or data.get("rows", [])
-                        for item in rows:
-                            name = item.get("playerName", "") or item.get("name", "") or item.get("player", "")
-                            rank = item.get("sglRank", 0) or item.get("rank", 0) or item.get("ranking", 0)
-                            points = item.get("points", 0) or item.get("sglPts", 0)
-                            if name and rank:
-                                key = name.lower().strip()
-                                rankings[key] = {"rank": int(rank), "name": name.strip(), "tour": "ATP", "points": int(points) if points else 0}
-                    if len(rankings) >= 10:
-                        print(f"  [rankings] ATP JSON API: {len(rankings)} players")
-                        return rankings
-                except (json.JSONDecodeError, ValueError):
-                    if _HAS_BS4 and '<table' in resp.text.lower():
-                        parsed = _parse_rankings_html(resp.text, "ATP")
-                        if parsed:
-                            print(f"  [rankings] ATP JSON endpoint returned HTML: {len(parsed)} players")
-                            return parsed
-        except Exception as e:
-            print(f"  [rankings] ATP API attempt failed: {e}", file=sys.stderr)
+    # Find the mega-table (ATP's rankings table)
+    table = soup.find("table", class_=re.compile(r"mega-table"))
+    if not table:
+        # Fallback: any table with rank cells
+        table = soup.find("table")
+    if not table:
+        print("  [rankings] ATP: no table found in HTML", file=sys.stderr)
+        return {}
 
-    # Approach B: Scrape the HTML rankings page
+    rows = table.find_all("tr")
+    for row in rows:
+        try:
+            # ── Rank ──
+            rank_cell = row.find("td", class_=re.compile(r"rank"))
+            if not rank_cell:
+                continue
+            rank_text = rank_cell.get_text(strip=True)
+            if not rank_text.isdigit():
+                continue
+            rank = int(rank_text)
+            if rank < 1 or rank > 500:
+                continue
+
+            # ── Player name ──
+            # Primary: span.lastName inside li.name
+            name_span = row.find("span", class_="lastName")
+            if name_span:
+                display_name = name_span.get_text(strip=True)
+            else:
+                # Fallback: text from the player cell
+                player_cell = row.find("td", class_=re.compile(r"player"))
+                if player_cell:
+                    display_name = player_cell.get_text(strip=True)
+                else:
+                    continue
+
+            if not display_name or len(display_name) < 2:
+                continue
+
+            # Try to get full name from the href slug (e.g., /en/players/jannik-sinner/...)
+            full_name = display_name
+            name_link = row.find("a", href=re.compile(r"/players/"))
+            if name_link:
+                href = name_link.get("href", "")
+                # Extract slug like "jannik-sinner" from /en/players/jannik-sinner/s0ag/overview
+                slug_match = re.search(r"/players/([a-z-]+)/", href)
+                if slug_match:
+                    slug = slug_match.group(1)
+                    full_name = slug.replace("-", " ").title()
+
+            # ── Points ──
+            points_cell = row.find("td", class_=re.compile(r"points"))
+            points = 0
+            if points_cell:
+                pts_text = points_cell.get_text(strip=True).replace(",", "").replace(".", "")
+                if pts_text.isdigit():
+                    points = int(pts_text)
+
+            # Store under both display name and full name for matching
+            key = full_name.lower().strip()
+            rankings[key] = {
+                "rank": rank,
+                "name": full_name.strip(),
+                "tour": "ATP",
+                "points": points,
+            }
+            # Also store by display name for fallback matching
+            disp_key = display_name.lower().strip()
+            if disp_key != key:
+                rankings[disp_key] = rankings[key]
+
+        except Exception as e:
+            continue
+
+    return rankings
+
+
+def _parse_wta_html(html):
+    """Parse WTA rankings from wtatennis.com HTML.
+
+    Known structure (verified May 2026):
+        <table class="rankings__list rankings__list--overview js-rankings-list">
+          <tr>
+            <td class="player-row__cell player-row__cell--rank">1 -</td>
+            <td class="player-row__cell player-row__cell--player">Aryna Sabalenka BLR</td>
+            <td class="player-row__cell player-row__cell--age ...">27</td>
+            <td class="player-row__cell player-row__cell--tournaments ...">19</td>
+            <td class="player-row__cell player-row__cell--points ...">10,895</td>
+          </tr>
+    """
+    if not _HAS_BS4:
+        return {}
+
+    soup = BeautifulSoup(html, "html.parser")
+    rankings = {}
+
+    # Find the rankings table
+    table = soup.find("table", class_=re.compile(r"rankings__list"))
+    if not table:
+        table = soup.find("table")
+    if not table:
+        print("  [rankings] WTA: no table found in HTML", file=sys.stderr)
+        return {}
+
+    rows = table.find_all("tr")
+    for row in rows:
+        try:
+            # ── Rank cell ──
+            rank_cell = row.find("td", class_=re.compile(r"player-row__cell--rank"))
+            if not rank_cell:
+                # Fallback: first td that looks like a rank
+                cells = row.find_all("td")
+                if not cells:
+                    continue
+                rank_cell = cells[0]
+
+            rank_text = rank_cell.get_text(strip=True)
+            # WTA rank text is like "1 -" or "2 +1" — extract leading number
+            rank_match = re.match(r"(\d+)", rank_text)
+            if not rank_match:
+                continue
+            rank = int(rank_match.group(1))
+            if rank < 1 or rank > 500:
+                continue
+
+            # ── Player name ──
+            player_cell = row.find("td", class_=re.compile(r"player-row__cell--player"))
+            if not player_cell:
+                cells = row.find_all("td")
+                player_cell = cells[1] if len(cells) > 1 else None
+            if not player_cell:
+                continue
+
+            raw_name = player_cell.get_text(strip=True)
+            if not raw_name or len(raw_name) < 3:
+                continue
+
+            # Strip trailing 2-3 letter country code (e.g., "Aryna Sabalenka BLR")
+            name_match = re.match(r"^(.+?)\s+[A-Z]{2,3}$", raw_name)
+            if name_match:
+                player_name = name_match.group(1).strip()
+            else:
+                player_name = raw_name.strip()
+
+            # Also try to get name from a link
+            name_link = player_cell.find("a")
+            if name_link:
+                link_name = name_link.get_text(strip=True)
+                # Strip country code from link text too
+                lm = re.match(r"^(.+?)\s+[A-Z]{2,3}$", link_name)
+                if lm:
+                    link_name = lm.group(1).strip()
+                if len(link_name) > 3:
+                    player_name = link_name
+
+            # ── Points ──
+            points_cell = row.find("td", class_=re.compile(r"player-row__cell--points"))
+            points = 0
+            if points_cell:
+                pts_text = points_cell.get_text(strip=True).replace(",", "").replace(".", "")
+                if pts_text.isdigit():
+                    points = int(pts_text)
+            else:
+                # Fallback: look through remaining cells for a large number
+                for cell in row.find_all("td"):
+                    t = cell.get_text(strip=True).replace(",", "")
+                    if t.isdigit() and int(t) > 100:
+                        points = int(t)
+                        break
+
+            key = player_name.lower().strip()
+            rankings[key] = {
+                "rank": rank,
+                "name": player_name.strip(),
+                "tour": "WTA",
+                "points": points,
+            }
+
+        except Exception as e:
+            continue
+
+    return rankings
+
+
+def _fetch_atp_rankings(top_n=200):
+    """Fetch current ATP singles rankings from atptour.com."""
+    rankings = {}
+
+    # Scrape the HTML rankings page directly
     if _HAS_BS4:
         try:
-            resp = _req.get(_ATP_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=20)
+            print("  [rankings] Fetching ATP Tour HTML...")
+            resp = _req.get(_ATP_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=30)
             resp.raise_for_status()
-            parsed = _parse_rankings_html(resp.text, "ATP")
-            if parsed:
-                print(f"  [rankings] ATP HTML scrape: {len(parsed)} players")
-                return parsed
+            rankings = _parse_atp_html(resp.text)
+            if rankings and len(rankings) >= 10:
+                print(f"  [rankings] ATP HTML scrape: {len(rankings)} entries")
+                return rankings
+            else:
+                print(f"  [rankings] ATP HTML parse returned only {len(rankings)} entries", file=sys.stderr)
         except Exception as e:
             print(f"  [rankings] ATP HTML scrape failed: {e}", file=sys.stderr)
 
@@ -139,142 +314,23 @@ def _fetch_atp_rankings(top_n=200):
 
 
 def _fetch_wta_rankings(top_n=200):
-    """Fetch current WTA singles rankings from wtatennis.com.
-    Tries multiple approaches: JSON API, then HTML scraping."""
+    """Fetch current WTA singles rankings from wtatennis.com."""
     rankings = {}
 
-    # Approach A: WTA internal API endpoints
-    for api_url in [
-        "https://api.wtatennis.com/tennis/v2/rankings/singles?page=1&pageSize=200",
-        "https://www.wtatennis.com/rankings/singles?ajax=true",
-    ]:
-        try:
-            resp = _req.get(api_url, headers=_BROWSER_HEADERS, timeout=20)
-            if resp.status_code == 200:
-                try:
-                    data = resp.json()
-                    rows = []
-                    if isinstance(data, list):
-                        rows = data
-                    elif isinstance(data, dict):
-                        rows = data.get("data", []) or data.get("rankings", []) or data.get("rows", [])
-
-                    for item in rows:
-                        player = item.get("player", {}) if isinstance(item.get("player"), dict) else {}
-                        name = (player.get("fullName", "") or player.get("name", "") or
-                                item.get("playerName", "") or item.get("name", "") or item.get("fullName", ""))
-                        rank = item.get("ranking", 0) or item.get("rank", 0) or item.get("sglRank", 0)
-                        points = item.get("points", 0) or item.get("rankingPoints", 0)
-                        if name and rank:
-                            key = name.lower().strip()
-                            rankings[key] = {"rank": int(rank), "name": name.strip(), "tour": "WTA", "points": int(points) if points else 0}
-
-                    if len(rankings) >= 10:
-                        print(f"  [rankings] WTA JSON API: {len(rankings)} players")
-                        return rankings
-                except (json.JSONDecodeError, ValueError):
-                    if _HAS_BS4 and '<table' in resp.text.lower():
-                        parsed = _parse_rankings_html(resp.text, "WTA")
-                        if parsed:
-                            print(f"  [rankings] WTA JSON endpoint returned HTML: {len(parsed)} players")
-                            return parsed
-        except Exception as e:
-            print(f"  [rankings] WTA API attempt failed: {e}", file=sys.stderr)
-
-    # Approach B: Scrape the HTML rankings page
+    # Scrape the HTML rankings page directly
     if _HAS_BS4:
         try:
-            resp = _req.get(_WTA_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=20)
+            print("  [rankings] Fetching WTA Tour HTML...")
+            resp = _req.get(_WTA_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=30)
             resp.raise_for_status()
-            parsed = _parse_rankings_html(resp.text, "WTA")
-            if parsed:
-                print(f"  [rankings] WTA HTML scrape: {len(parsed)} players")
-                return parsed
+            rankings = _parse_wta_html(resp.text)
+            if rankings and len(rankings) >= 10:
+                print(f"  [rankings] WTA HTML scrape: {len(rankings)} entries")
+                return rankings
+            else:
+                print(f"  [rankings] WTA HTML parse returned only {len(rankings)} entries", file=sys.stderr)
         except Exception as e:
             print(f"  [rankings] WTA HTML scrape failed: {e}", file=sys.stderr)
-
-    return rankings
-
-
-def _parse_rankings_html(html, tour="ATP"):
-    """Parse rankings from HTML page (ATP or WTA).
-    Looks for ranking tables and extracts rank, name, points."""
-    if not _HAS_BS4:
-        return {}
-
-    soup = BeautifulSoup(html, "html.parser")
-    rankings = {}
-
-    # Strategy 1: Look for table rows with ranking data
-    for table in soup.find_all("table"):
-        rows = table.find_all("tr")
-        for row in rows:
-            cells = row.find_all(["td", "th"])
-            if len(cells) < 2:
-                continue
-
-            rank_text = ""
-            name_text = ""
-            points_text = ""
-
-            for i, cell in enumerate(cells):
-                text = cell.get_text(strip=True)
-                if not rank_text and text.isdigit() and int(text) <= 500:
-                    rank_text = text
-                elif rank_text and not name_text and len(text) > 2 and not text.replace(",", "").replace(".", "").isdigit():
-                    name_text = text
-                elif rank_text and name_text and text.replace(",", "").isdigit() and int(text.replace(",", "")) > 10:
-                    points_text = text.replace(",", "")
-
-            if rank_text and name_text:
-                key = name_text.lower().strip()
-                rankings[key] = {
-                    "rank": int(rank_text),
-                    "name": name_text.strip(),
-                    "tour": tour,
-                    "points": int(points_text) if points_text else 0,
-                }
-
-    # Strategy 2: Look for structured data in divs/spans with ranking classes
-    if len(rankings) < 10:
-        rank_elements = soup.find_all(attrs={"class": re.compile(r"rank|ranking|position", re.I)})
-        for elem in rank_elements:
-            text = elem.get_text(strip=True)
-            if text.isdigit():
-                parent = elem.parent
-                if parent:
-                    name_elem = parent.find(attrs={"class": re.compile(r"name|player", re.I)})
-                    if name_elem:
-                        name = name_elem.get_text(strip=True)
-                        if name and len(name) > 2:
-                            key = name.lower().strip()
-                            rankings[key] = {
-                                "rank": int(text),
-                                "name": name.strip(),
-                                "tour": tour,
-                                "points": 0,
-                            }
-
-    # Strategy 3: Look for embedded JSON data in script tags
-    if len(rankings) < 10:
-        for script in soup.find_all("script"):
-            script_text = script.string or ""
-            json_matches = re.findall(r'\[[\s\S]*?"rank(?:ing)?"[\s\S]*?\]', script_text)
-            for match in json_matches[:3]:
-                try:
-                    data = json.loads(match)
-                    if isinstance(data, list):
-                        for item in data:
-                            if isinstance(item, dict):
-                                name = (item.get("playerName", "") or item.get("name", "") or
-                                        item.get("fullName", "") or "")
-                                rank = item.get("ranking", 0) or item.get("rank", 0)
-                                points = item.get("points", 0)
-                                if name and rank and isinstance(rank, int) and rank <= 500:
-                                    key = name.lower().strip()
-                                    rankings[key] = {"rank": rank, "name": name.strip(), "tour": tour, "points": int(points) if points else 0}
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    continue
 
     return rankings
 
@@ -343,99 +399,49 @@ def _fetch_sofascore_rankings():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SOURCE 3: TML match data (last resort — extract ranks from recent matches)
+# SOURCE 3: TML match data (last resort — infer rankings from recent results)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _fetch_tml_rankings():
-    """Extract current rankings from TML match data CSV files.
-    Uses the most recent match record for each player to get their rank.
-    TML data is updated more frequently than weekly Sackmann CSVs."""
-    rankings = {}
+    """Fetch approximate rankings from TML (tennismylife.org) match database.
+    TML doesn't have a direct rankings endpoint, so we look for ranking data
+    embedded in recent match records. Returns whatever we can find."""
+    all_rankings = {}
+    errors = []
 
-    # Also check persistent disk location
-    tml_dirs = [_TML_DATA_DIR]
-    persistent_tml = Path("/data/data/raw")
-    if persistent_tml.exists():
-        tml_dirs.append(persistent_tml)
-
-    # Find TML CSV files (most recent year first)
-    tml_files = []
-    for d in tml_dirs:
-        if d.exists():
-            for f in sorted(d.glob("tml_*.csv"), reverse=True):
-                tml_files.append(f)
-
-    if not tml_files:
-        print("  [rankings] No TML CSV files found", file=sys.stderr)
-        return rankings
-
-    try:
-        import pandas as pd
-    except ImportError:
-        print("  [rankings] pandas not available for TML parsing", file=sys.stderr)
-        return rankings
-
-    for csv_path in tml_files[:3]:  # check up to 3 most recent files
+    # Try to pull ranking info from TML match pages
+    for tour, gender in [("ATP", "men"), ("WTA", "women")]:
         try:
-            df = pd.read_csv(csv_path, low_memory=False)
-
-            # TML CSVs use Sackmann-compatible column names
-            # winner_name, winner_rank, loser_name, loser_rank, tourney_date
-            date_col = None
-            for col in ["tourney_date", "date", "match_date"]:
-                if col in df.columns:
-                    date_col = col
-                    break
-
-            if date_col:
-                df[date_col] = pd.to_numeric(df[date_col], errors="coerce")
-                df = df.sort_values(date_col, ascending=False)
-
-            # Extract winner ranks
-            if "winner_name" in df.columns and "winner_rank" in df.columns:
-                for _, row in df.iterrows():
-                    name = str(row.get("winner_name", "")).strip()
-                    rank = row.get("winner_rank")
-                    if name and pd.notna(rank) and int(rank) > 0 and int(rank) <= 500:
-                        key = name.lower()
-                        if key not in rankings:  # keep most recent
-                            # Determine tour from tourney_name or surface hints
-                            tour = "ATP"  # TML is primarily ATP
-                            tourney = str(row.get("tourney_name", "")).lower()
-                            if any(w in tourney for w in ["wta", "women"]):
-                                tour = "WTA"
-                            rankings[key] = {
-                                "rank": int(rank),
-                                "name": name,
-                                "tour": tour,
-                                "points": 0,
-                            }
-
-            # Extract loser ranks
-            if "loser_name" in df.columns and "loser_rank" in df.columns:
-                for _, row in df.iterrows():
-                    name = str(row.get("loser_name", "")).strip()
-                    rank = row.get("loser_rank")
-                    if name and pd.notna(rank) and int(rank) > 0 and int(rank) <= 500:
-                        key = name.lower()
-                        if key not in rankings:
-                            tour = "ATP"
-                            tourney = str(row.get("tourney_name", "")).lower()
-                            if any(w in tourney for w in ["wta", "women"]):
-                                tour = "WTA"
-                            rankings[key] = {
-                                "rank": int(rank),
-                                "name": name,
-                                "tour": tour,
-                                "points": 0,
-                            }
-
-            print(f"  [rankings] TML {csv_path.name}: {len(rankings)} players extracted")
-
+            # TML stores recent matches with player rankings embedded
+            url = f"{_TML_BASE}/tennis-match-database"
+            resp = _req.get(url, headers=_BROWSER_HEADERS, timeout=20)
+            if resp.status_code == 200 and _HAS_BS4:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                # Look for player ranking data in match listings
+                for row in soup.find_all("tr"):
+                    cells = row.find_all("td")
+                    for cell in cells:
+                        text = cell.get_text(strip=True)
+                        # TML often shows rank in parentheses: "(1) Sinner"
+                        match = re.match(r"\((\d+)\)\s+(.+)", text)
+                        if match:
+                            rank = int(match.group(1))
+                            name = match.group(2).strip()
+                            if rank <= 500 and len(name) > 2:
+                                key = name.lower()
+                                if key not in all_rankings:
+                                    all_rankings[key] = {
+                                        "rank": rank,
+                                        "name": name,
+                                        "tour": tour,
+                                        "points": 0,
+                                    }
+            print(f"  [rankings] TML {tour}: {sum(1 for v in all_rankings.values() if v['tour'] == tour)} players")
         except Exception as e:
-            print(f"  [rankings] TML parse error ({csv_path.name}): {e}", file=sys.stderr)
+            errors.append(f"TML {tour}: {e}")
+            print(f"  [rankings] TML {tour} failed: {e}", file=sys.stderr)
 
-    return rankings
+    return all_rankings, errors
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -444,7 +450,7 @@ def _fetch_tml_rankings():
 
 def fetch_live_rankings():
     """Fetch fresh ATP + WTA rankings.
-    Priority: 1) Official ATP/WTA Tour sites  2) Sofascore  3) TML match data
+    Priority: 1) Official ATP/WTA sites  2) Sofascore  3) TML match data
     Returns dict with 'rankings', 'count', 'source', 'fetched_at'."""
     all_rankings = {}
     errors = []
@@ -457,9 +463,9 @@ def fetch_live_rankings():
         if atp and len(atp) >= 10:
             all_rankings.update(atp)
             source = "atptour.com"
-            print(f"  [rankings] ✓ ATP Tour: {len(atp)} players")
+            print(f"  [rankings] ✓ ATP Tour: {len(atp)} entries")
         else:
-            errors.append(f"ATP Tour: only {len(atp)} players returned")
+            errors.append(f"ATP Tour: only {len(atp)} entries returned")
     except Exception as e:
         errors.append(f"ATP Tour: {e}")
         print(f"  [rankings] ATP Tour failed: {e}", file=sys.stderr)
@@ -472,9 +478,9 @@ def fetch_live_rankings():
         if wta and len(wta) >= 10:
             all_rankings.update(wta)
             source = f"{source}+wtatennis.com" if source != "unknown" else "wtatennis.com"
-            print(f"  [rankings] ✓ WTA Tour: {len(wta)} players")
+            print(f"  [rankings] ✓ WTA Tour: {len(wta)} entries")
         else:
-            errors.append(f"WTA Tour: only {len(wta)} players returned")
+            errors.append(f"WTA Tour: only {len(wta)} entries returned")
     except Exception as e:
         errors.append(f"WTA Tour: {e}")
         print(f"  [rankings] WTA Tour failed: {e}", file=sys.stderr)
@@ -490,11 +496,13 @@ def fetch_live_rankings():
         sofa_rankings, sofa_errors = _fetch_sofascore_rankings()
         errors.extend(sofa_errors)
         if sofa_rankings:
+            # Only fill gaps — don't overwrite official data
             for key, val in sofa_rankings.items():
                 if key not in all_rankings:
                     all_rankings[key] = val
+            sofa_added = len(sofa_rankings)
             source = f"{source}+sofascore" if source != "unknown" else "sofascore"
-            print(f"  [rankings] Sofascore added {len(sofa_rankings)} players")
+            print(f"  [rankings] Sofascore filled {sofa_added} additional entries")
 
     time.sleep(1)
 
@@ -503,17 +511,15 @@ def fetch_live_rankings():
     wta_count = sum(1 for v in all_rankings.values() if v["tour"] == "WTA")
 
     if atp_count < 20 or wta_count < 20:
-        print(f"  [rankings] Still low coverage (ATP:{atp_count}, WTA:{wta_count}), trying TML match data...")
-        try:
-            tml = _fetch_tml_rankings()
-            if tml:
-                for key, val in tml.items():
-                    if key not in all_rankings:
-                        all_rankings[key] = val
-                source = f"{source}+tml" if source != "unknown" else "tml"
-                print(f"  [rankings] TML added {len(tml)} players")
-        except Exception as e:
-            errors.append(f"TML: {e}")
+        print(f"  [rankings] Still low coverage (ATP:{atp_count}, WTA:{wta_count}), trying TML...")
+        tml_rankings, tml_errors = _fetch_tml_rankings()
+        errors.extend(tml_errors)
+        if tml_rankings:
+            for key, val in tml_rankings.items():
+                if key not in all_rankings:
+                    all_rankings[key] = val
+            source = f"{source}+tml" if source != "unknown" else "tml"
+            print(f"  [rankings] TML added {len(tml_rankings)} entries")
 
     if not all_rankings:
         print(f"  [rankings] ALL SOURCES FAILED: {errors}", file=sys.stderr)
@@ -522,10 +528,10 @@ def fetch_live_rankings():
     if all_rankings:
         atp_top = sorted([v for v in all_rankings.values() if v["tour"] == "ATP"], key=lambda x: x["rank"])[:5]
         wta_top = sorted([v for v in all_rankings.values() if v["tour"] == "WTA"], key=lambda x: x["rank"])[:5]
-        if atp_top:
-            print(f"  [rankings] ATP Top 5: {', '.join(f'#{r[\"rank\"]} {r[\"name\"]}' for r in atp_top)}")
-        if wta_top:
-            print(f"  [rankings] WTA Top 5: {', '.join(f'#{r[\"rank\"]} {r[\"name\"]}' for r in wta_top)}")
+        atp_str = ", ".join(f"#{r['rank']} {r['name']}" for r in atp_top)
+        wta_str = ", ".join(f"#{r['rank']} {r['name']}" for r in wta_top)
+        print(f"  [rankings] ATP Top 5: {atp_str}")
+        print(f"  [rankings] WTA Top 5: {wta_str}")
 
     result = {
         "rankings": all_rankings,
@@ -605,6 +611,7 @@ def lookup_player_rank(player_name, cache=None):
     last_name = parts[-1].lower() if parts else ""
     first_name = parts[0].lower() if len(parts) > 1 else ""
 
+    # Collect all matches by last name
     last_matches = []
     for key, r in rankings.items():
         key_parts = key.split()
@@ -615,6 +622,7 @@ def lookup_player_rank(player_name, cache=None):
     if len(last_matches) == 1:
         return last_matches[0]["rank"], last_matches[0]["tour"]
 
+    # Multiple last name matches — try first name too
     if len(last_matches) > 1 and first_name:
         for r in last_matches:
             r_parts = r["name"].lower().split()
@@ -623,10 +631,22 @@ def lookup_player_rank(player_name, cache=None):
                 return r["rank"], r["tour"]
             if len(first_name) == 1 and r_first.startswith(first_name):
                 return r["rank"], r["tour"]
+        # Still ambiguous — return highest ranked
         best = min(last_matches, key=lambda x: x["rank"])
         return best["rank"], best["tour"]
 
-    # 3. Fuzzy match (for name variations)
+    # 3. Handle "F. Lastname" format (common in ATP display names)
+    if len(parts) == 2 and len(parts[0]) == 2 and parts[0].endswith("."):
+        initial = parts[0][0].lower()
+        for key, r in rankings.items():
+            key_parts = key.split()
+            if len(key_parts) >= 2:
+                key_last = key_parts[-1].lower()
+                key_first_initial = key_parts[0][0].lower() if key_parts[0] else ""
+                if key_last == last_name and key_first_initial == initial:
+                    return r["rank"], r["tour"]
+
+    # 4. Fuzzy match (for name variations)
     best_score = 0
     best_match = None
     for key, r in rankings.items():
