@@ -26,7 +26,7 @@ services:
       - key: CRON_SECRET
         sync: false  # Must match the web service's CRON_SECRET
       - key: WEB_SERVICE_URL
-        value: "https://tennis-betting-server.onrender.com"
+        value: "https://breakpointbetting.net"
 
   # ─── AUTO-TRADER CRON — scans for new picks every 2 hours ──────────────
   - type: cron
@@ -42,7 +42,7 @@ services:
       - key: CRON_SECRET
         sync: false  # Must match the web service's CRON_SECRET
       - key: WEB_SERVICE_URL
-        value: "https://tennis.critterlabs.io"
+        value: "https://breakpointbetting.net"
 
   # ─── V2 CONVICTION SIGNAL — tennisv2.critterlabs.io ──────────────────────
   # Parallel/isolated from v1. Ranks by model_prob (not edge).
