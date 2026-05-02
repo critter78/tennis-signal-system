@@ -80,202 +80,153 @@ _TML_BASE = "https://stats.tennismylife.org"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _parse_atp_html(html):
-    """Parse ATP rankings from atptour.com HTML.
+    """Parse ATP rankings from atptour.com HTML using lightweight regex.
+    No BeautifulSoup needed — avoids OOM on 512MB Render Starter plan.
 
     Known structure (verified May 2026):
-        <table class="mega-table">
-          <tbody>
-            <tr>
-              <td class="rank bold heavy tiny-cell">1</td>
-              <td class="player bold heavy large-cell">
-                <ul class="player-stats">
-                  <li class="name">
-                    <a href="/en/players/jannik-sinner/s0ag/overview">
-                      <span class="lastName">J. Sinner</span>
-                    </a>
-                  </li>
-                </ul>
-              </td>
-              <td class="points center bold extrabold small-cell">
-                <a href="...">13,350</a>
-              </td>
-            </tr>
+        <tr>
+          <td class="rank bold heavy tiny-cell">1</td>
+          ...
+          <a href="/en/players/jannik-sinner/s0ag/overview">
+            <span class="lastName">J. Sinner</span>
+          </a>
+          ...
+          <td class="points ...">
+            <a href="...">13,350</a>
+          </td>
+        </tr>
     """
-    if not _HAS_BS4:
-        return {}
-
-    soup = BeautifulSoup(html, "html.parser")
     rankings = {}
 
-    # Find the mega-table (ATP's rankings table)
-    table = soup.find("table", class_=re.compile(r"mega-table"))
-    if not table:
-        # Fallback: any table with rank cells
-        table = soup.find("table")
-    if not table:
-        print("  [rankings] ATP: no table found in HTML", file=sys.stderr)
+    # Extract just the <tbody>...</tbody> to minimize memory
+    tbody_start = html.find("<tbody")
+    tbody_end = html.find("</tbody>")
+    if tbody_start < 0 or tbody_end < 0:
+        print("  [rankings] ATP: no <tbody> found in HTML", file=sys.stderr)
         return {}
+    table_html = html[tbody_start:tbody_end + 10]
 
-    rows = table.find_all("tr")
-    for row in rows:
+    # Free the full HTML from memory
+    del html
+
+    # Split into rows and parse each one with regex
+    row_pattern = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL)
+    rank_pattern = re.compile(r'class="rank[^"]*"[^>]*>(\d+)<')
+    slug_pattern = re.compile(r'href="/en/players/([a-z][\w-]+)/')
+    name_pattern = re.compile(r'class="lastName"[^>]*>([^<]+)<')
+    points_pattern = re.compile(r'class="points[^"]*"[^>]*>.*?>([\d,]+)<', re.DOTALL)
+
+    for row_match in row_pattern.finditer(table_html):
+        row = row_match.group(1)
         try:
-            # ── Rank ──
-            rank_cell = row.find("td", class_=re.compile(r"rank"))
-            if not rank_cell:
+            # Rank
+            rm = rank_pattern.search(row)
+            if not rm:
                 continue
-            rank_text = rank_cell.get_text(strip=True)
-            if not rank_text.isdigit():
-                continue
-            rank = int(rank_text)
+            rank = int(rm.group(1))
             if rank < 1 or rank > 500:
                 continue
 
-            # ── Player name ──
-            # Primary: span.lastName inside li.name
-            name_span = row.find("span", class_="lastName")
-            if name_span:
-                display_name = name_span.get_text(strip=True)
-            else:
-                # Fallback: text from the player cell
-                player_cell = row.find("td", class_=re.compile(r"player"))
-                if player_cell:
-                    display_name = player_cell.get_text(strip=True)
-                else:
-                    continue
-
+            # Player name from span.lastName
+            nm = name_pattern.search(row)
+            display_name = nm.group(1).strip() if nm else ""
             if not display_name or len(display_name) < 2:
                 continue
 
-            # Try to get full name from the href slug (e.g., /en/players/jannik-sinner/...)
+            # Full name from URL slug (e.g., /players/jannik-sinner/ → Jannik Sinner)
             full_name = display_name
-            name_link = row.find("a", href=re.compile(r"/players/"))
-            if name_link:
-                href = name_link.get("href", "")
-                # Extract slug like "jannik-sinner" from /en/players/jannik-sinner/s0ag/overview
-                slug_match = re.search(r"/players/([a-z-]+)/", href)
-                if slug_match:
-                    slug = slug_match.group(1)
-                    full_name = slug.replace("-", " ").title()
+            sm = slug_pattern.search(row)
+            if sm:
+                full_name = sm.group(1).replace("-", " ").title()
 
-            # ── Points ──
-            points_cell = row.find("td", class_=re.compile(r"points"))
-            points = 0
-            if points_cell:
-                pts_text = points_cell.get_text(strip=True).replace(",", "").replace(".", "")
-                if pts_text.isdigit():
-                    points = int(pts_text)
+            # Points
+            pm = points_pattern.search(row)
+            points = int(pm.group(1).replace(",", "")) if pm else 0
 
-            # Store under both display name and full name for matching
+            # Store under both full name and display name
             key = full_name.lower().strip()
-            rankings[key] = {
-                "rank": rank,
-                "name": full_name.strip(),
-                "tour": "ATP",
-                "points": points,
-            }
-            # Also store by display name for fallback matching
+            entry = {"rank": rank, "name": full_name.strip(), "tour": "ATP", "points": points}
+            rankings[key] = entry
             disp_key = display_name.lower().strip()
             if disp_key != key:
-                rankings[disp_key] = rankings[key]
+                rankings[disp_key] = entry
 
-        except Exception as e:
+        except Exception:
             continue
 
     return rankings
 
 
 def _parse_wta_html(html):
-    """Parse WTA rankings from wtatennis.com HTML.
+    """Parse WTA rankings from wtatennis.com HTML using lightweight regex.
+    No BeautifulSoup needed — avoids OOM on 512MB Render Starter plan.
 
     Known structure (verified May 2026):
-        <table class="rankings__list rankings__list--overview js-rankings-list">
-          <tr>
-            <td class="player-row__cell player-row__cell--rank">1 -</td>
-            <td class="player-row__cell player-row__cell--player">Aryna Sabalenka BLR</td>
-            <td class="player-row__cell player-row__cell--age ...">27</td>
-            <td class="player-row__cell player-row__cell--tournaments ...">19</td>
-            <td class="player-row__cell player-row__cell--points ...">10,895</td>
-          </tr>
+        <tr>
+          <td class="player-row__cell player-row__cell--rank">1 -</td>
+          <td class="player-row__cell player-row__cell--player">Aryna Sabalenka BLR</td>
+          <td class="player-row__cell player-row__cell--age ...">27</td>
+          <td class="player-row__cell player-row__cell--tournaments ...">19</td>
+          <td class="player-row__cell player-row__cell--points ...">10,895</td>
+        </tr>
     """
-    if not _HAS_BS4:
-        return {}
-
-    soup = BeautifulSoup(html, "html.parser")
     rankings = {}
 
-    # Find the rankings table
-    table = soup.find("table", class_=re.compile(r"rankings__list"))
-    if not table:
-        table = soup.find("table")
-    if not table:
-        print("  [rankings] WTA: no table found in HTML", file=sys.stderr)
+    # Extract just the rankings table to minimize memory
+    table_start = html.find('class="rankings__list')
+    if table_start < 0:
+        # Fallback: find any table
+        table_start = html.find("<table")
+    if table_start < 0:
+        print("  [rankings] WTA: no rankings table found in HTML", file=sys.stderr)
         return {}
+    # Back up to the <table tag
+    table_tag = html.rfind("<table", 0, table_start + 1)
+    if table_tag >= 0:
+        table_start = table_tag
+    table_end = html.find("</table>", table_start)
+    if table_end < 0:
+        table_end = len(html)
+    table_html = html[table_start:table_end + 10]
 
-    rows = table.find_all("tr")
-    for row in rows:
+    # Free the full HTML from memory
+    del html
+
+    # Parse rows with regex
+    row_pattern = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL)
+    rank_pattern = re.compile(r'player-row__cell--rank[^>]*>\s*(\d+)')
+    player_pattern = re.compile(r'player-row__cell--player[^>]*>(.*?)</td>', re.DOTALL)
+    points_pattern = re.compile(r'player-row__cell--points[^>]*>\s*([\d,]+)')
+    tag_strip = re.compile(r"<[^>]+>")
+
+    for row_match in row_pattern.finditer(table_html):
+        row = row_match.group(1)
         try:
-            # ── Rank cell ──
-            rank_cell = row.find("td", class_=re.compile(r"player-row__cell--rank"))
-            if not rank_cell:
-                # Fallback: first td that looks like a rank
-                cells = row.find_all("td")
-                if not cells:
-                    continue
-                rank_cell = cells[0]
-
-            rank_text = rank_cell.get_text(strip=True)
-            # WTA rank text is like "1 -" or "2 +1" — extract leading number
-            rank_match = re.match(r"(\d+)", rank_text)
-            if not rank_match:
+            # Rank — text like "1 -" or "2 +1", extract leading number
+            rm = rank_pattern.search(row)
+            if not rm:
                 continue
-            rank = int(rank_match.group(1))
+            rank = int(rm.group(1))
             if rank < 1 or rank > 500:
                 continue
 
-            # ── Player name ──
-            player_cell = row.find("td", class_=re.compile(r"player-row__cell--player"))
-            if not player_cell:
-                cells = row.find_all("td")
-                player_cell = cells[1] if len(cells) > 1 else None
-            if not player_cell:
+            # Player name
+            pm = player_pattern.search(row)
+            if not pm:
                 continue
-
-            raw_name = player_cell.get_text(strip=True)
+            raw_name = tag_strip.sub("", pm.group(1)).strip()
+            # Collapse whitespace
+            raw_name = re.sub(r"\s+", " ", raw_name).strip()
             if not raw_name or len(raw_name) < 3:
                 continue
 
             # Strip trailing 2-3 letter country code (e.g., "Aryna Sabalenka BLR")
             name_match = re.match(r"^(.+?)\s+[A-Z]{2,3}$", raw_name)
-            if name_match:
-                player_name = name_match.group(1).strip()
-            else:
-                player_name = raw_name.strip()
+            player_name = name_match.group(1).strip() if name_match else raw_name
 
-            # Also try to get name from a link
-            name_link = player_cell.find("a")
-            if name_link:
-                link_name = name_link.get_text(strip=True)
-                # Strip country code from link text too
-                lm = re.match(r"^(.+?)\s+[A-Z]{2,3}$", link_name)
-                if lm:
-                    link_name = lm.group(1).strip()
-                if len(link_name) > 3:
-                    player_name = link_name
-
-            # ── Points ──
-            points_cell = row.find("td", class_=re.compile(r"player-row__cell--points"))
-            points = 0
-            if points_cell:
-                pts_text = points_cell.get_text(strip=True).replace(",", "").replace(".", "")
-                if pts_text.isdigit():
-                    points = int(pts_text)
-            else:
-                # Fallback: look through remaining cells for a large number
-                for cell in row.find_all("td"):
-                    t = cell.get_text(strip=True).replace(",", "")
-                    if t.isdigit() and int(t) > 100:
-                        points = int(t)
-                        break
+            # Points
+            pts_match = points_pattern.search(row)
+            points = int(pts_match.group(1).replace(",", "")) if pts_match else 0
 
             key = player_name.lower().strip()
             rankings[key] = {
@@ -285,52 +236,50 @@ def _parse_wta_html(html):
                 "points": points,
             }
 
-        except Exception as e:
+        except Exception:
             continue
 
     return rankings
 
 
 def _fetch_atp_rankings(top_n=200):
-    """Fetch current ATP singles rankings from atptour.com."""
+    """Fetch current ATP singles rankings from atptour.com.
+    Uses regex parsing (no BeautifulSoup) to stay under 512MB on Render."""
     rankings = {}
 
-    # Scrape the HTML rankings page directly
-    if _HAS_BS4:
-        try:
-            print("  [rankings] Fetching ATP Tour HTML...")
-            resp = _req.get(_ATP_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=30)
-            resp.raise_for_status()
-            rankings = _parse_atp_html(resp.text)
-            if rankings and len(rankings) >= 10:
-                print(f"  [rankings] ATP HTML scrape: {len(rankings)} entries")
-                return rankings
-            else:
-                print(f"  [rankings] ATP HTML parse returned only {len(rankings)} entries", file=sys.stderr)
-        except Exception as e:
-            print(f"  [rankings] ATP HTML scrape failed: {e}", file=sys.stderr)
+    try:
+        print("  [rankings] Fetching ATP Tour HTML...")
+        resp = _req.get(_ATP_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=30)
+        resp.raise_for_status()
+        rankings = _parse_atp_html(resp.text)
+        if rankings and len(rankings) >= 10:
+            print(f"  [rankings] ATP HTML scrape: {len(rankings)} entries")
+            return rankings
+        else:
+            print(f"  [rankings] ATP HTML parse returned only {len(rankings)} entries", file=sys.stderr)
+    except Exception as e:
+        print(f"  [rankings] ATP HTML scrape failed: {e}", file=sys.stderr)
 
     return rankings
 
 
 def _fetch_wta_rankings(top_n=200):
-    """Fetch current WTA singles rankings from wtatennis.com."""
+    """Fetch current WTA singles rankings from wtatennis.com.
+    Uses regex parsing (no BeautifulSoup) to stay under 512MB on Render."""
     rankings = {}
 
-    # Scrape the HTML rankings page directly
-    if _HAS_BS4:
-        try:
-            print("  [rankings] Fetching WTA Tour HTML...")
-            resp = _req.get(_WTA_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=30)
-            resp.raise_for_status()
-            rankings = _parse_wta_html(resp.text)
-            if rankings and len(rankings) >= 10:
-                print(f"  [rankings] WTA HTML scrape: {len(rankings)} entries")
-                return rankings
-            else:
-                print(f"  [rankings] WTA HTML parse returned only {len(rankings)} entries", file=sys.stderr)
-        except Exception as e:
-            print(f"  [rankings] WTA HTML scrape failed: {e}", file=sys.stderr)
+    try:
+        print("  [rankings] Fetching WTA Tour HTML...")
+        resp = _req.get(_WTA_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=30)
+        resp.raise_for_status()
+        rankings = _parse_wta_html(resp.text)
+        if rankings and len(rankings) >= 10:
+            print(f"  [rankings] WTA HTML scrape: {len(rankings)} entries")
+            return rankings
+        else:
+            print(f"  [rankings] WTA HTML parse returned only {len(rankings)} entries", file=sys.stderr)
+    except Exception as e:
+        print(f"  [rankings] WTA HTML scrape failed: {e}", file=sys.stderr)
 
     return rankings
 
