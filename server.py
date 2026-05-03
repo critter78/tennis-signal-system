@@ -3998,6 +3998,92 @@ def auto_trader_reject():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/auto-trader/requeue", methods=["POST"])
+@enable_cors
+def auto_trader_requeue():
+    """Re-queue a trade at a new price (spread was too wide).
+    Creates a new pending trade at the adjusted price and sends Telegram notification."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        data = request.get_json(force=True)
+        if not data or not data.get("match"):
+            return jsonify({"error": "Trade data required"}), 400
+
+        import uuid
+        new_pid = str(uuid.uuid4())[:8]
+
+        # Build the new pending trade at the adjusted price
+        trade = {
+            "pending_id": new_pid,
+            "status": "pending",
+            "created_at": datetime.utcnow().isoformat() + "Z",
+            "requeued": True,
+            "original_price": data.get("original_price"),
+            "match": data.get("match"),
+            "bet_on": data.get("bet_on"),
+            "player_a": data.get("player_a"),
+            "player_b": data.get("player_b"),
+            "model_prob": data.get("model_prob"),
+            "poly_price": data.get("new_price"),  # Updated price
+            "entry_price": data.get("new_price"),  # Updated price
+            "edge": data.get("edge"),
+            "stake": data.get("stake"),
+            "token_id": data.get("token_id"),
+            "poly_link": data.get("poly_link"),
+            "slug": data.get("slug"),
+            "tournament": data.get("tournament"),
+            "surface": data.get("surface"),
+            "market_type": data.get("market_type"),
+            "action": "entry",
+            "mode": "semi",
+            "bet_type": data.get("bet_type", "edge"),
+        }
+
+        # Add to pending queue
+        pending = json.loads(PENDING_TRADES_FILE.read_text()) if PENDING_TRADES_FILE.exists() else []
+        pending.append(trade)
+        PENDING_TRADES_FILE.write_text(json.dumps(pending, indent=2))
+
+        # Send Telegram with price change context
+        original_p = data.get("original_price", "?")
+        new_p = data.get("new_price", "?")
+        gap = abs(float(new_p or 0) - float(original_p or 0))
+
+        text = (
+            f"⚠️ <b>PRICE MOVED — RE-QUEUED</b>\n\n"
+            f"\U0001f3be <b>{trade['bet_on']}</b>\n"
+            f"{trade['match']}\n"
+        )
+        if trade.get("tournament"):
+            text += f"\U0001f3c6 {trade['tournament']}"
+            if trade.get("surface"):
+                text += f" ({trade['surface']})"
+            text += "\n"
+        text += (
+            f"\n"
+            f"\U0001f4ca Model: <b>{trade.get('model_prob', '?')}%</b>\n"
+            f"\U0001f4b0 Original: <b>{original_p}c</b> → Now: <b>{new_p}c</b> (moved {gap:.0f}c)\n"
+            f"Stake: <b>${trade.get('stake', 5)}</b>\n"
+        )
+
+        keyboard = {
+            "inline_keyboard": [[
+                {"text": "✅ Approve at " + str(new_p) + "c", "callback_data": f"approve:{new_pid}"},
+                {"text": "❌ Reject", "callback_data": f"reject:{new_pid}"},
+            ]]
+        }
+        telegram_send(text, reply_markup=keyboard)
+
+        logger.info(f"[AUTO-TRADER] Re-queued trade at new price: {trade['match']} — {trade['bet_on']} @ {new_p}c (was {original_p}c)")
+        return jsonify({"status": "requeued", "pending_id": new_pid, "trade": trade})
+
+    except Exception as e:
+        logger.error(f"Error in requeue: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/telegram/webhook", methods=["POST"])
 def telegram_webhook():
     """Handle Telegram bot webhook — inline button callbacks for approve/reject."""

@@ -84,41 +84,51 @@ def fetch_clob_price(token_id: str) -> float | None:
         return None
 
 
-def notify_spread_too_wide(trade: dict, signal_price: float, current_price: float, gap: float):
-    """Send Telegram alert that spread is too wide — ask user to approve at new price."""
-    import urllib.request
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        log("  [spread] No Telegram credentials — can't notify about wide spread")
-        return
+def requeue_at_new_price(trade: dict, signal_price_cents: float, current_price_cents: float):
+    """Re-queue trade at the current market price via the server.
+    Server creates a new pending trade and sends Telegram with Approve/Reject buttons."""
+    import requests
+    cookie = get_admin_cookie()
+    if not cookie:
+        log("  [spread] No admin cookie — can't requeue")
+        return False
     try:
-        text = (
-            f"⚠️ <b>SPREAD ALERT</b>\n\n"
-            f"\U0001f3be {trade.get('bet_on', '?')}\n"
-            f"{trade.get('match', '?')}\n\n"
-            f"Signal price: <b>{signal_price:.0f}c</b>\n"
-            f"Current price: <b>{current_price*100:.0f}c</b>\n"
-            f"Gap: <b>{gap:.0f}c</b> (>{SPREAD_TOLERANCE_CENTS}c tolerance)\n\n"
-            f"Stake: ${trade.get('stake', 0):.2f}\n\n"
-            f"<i>Order NOT placed. Check Polymarket manually if you still want in.</i>"
+        payload = {
+            "match": trade.get("match"),
+            "bet_on": trade.get("bet_on"),
+            "player_a": trade.get("player_a"),
+            "player_b": trade.get("player_b"),
+            "model_prob": trade.get("model_prob"),
+            "original_price": round(signal_price_cents, 1),
+            "new_price": round(current_price_cents, 1),
+            "edge": trade.get("edge"),
+            "stake": trade.get("stake"),
+            "token_id": trade.get("token_id"),
+            "poly_link": trade.get("poly_link"),
+            "slug": trade.get("slug"),
+            "tournament": trade.get("tournament"),
+            "surface": trade.get("surface"),
+            "market_type": trade.get("market_type"),
+            "bet_type": trade.get("bet_type", "edge"),
+        }
+        r = requests.post(
+            f"{SERVER_URL}/api/auto-trader/requeue",
+            json=payload,
+            cookies={"tennis_admin": cookie},
+            timeout=15,
         )
-        payload = json.dumps({
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": text,
-            "parse_mode": "HTML",
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status == 200:
-                log("  [spread] Telegram alert sent — spread too wide")
-            else:
-                log(f"  [spread] Telegram send failed: {resp.status}")
+        if r.ok:
+            data = r.json()
+            new_pid = data.get("pending_id", "?")
+            log(f"  [spread] Re-queued at {current_price_cents:.0f}c (was {signal_price_cents:.0f}c) — pending_id: {new_pid}")
+            log(f"  [spread] Telegram sent with Approve/Reject buttons")
+            return True
+        else:
+            log(f"  [spread] Requeue failed: {r.status_code} — {r.text[:200]}")
+            return False
     except Exception as e:
-        log(f"  [spread] Telegram error: {e}")
+        log(f"  [spread] Requeue error: {e}")
+        return False
 
 
 # ─── CLOB Client (V2) ─────────────────────────────────────────────────────────
@@ -638,11 +648,11 @@ def watch_mode(interval: int = 30, once: bool = False, dry_run: bool = False):
                                     log(f"  Spread {gap:.1f}c ≤ {SPREAD_TOLERANCE_CENTS}c — adjusting to market price")
                                     trade["entry_price"] = round(current_cents, 1)
                             else:
-                                # Spread too wide — notify and skip
-                                log(f"  Spread {gap:.1f}c > {SPREAD_TOLERANCE_CENTS}c — SKIPPING (notifying via Telegram)")
-                                notify_spread_too_wide(trade, signal_cents, current_price, gap)
+                                # Spread too wide — re-queue at current price for approval
+                                log(f"  Spread {gap:.1f}c > {SPREAD_TOLERANCE_CENTS}c — re-queuing at {current_cents:.0f}c for approval")
+                                requeue_at_new_price(trade, signal_cents, current_cents)
                                 if not dry_run:
-                                    report_execution(pid, False, error=f"Spread too wide: {gap:.1f}c (limit: {SPREAD_TOLERANCE_CENTS}c)")
+                                    report_execution(pid, False, error=f"Spread {gap:.1f}c > {SPREAD_TOLERANCE_CENTS}c — re-queued at {current_cents:.0f}c")
                                 skip_trade = True
                     else:
                         log(f"  No token_id — can't check spread, proceeding with signal price")
