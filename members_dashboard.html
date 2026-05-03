@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BreakPoint Betting — Members Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23c8e645' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M8 32c0-6 8-12 24-12s24 6 24 12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Cpath d='M8 32c0 6 8 12 24 12s24-6 24-12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Mono', monospace; }
+body { background: #0f1117; color: #e0e0e0; min-height: 100vh; padding-bottom: 50px; }
+
+/* ── Header ── */
+header { background: #13151d; border-bottom: 1px solid #2d3139; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand img.dog { height: 36px; }
+.brand .title { font-size: 13px; color: #d4740a; letter-spacing: 0.06em; font-weight: 700; }
+.brand .sub { font-size: 9px; color: #6c757d; letter-spacing: 0.04em; }
+.session { display: flex; align-items: center; gap: 14px; font-size: 11px; }
+.session .email { color: #c4a44e; letter-spacing: 0.04em; }
+.session a.logout { color: #6c757d; text-decoration: none; padding: 6px 12px; border: 1px solid #2d3139; }
+.session a.logout:hover { color: #d4740a; border-color: #d4740a; }
+
+/* ── Tabs ── */
+.tabs { display: flex; gap: 0; padding: 0 24px; background: #13151d; border-bottom: 1px solid #2d3139; overflow-x: auto; }
+.tab { background: none; border: none; color: #6c757d; padding: 14px 18px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; cursor: pointer; border-bottom: 2px solid transparent; font-family: inherit; white-space: nowrap; }
+.tab:hover { color: #d4740a; }
+.tab.active { color: #d4740a; border-bottom-color: #d4740a; }
+
+/* ── Content ── */
+main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.panel { display: none; }
+.panel.active { display: block; }
+.card { background: #1a1d27; border: 1px solid #2d3139; padding: 24px; margin-bottom: 18px; }
+.card h2 { font-size: 13px; color: #d4740a; letter-spacing: 0.06em; margin-bottom: 12px; }
+.muted { color: #6c757d; font-size: 12px; line-height: 1.6; }
+.muted code { background: #0f1117; padding: 1px 6px; border: 1px solid #2d3139; color: #c4a44e; font-size: 11px; }
+.stub { padding: 36px 20px; text-align: center; border: 1px dashed #2d3139; }
+.stub .h { font-size: 14px; color: #c4a44e; margin-bottom: 8px; letter-spacing: 0.06em; }
+.stub .b { font-size: 11px; color: #6c757d; line-height: 1.7; max-width: 520px; margin: 0 auto; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 12px; }
+.kpi { background: #0f1117; border: 1px solid #2d3139; padding: 14px; }
+.kpi .lbl { font-size: 9px; color: #6c757d; letter-spacing: 0.06em; }
+.kpi .val { font-size: 22px; color: #e0e0e0; margin-top: 6px; font-weight: 600; }
+.tag { display: inline-block; font-size: 9px; color: #c4a44e; border: 1px solid #5a4a1f; padding: 2px 7px; letter-spacing: 0.06em; margin-left: 8px; vertical-align: middle; }
+
+/* ── Footer ── */
+footer { position: fixed; bottom: 0; left: 0; right: 0; background: #13151d; border-top: 1px solid #2d3139; padding: 8px 20px; display: flex; align-items: center; justify-content: center; gap: 0; z-index: 5; }
+footer .brand-critter { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; background: linear-gradient(180deg, #e2b968 0%, #d4a04a 30%, #c4873a 60%, #b87333 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+footer .brand-labs { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; -webkit-text-fill-color: transparent; -webkit-text-stroke: 0.8px #c4873a; margin-left: 1px; }
+footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-left: 6px; }
+
+@media (max-width: 600px) {
+    header { padding: 10px 14px; }
+    .tabs { padding: 0 14px; }
+    .tab { padding: 12px 10px; font-size: 10px; }
+    main { padding: 14px; }
+    .card { padding: 16px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+    <div class="brand">
+        <img class="dog" src="/static/critterlabs_dog.png" alt="CritterLabs" onerror="this.style.display='none'">
+        <div>
+            <div class="title">BREAKPOINT BETTING — MEMBERS</div>
+            <div class="sub">POWERED BY AMORA EDGE • INVITE-ONLY BETA</div>
+        </div>
+    </div>
+    <div class="session">
+        <span class="email" id="memberEmail">{{MEMBER_EMAIL}}</span>
+        <a class="logout" href="/members/logout">SIGN OUT</a>
+    </div>
+</header>
+
+<div class="tabs" role="tablist">
+    <button class="tab active" data-tab="signals" onclick="showTab('signals')">TODAY'S SIGNALS</button>
+    <button class="tab" data-tab="bets" onclick="showTab('bets')">MY BETS</button>
+    <button class="tab" data-tab="players" onclick="showTab('players')">PLAYER CARDS</button>
+    <button class="tab" data-tab="performance" onclick="showTab('performance')">MY PERFORMANCE</button>
+</div>
+
+<main>
+
+<!-- TODAY'S SIGNALS -->
+<section class="panel active" id="panel-signals">
+    <div class="card">
+        <h2>TODAY'S SIGNALS <span class="tag">PHASE 1 STUB</span></h2>
+        <div class="muted">
+            The full signals feed will land in Phase 3 — pulling live picks from the system's signal generator with model probability, market price, and recommended stake. For now this tab is a placeholder so the navigation shell is in place.
+        </div>
+        <div class="stub" style="margin-top:16px">
+            <div class="h">SIGNALS FEED COMING IN PHASE 3</div>
+            <div class="b">Will surface today's high-confidence picks (sourced from the same generator that drives the admin dashboard) with read-only views for members.</div>
+        </div>
+    </div>
+</section>
+
+<!-- MY BETS -->
+<section class="panel" id="panel-bets">
+    <div class="card">
+        <h2>MY BETS <span class="tag">PHASE 2</span></h2>
+        <div class="muted">
+            Member-scoped bet log. You'll log your own bets here (match, side, stake, odds) and the system will auto-resolve them against the picks database when the match completes.
+        </div>
+        <div class="stub" style="margin-top:16px">
+            <div class="h">PERSONAL BET LOG COMING IN PHASE 2</div>
+            <div class="b">Each member gets their own private bet log stored under their account. We'll wire the form + auto-resolution next.</div>
+        </div>
+    </div>
+</section>
+
+<!-- PLAYER CARDS -->
+<section class="panel" id="panel-players">
+    <div class="card">
+        <h2>PLAYER CARDS <span class="tag">PHASE 3</span></h2>
+        <div class="muted">
+            The Player Cards / ELO intel tab from the admin dashboard, gated behind member login. Phase 3 will mount the existing component into this shell.
+        </div>
+        <div class="stub" style="margin-top:16px">
+            <div class="h">PLAYER LOOKUP COMING IN PHASE 3</div>
+            <div class="b">Read-through view of the existing Player Cards tab — same surface-specific ELO, head-to-head, and Polymarket trade history.</div>
+        </div>
+    </div>
+</section>
+
+<!-- MY PERFORMANCE -->
+<section class="panel" id="panel-performance">
+    <div class="card">
+        <h2>MY PERFORMANCE <span class="tag">PHASE 2</span></h2>
+        <div class="muted">
+            Personal P&L derived from your logged bets only. Win rate, ROI, equity curve, broken down by surface and confidence tier.
+        </div>
+        <div class="kpi-grid">
+            <div class="kpi"><div class="lbl">TOTAL BETS</div><div class="val">—</div></div>
+            <div class="kpi"><div class="lbl">WIN RATE</div><div class="val">—</div></div>
+            <div class="kpi"><div class="lbl">ROI</div><div class="val">—</div></div>
+            <div class="kpi"><div class="lbl">NET P&amp;L</div><div class="val">—</div></div>
+        </div>
+        <div class="stub" style="margin-top:16px">
+            <div class="h">PERSONAL STATS WIRED IN PHASE 2</div>
+            <div class="b">Numbers above will populate once member bet logging is live and bets start resolving.</div>
+        </div>
+    </div>
+</section>
+
+</main>
+
+<footer>
+    <span class="brand-critter">CRITTER</span><span class="brand-labs">LABS</span>
+    <span class="rights">&mdash; All Rights Reserved, 2026</span>
+</footer>
+
+<script>
+function showTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+    history.replaceState(null, '', '#' + name);
+}
+// Restore from hash
+(function(){
+    const h = (location.hash || '').replace('#','');
+    if (h && document.getElementById('panel-' + h)) showTab(h);
+})();
+// Verify session — bounce to login if cookie expired mid-session
+fetch('/members/api/me').then(r => {
+    if (r.status === 401) location.href = '/members';
+}).catch(()=>{});
+</script>
+
+</body>
+</html>

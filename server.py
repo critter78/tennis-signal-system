@@ -57,6 +57,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PICKS_FILE = LOGS_DIR / "picks.jsonl"
 BETS_FILE = LOGS_DIR / "my_bets.json"
 SHARES_FILE = LOGS_DIR / "shares.json"
+MEMBERS_FILE = LOGS_DIR / "members.json"
+INVITES_FILE = LOGS_DIR / "invites.json"
+MEMBER_BETS_FILE = LOGS_DIR / "member_bets.json"  # Phase 2 — member-scoped bets
 
 def _seed_persistent_files():
     """On first boot with persistent disk, copy data files from repo if they don't exist yet."""
@@ -66,6 +69,9 @@ def _seed_persistent_files():
         BASE_DIR / "logs" / "picks.jsonl": PICKS_FILE,
         BASE_DIR / "logs" / "my_bets.json": BETS_FILE,
         BASE_DIR / "logs" / "shares.json": SHARES_FILE,
+        BASE_DIR / "logs" / "members.json": MEMBERS_FILE,
+        BASE_DIR / "logs" / "invites.json": INVITES_FILE,
+        BASE_DIR / "logs" / "member_bets.json": MEMBER_BETS_FILE,
         BASE_DIR / "data" / "live_rankings.json": DATA_DIR / "live_rankings.json",
         BASE_DIR / "data" / "player_profiles.json": DATA_DIR / "player_profiles.json",
     }
@@ -291,7 +297,178 @@ def cleanup_expired_shares():
     return kept
 
 
+# ─── MEMBERS / INVITES (Phase 1 of members area) ──────────────────────────────
+#
+# Schemas:
+#   members.json: { "<member_id>": {
+#       "id": "<uuid>", "email": "<lower>", "password_hash": "<werkzeug>",
+#       "invite_code": "<code>", "created_at": "<iso>", "last_login_at": "<iso>",
+#       "status": "active" | "disabled"
+#   } }
+#
+#   invites.json: { "<code>": {
+#       "code": "<code>", "label": "<note>", "created_at": "<iso>",
+#       "expires_at": "<iso|null>", "used_by": "<member_id|null>",
+#       "used_at": "<iso|null>", "status": "active" | "used" | "revoked"
+#   } }
+
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
+def load_members():
+    """Load all member records keyed by member id."""
+    try:
+        if MEMBERS_FILE.exists():
+            with open(MEMBERS_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading members: {e}")
+    return {}
+
+
+def save_members(members):
+    """Persist member records to disk."""
+    try:
+        with open(MEMBERS_FILE, 'w') as f:
+            json.dump(members, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving members: {e}")
+        return False
+
+
+def load_invites():
+    """Load all invite codes keyed by code."""
+    try:
+        if INVITES_FILE.exists():
+            with open(INVITES_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading invites: {e}")
+    return {}
+
+
+def save_invites(invites):
+    """Persist invite codes to disk."""
+    try:
+        with open(INVITES_FILE, 'w') as f:
+            json.dump(invites, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving invites: {e}")
+        return False
+
+
+def find_member_by_email(email):
+    """Lookup a member by (lowercased) email. Returns (member_id, record) or (None, None)."""
+    if not email:
+        return None, None
+    email = email.strip().lower()
+    for mid, m in load_members().items():
+        if m.get("email", "").lower() == email:
+            return mid, m
+    return None, None
+
+
+def create_invite(label="", duration_days=None):
+    """Generate a new invite code. duration_days=None means no expiry."""
+    code = secrets.token_urlsafe(9)  # ~12-char human-shareable token
+    now = datetime.utcnow()
+    expires_at = (now + timedelta(days=duration_days)).isoformat() if duration_days else None
+    invites = load_invites()
+    invites[code] = {
+        "code": code,
+        "label": label,
+        "created_at": now.isoformat(),
+        "expires_at": expires_at,
+        "used_by": None,
+        "used_at": None,
+        "status": "active",
+    }
+    save_invites(invites)
+    return code, invites[code]
+
+
+def validate_invite(code):
+    """Return (ok, reason) for a given invite code."""
+    if not code:
+        return False, "missing"
+    invites = load_invites()
+    inv = invites.get(code)
+    if not inv:
+        return False, "not_found"
+    if inv.get("status") != "active":
+        return False, inv.get("status", "invalid")
+    if inv.get("expires_at"):
+        try:
+            if datetime.utcnow() > datetime.fromisoformat(inv["expires_at"]):
+                return False, "expired"
+        except Exception:
+            return False, "invalid_expiry"
+    return True, "ok"
+
+
+def consume_invite(code, member_id):
+    """Mark an invite as used by a specific member."""
+    invites = load_invites()
+    if code not in invites:
+        return False
+    invites[code]["used_by"] = member_id
+    invites[code]["used_at"] = datetime.utcnow().isoformat()
+    invites[code]["status"] = "used"
+    save_invites(invites)
+    return True
+
+
 # ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
+
+def _member_token(member_id):
+    """Stable signed cookie value for a member. Tied to SECRET_KEY so rotating it logs everyone out."""
+    return hashlib.sha256(f"member:{member_id}:{app.secret_key}".encode()).hexdigest()
+
+
+def set_member_cookie(response, member_id):
+    """Issue the members session cookie. 30-day rolling cookie."""
+    token = _member_token(member_id)
+    # We store id|token so the server can find the member without a session store
+    value = f"{member_id}|{token}"
+    response.set_cookie(
+        "tennis_member",
+        value,
+        max_age=60 * 60 * 24 * 30,  # 30 days
+        httponly=True,
+        samesite="Lax",
+    )
+    return response
+
+
+def get_current_member():
+    """Return the currently logged-in member record, or None."""
+    raw = request.cookies.get("tennis_member")
+    if not raw or "|" not in raw:
+        return None
+    member_id, token = raw.split("|", 1)
+    if token != _member_token(member_id):
+        return None
+    members = load_members()
+    member = members.get(member_id)
+    if not member or member.get("status") != "active":
+        return None
+    # attach id for convenience
+    member = dict(member)
+    member["id"] = member_id
+    return member
+
+
+def require_member(f):
+    """Decorator: redirect to /members if no valid member cookie."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not get_current_member():
+            return redirect("/members")
+        return f(*args, **kwargs)
+    return decorated
+
 
 def check_admin_cookie():
     """Check if the request has a valid admin session cookie."""
@@ -812,6 +989,104 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
 </body></html>
 """
 
+# ─── MEMBER AUTH PAGES (Phase 1) ──────────────────────────────────────────────
+#
+# Single template for both login and signup. The signup form only appears when
+# a valid invite code is in the URL (?invite=...). Otherwise just login.
+
+MEMBERS_AUTH_PAGE = """
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BreakPoint Betting — Members</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23c8e645' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M8 32c0-6 8-12 24-12s24 6 24 12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Cpath d='M8 32c0 6 8 12 24 12s24-6 24-12' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3C/svg%3E">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Mono', monospace; }
+body { background: #0f1117; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 16px 64px; }
+.box { background: #1a1d27; border: 1px solid #2d3139; padding: 36px 32px; max-width: 420px; width: 100%; text-align: center; }
+h1 { font-size: 16px; color: #d4740a; margin-bottom: 4px; letter-spacing: 0.06em; }
+.sub { font-size: 11px; color: #6c757d; margin-bottom: 20px; }
+.tabs { display: flex; gap: 0; margin: 0 0 20px; border-bottom: 1px solid #2d3139; }
+.tab { flex: 1; padding: 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #6c757d; cursor: pointer; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; }
+.tab.active { color: #d4740a; border-bottom-color: #d4740a; }
+.panel { display: none; text-align: left; }
+.panel.active { display: block; }
+label { font-size: 10px; color: #6c757d; letter-spacing: 0.06em; display: block; margin: 12px 0 6px; }
+input { width: 100%; background: #0f1117; border: 1px solid #2d3139; color: #e0e0e0; padding: 11px 14px; font-size: 13px; font-family: inherit; }
+input:focus { outline: none; border-color: #d4740a; }
+input[readonly] { color: #6c757d; }
+button.primary { width: 100%; background: #d4740a; color: white; border: none; padding: 12px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; letter-spacing: 0.04em; margin-top: 18px; }
+button.primary:hover { background: #e65100; }
+.error { color: #f44336; font-size: 11px; margin-top: 12px; padding: 8px 10px; border: 1px solid #5a1f1f; background: #1f0f0f; }
+.success { color: #4caf50; font-size: 11px; margin-top: 12px; padding: 8px 10px; border: 1px solid #1b5e20; background: #0e1f10; }
+.invite-pill { display: inline-block; font-size: 10px; color: #c4a44e; border: 1px solid #5a4a1f; padding: 3px 8px; margin-bottom: 6px; }
+.powered-by { font-size: 9px; color: #c4a44e; margin-top: 18px; letter-spacing: 0.04em; }
+.invite-hint { font-size: 10px; color: #6c757d; margin-top: 14px; }
+.invite-hint a { color: #d4740a; text-decoration: none; }
+footer { position: fixed; bottom: 0; left: 0; right: 0; background: #13151d; border-top: 1px solid #2d3139; padding: 8px 20px; display: flex; align-items: center; justify-content: center; gap: 0; }
+footer .brand-critter { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; background: linear-gradient(180deg, #e2b968 0%, #d4a04a 30%, #c4873a 60%, #b87333 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+footer .brand-labs { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; -webkit-text-fill-color: transparent; -webkit-text-stroke: 0.8px #c4873a; margin-left: 1px; }
+footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-left: 6px; }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head><body>
+<div class="box">
+    <h1>BREAKPOINT BETTING — MEMBERS</h1>
+    <div class="sub">Invite-only beta. Sign in or redeem your invite.</div>
+
+    <div class="tabs">
+        <button class="tab" id="tab-login" onclick="showTab('login')">SIGN IN</button>
+        <button class="tab" id="tab-signup" onclick="showTab('signup')">REDEEM INVITE</button>
+    </div>
+
+    {{FLASH}}
+
+    <div class="panel" id="panel-login">
+        <form method="POST" action="/members/login">
+            <label for="login-email">EMAIL</label>
+            <input type="email" id="login-email" name="email" required autocomplete="email">
+            <label for="login-password">PASSWORD</label>
+            <input type="password" id="login-password" name="password" required autocomplete="current-password">
+            <button class="primary" type="submit">SIGN IN</button>
+        </form>
+        <div class="invite-hint">Have an invite code? <a href="#" onclick="showTab('signup'); return false;">Redeem here</a>.</div>
+    </div>
+
+    <div class="panel" id="panel-signup">
+        <form method="POST" action="/members/signup">
+            {{INVITE_PILL}}
+            <label for="signup-invite">INVITE CODE</label>
+            <input type="text" id="signup-invite" name="invite" value="{{INVITE_CODE}}" required>
+            <label for="signup-email">EMAIL</label>
+            <input type="email" id="signup-email" name="email" required autocomplete="email">
+            <label for="signup-password">CREATE PASSWORD <span style="color:#5a5f6a">(min 8 chars)</span></label>
+            <input type="password" id="signup-password" name="password" minlength="8" required autocomplete="new-password">
+            <button class="primary" type="submit">CREATE ACCOUNT</button>
+        </form>
+    </div>
+
+    <div class="powered-by">POWERED BY AMORA EDGE</div>
+</div>
+<footer>
+    <span class="brand-critter">CRITTER</span><span class="brand-labs">LABS</span>
+    <span class="rights">&mdash; All Rights Reserved, 2026</span>
+</footer>
+<script>
+function showTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    document.getElementById('panel-' + name).classList.add('active');
+}
+// Initial tab — server can override by setting __initialTab
+(function(){
+    var initial = "{{INITIAL_TAB}}" || 'login';
+    showTab(initial);
+})();
+</script>
+</body></html>
+"""
+
 # ─── EXPIRED PAGE ─────────────────────────────────────────────────────────────
 
 EXPIRED_PAGE = """
@@ -931,6 +1206,28 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
         <button class="revoke-btn" style="font-size:10px;padding:6px 14px" onclick="clearExpiredShares()">CLEAR ALL EXPIRED</button>
     </div>
     <div id="sharesTable"></div>
+</div>
+
+<div class="section" style="border-color:#5a4a1f">
+    <h2 style="color:#c4a44e">MEMBERS — INVITE CODES</h2>
+    <div class="label-row">
+        <input type="text" id="inviteLabel" placeholder="Label (e.g. 'For Mike — beta tester')">
+        <input type="number" id="inviteDays" placeholder="Expiry days (blank = never)" style="max-width:200px">
+    </div>
+    <button class="gen-btn" onclick="generateInvite()" style="background:#c4873a">GENERATE INVITE CODE</button>
+    <div class="result" id="inviteResult" style="border-color:#5a4a1f">
+        <div class="url" id="inviteUrl" style="color:#c4a44e"></div>
+        <div class="info" id="inviteInfo"></div>
+        <button class="copy-btn" style="background:#5a4a1f" onclick="copyInviteLink()">COPY INVITE LINK</button>
+    </div>
+    <div style="margin-top:18px">
+        <h2 style="font-size:12px;color:#6c757d">ALL INVITES</h2>
+        <div id="invitesTable"></div>
+    </div>
+    <div style="margin-top:18px">
+        <h2 style="font-size:12px;color:#6c757d">MEMBERS</h2>
+        <div id="membersTable"></div>
+    </div>
 </div>
 
 <script>
@@ -1166,6 +1463,119 @@ async function fullRefresh() {
 
 loadShares();
 setInterval(loadShares, 30000);
+
+// ─── Members invite management ───
+async function generateInvite() {
+    const label = document.getElementById('inviteLabel').value;
+    const days = document.getElementById('inviteDays').value;
+    const body = { label };
+    if (days) body.duration_days = parseInt(days);
+    const res = await fetch('/admin/create-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.url) {
+        document.getElementById('inviteResult').style.display = 'block';
+        document.getElementById('inviteUrl').textContent = data.url;
+        const exp = data.invite.expires_at
+            ? 'Expires ' + new Date(data.invite.expires_at + 'Z').toLocaleString()
+            : 'Never expires';
+        document.getElementById('inviteInfo').textContent = exp + ' • Code: ' + data.code;
+        loadInvites();
+    }
+}
+function copyInviteLink() {
+    const url = document.getElementById('inviteUrl').textContent;
+    navigator.clipboard.writeText(url).then(() => {
+        const btn = event.target;
+        btn.textContent = 'COPIED!';
+        setTimeout(() => btn.textContent = 'COPY INVITE LINK', 2000);
+    });
+}
+async function revokeInvite(code) {
+    if (!confirm('Revoke invite ' + code + '?')) return;
+    await fetch('/admin/revoke-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+    });
+    loadInvites();
+}
+async function toggleMember(memberId, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    if (!confirm('Set member to ' + newStatus + '?')) return;
+    await fetch('/admin/disable-member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member_id: memberId, status: newStatus })
+    });
+    loadInvites();
+}
+async function loadInvites() {
+    const res = await fetch('/admin/invites');
+    const data = await res.json();
+
+    // Invites table
+    const iWrap = document.getElementById('invitesTable');
+    if (!data.invites || data.invites.length === 0) {
+        iWrap.innerHTML = '<div style="color:#6c757d; font-size:12px; padding:10px">No invites yet.</div>';
+    } else {
+        let html = '<table><thead><tr><th>Code</th><th>Label</th><th>Status</th><th>Used By</th><th>Expires</th><th></th></tr></thead><tbody>';
+        for (const inv of data.invites) {
+            const exp = inv.expires_at ? new Date(inv.expires_at + 'Z').toLocaleDateString() : '—';
+            const statusClass = inv.status === 'active' ? 'active' : 'expired';
+            const usedBy = inv.used_by_email || '—';
+            const action = inv.status === 'active'
+                ? '<button class="copy-btn" style="margin:0;font-size:9px;padding:4px 8px;background:#5a4a1f" onclick="copyInviteByCode(\\''+inv.code+'\\')">COPY LINK</button> <button class="revoke-btn" onclick="revokeInvite(\\''+inv.code+'\\')">REVOKE</button>'
+                : '';
+            html += '<tr>' +
+                '<td style="font-size:10px;color:#c4a44e">' + inv.code + '</td>' +
+                '<td>' + (inv.label || '—') + '</td>' +
+                '<td><span class="' + statusClass + '">' + inv.status.toUpperCase() + '</span></td>' +
+                '<td style="font-size:10px">' + usedBy + '</td>' +
+                '<td style="font-size:10px">' + exp + '</td>' +
+                '<td style="display:flex;gap:6px">' + action + '</td>' +
+                '</tr>';
+        }
+        html += '</tbody></table>';
+        iWrap.innerHTML = html;
+    }
+
+    // Members table
+    const mWrap = document.getElementById('membersTable');
+    if (!data.members || data.members.length === 0) {
+        mWrap.innerHTML = '<div style="color:#6c757d; font-size:12px; padding:10px">No members yet.</div>';
+    } else {
+        let html = '<table><thead><tr><th>Email</th><th>Joined</th><th>Last Login</th><th>Status</th><th></th></tr></thead><tbody>';
+        for (const m of data.members) {
+            const created = m.created_at ? new Date(m.created_at + 'Z').toLocaleDateString() : '—';
+            const last = m.last_login_at ? new Date(m.last_login_at + 'Z').toLocaleString() : '—';
+            const statusClass = m.status === 'active' ? 'active' : 'expired';
+            const toggleLabel = m.status === 'active' ? 'DISABLE' : 'ENABLE';
+            html += '<tr>' +
+                '<td>' + m.email + '</td>' +
+                '<td style="font-size:10px">' + created + '</td>' +
+                '<td style="font-size:10px">' + last + '</td>' +
+                '<td><span class="' + statusClass + '">' + m.status.toUpperCase() + '</span></td>' +
+                '<td><button class="revoke-btn" onclick="toggleMember(\\''+m.id+'\\', \\''+m.status+'\\')">' + toggleLabel + '</button></td>' +
+                '</tr>';
+        }
+        html += '</tbody></table>';
+        mWrap.innerHTML = html;
+    }
+}
+async function copyInviteByCode(code) {
+    const url = window.location.origin + '/members?invite=' + code;
+    navigator.clipboard.writeText(url).then(() => {
+        const btn = event.target;
+        btn.textContent = 'COPIED!';
+        setTimeout(() => btn.textContent = 'COPY LINK', 2000);
+    });
+}
+loadInvites();
+setInterval(loadInvites, 60000);
 </script>
 </body></html>
 """
@@ -1284,6 +1694,149 @@ def logout():
     return response
 
 
+# ─── MEMBER AREA ROUTES (Phase 1) ─────────────────────────────────────────────
+
+def _render_members_auth(flash_html="", invite_code="", initial_tab="login"):
+    """Render the members login/signup page."""
+    pill = ""
+    if invite_code:
+        pill = f'<div class="invite-pill">INVITE: {invite_code}</div>'
+    page = (MEMBERS_AUTH_PAGE
+            .replace("{{FLASH}}", flash_html)
+            .replace("{{INVITE_CODE}}", invite_code)
+            .replace("{{INVITE_PILL}}", pill)
+            .replace("{{INITIAL_TAB}}", initial_tab))
+    return page
+
+
+@app.route("/members", methods=["GET"])
+def members_landing():
+    """Members login page. ?invite=<code> opens the signup tab pre-filled."""
+    if get_current_member():
+        return redirect("/members/dashboard")
+    invite = (request.args.get("invite") or "").strip()
+    initial = "signup" if invite else "login"
+    flash = ""
+    if invite:
+        ok, reason = validate_invite(invite)
+        if not ok:
+            flash = f'<div class="error">Invite code is {reason}.</div>'
+            invite = ""
+            initial = "login"
+    return make_response(_render_members_auth(flash_html=flash, invite_code=invite, initial_tab=initial)), 200
+
+
+@app.route("/members/login", methods=["POST"])
+def members_login():
+    """Authenticate a member by email + password."""
+    email = (request.form.get("email") or "").strip().lower()
+    password = request.form.get("password") or ""
+    if not email or not password:
+        flash = '<div class="error">Email and password are required.</div>'
+        return make_response(_render_members_auth(flash_html=flash)), 400
+
+    member_id, member = find_member_by_email(email)
+    if not member or not check_password_hash(member.get("password_hash", ""), password):
+        flash = '<div class="error">Incorrect email or password.</div>'
+        return make_response(_render_members_auth(flash_html=flash)), 401
+
+    if member.get("status") != "active":
+        flash = '<div class="error">Account is disabled. Contact the admin.</div>'
+        return make_response(_render_members_auth(flash_html=flash)), 403
+
+    # Update last_login_at
+    members = load_members()
+    if member_id in members:
+        members[member_id]["last_login_at"] = datetime.utcnow().isoformat()
+        save_members(members)
+
+    response = make_response(redirect("/members/dashboard"))
+    set_member_cookie(response, member_id)
+    logger.info(f"[MEMBERS] Login: {email}")
+    return response
+
+
+@app.route("/members/signup", methods=["POST"])
+def members_signup():
+    """Create a new member account using a valid invite code."""
+    invite_code = (request.form.get("invite") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    password = request.form.get("password") or ""
+
+    # Validate
+    if not invite_code or not email or not password:
+        flash = '<div class="error">All fields are required.</div>'
+        return make_response(_render_members_auth(flash_html=flash, invite_code=invite_code, initial_tab="signup")), 400
+    if len(password) < 8:
+        flash = '<div class="error">Password must be at least 8 characters.</div>'
+        return make_response(_render_members_auth(flash_html=flash, invite_code=invite_code, initial_tab="signup")), 400
+
+    ok, reason = validate_invite(invite_code)
+    if not ok:
+        flash = f'<div class="error">Invite code is {reason}.</div>'
+        return make_response(_render_members_auth(flash_html=flash, initial_tab="signup")), 400
+
+    existing_id, existing = find_member_by_email(email)
+    if existing:
+        flash = '<div class="error">An account with that email already exists. Sign in instead.</div>'
+        return make_response(_render_members_auth(flash_html=flash, initial_tab="login")), 409
+
+    # Create member
+    member_id = secrets.token_urlsafe(12)
+    members = load_members()
+    members[member_id] = {
+        "id": member_id,
+        "email": email,
+        "password_hash": generate_password_hash(password),
+        "invite_code": invite_code,
+        "created_at": datetime.utcnow().isoformat(),
+        "last_login_at": datetime.utcnow().isoformat(),
+        "status": "active",
+    }
+    save_members(members)
+    consume_invite(invite_code, member_id)
+
+    response = make_response(redirect("/members/dashboard"))
+    set_member_cookie(response, member_id)
+    logger.info(f"[MEMBERS] Signup: {email} (invite {invite_code})")
+    return response
+
+
+@app.route("/members/logout", methods=["GET"])
+def members_logout():
+    """Clear member session."""
+    response = make_response(redirect("/members"))
+    response.delete_cookie("tennis_member")
+    return response
+
+
+@app.route("/members/dashboard", methods=["GET"])
+@require_member
+def members_dashboard():
+    """Authenticated members shell — Phase 1 stub with the 4 tabs."""
+    member = get_current_member()
+    template_path = BASE_DIR / "members_dashboard.html"
+    if not template_path.exists():
+        return make_response("<h1>members_dashboard.html missing</h1>", 500)
+    html = template_path.read_text()
+    html = html.replace("{{MEMBER_EMAIL}}", member.get("email", ""))
+    return make_response(html), 200
+
+
+@app.route("/members/api/me", methods=["GET"])
+def members_api_me():
+    """JSON endpoint — current member identity for the dashboard JS."""
+    member = get_current_member()
+    if not member:
+        return jsonify({"authenticated": False}), 401
+    return jsonify({
+        "authenticated": True,
+        "id": member["id"],
+        "email": member["email"],
+        "created_at": member.get("created_at"),
+    })
+
+
 # ─── STATIC ASSETS ────────────────────────────────────────────────────────────
 
 @app.route("/static/<path:filename>", methods=["GET"])
@@ -1397,6 +1950,114 @@ def admin_clear_expired_shares():
     removed = len(shares) - len(active)
     save_shares(active)
     return jsonify({"status": "cleared", "removed": removed})
+
+
+# ─── ADMIN: INVITE MANAGEMENT (Phase 1 of members area) ──────────────────────
+
+@app.route("/admin/invites", methods=["GET"])
+def admin_list_invites():
+    """List all invite codes plus the members directory."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    invites = load_invites()
+    members = load_members()
+
+    # Build a lightweight members view (no password hashes)
+    members_pub = []
+    for mid, m in members.items():
+        members_pub.append({
+            "id": mid,
+            "email": m.get("email"),
+            "invite_code": m.get("invite_code"),
+            "created_at": m.get("created_at"),
+            "last_login_at": m.get("last_login_at"),
+            "status": m.get("status"),
+        })
+    members_pub.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+
+    # Decorate invites with the email of who used them
+    used_by_lookup = {m["id"]: m.get("email") for m in members_pub}
+    invites_pub = []
+    for code, inv in invites.items():
+        invites_pub.append({
+            **inv,
+            "used_by_email": used_by_lookup.get(inv.get("used_by")) if inv.get("used_by") else None,
+        })
+    invites_pub.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+
+    host = request.host_url.rstrip("/")
+    return jsonify({
+        "invites": invites_pub,
+        "members": members_pub,
+        "base_url": host,
+        "counts": {
+            "invites_total": len(invites_pub),
+            "invites_active": sum(1 for i in invites_pub if i.get("status") == "active"),
+            "members_total": len(members_pub),
+        },
+    })
+
+
+@app.route("/admin/create-invite", methods=["POST"])
+def admin_create_invite():
+    """Generate a new invite code."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    label = (data.get("label") or "").strip()
+    duration_days = data.get("duration_days")  # None = no expiry
+    if duration_days in ("", 0):
+        duration_days = None
+    if duration_days is not None:
+        try:
+            duration_days = int(duration_days)
+        except (TypeError, ValueError):
+            return jsonify({"error": "duration_days must be int or null"}), 400
+
+    code, inv = create_invite(label=label, duration_days=duration_days)
+    host = request.host_url.rstrip("/")
+    return jsonify({
+        "code": code,
+        "invite": inv,
+        "url": f"{host}/members?invite={code}",
+    })
+
+
+@app.route("/admin/revoke-invite", methods=["POST"])
+def admin_revoke_invite():
+    """Revoke an invite code (cannot revoke once used)."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    code = (data.get("code") or "").strip()
+    if not code:
+        return jsonify({"error": "code required"}), 400
+    invites = load_invites()
+    if code not in invites:
+        return jsonify({"error": "not found"}), 404
+    if invites[code].get("status") == "used":
+        return jsonify({"error": "already used — cannot revoke"}), 400
+    invites[code]["status"] = "revoked"
+    save_invites(invites)
+    return jsonify({"status": "revoked", "code": code})
+
+
+@app.route("/admin/disable-member", methods=["POST"])
+def admin_disable_member():
+    """Disable (or re-enable) a member account."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    member_id = data.get("member_id")
+    new_status = (data.get("status") or "disabled").strip()
+    if new_status not in ("active", "disabled"):
+        return jsonify({"error": "status must be active or disabled"}), 400
+    members = load_members()
+    if member_id not in members:
+        return jsonify({"error": "not found"}), 404
+    members[member_id]["status"] = new_status
+    save_members(members)
+    return jsonify({"status": "ok", "member_id": member_id, "new_status": new_status})
 
 
 # ─── EXISTING API ROUTES ─────────────────────────────────────────────────────
