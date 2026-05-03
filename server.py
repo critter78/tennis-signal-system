@@ -1837,6 +1837,300 @@ def members_api_me():
     })
 
 
+# ─── MEMBER BETS — STORAGE + RESOLUTION ──────────────────────────────────────
+
+def _load_member_bets_all():
+    """Load the full member_bets.json. Returns {member_id: {bets:[], updated_at:...}}."""
+    try:
+        if MEMBER_BETS_FILE.exists():
+            with open(MEMBER_BETS_FILE, 'r') as f:
+                content = f.read().strip()
+                if not content:
+                    return {}
+                return json.loads(content)
+    except Exception as e:
+        logger.error(f"Error loading member_bets: {e}")
+    return {}
+
+
+def _save_member_bets_all(data):
+    """Persist the full member_bets.json."""
+    try:
+        with open(MEMBER_BETS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving member_bets: {e}")
+        return False
+
+
+def get_member_bets(member_id):
+    """Return the (unresolved) bet array for a member."""
+    return _load_member_bets_all().get(member_id, {}).get("bets", [])
+
+
+def set_member_bets(member_id, bets):
+    """Save a member's bet array."""
+    data = _load_member_bets_all()
+    data[member_id] = {
+        "bets": bets,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    return _save_member_bets_all(data)
+
+
+def _normalize_bet(raw, member_id):
+    """Validate + normalize an incoming bet payload."""
+    if not isinstance(raw, dict):
+        return None, "bet payload must be an object"
+    match = (raw.get("match") or "").strip()
+    bet_on = (raw.get("bet_on") or "").strip()
+    if not match or not bet_on:
+        return None, "match and bet_on are required"
+    try:
+        stake = float(raw.get("stake") or 0)
+    except (TypeError, ValueError):
+        return None, "stake must be numeric"
+    if stake <= 0:
+        return None, "stake must be > 0"
+    try:
+        # Price is on a 0-100 scale (matches existing admin convention)
+        price = float(raw.get("price") or raw.get("poly_price") or 0)
+    except (TypeError, ValueError):
+        return None, "price must be numeric"
+    if price <= 0 or price >= 100:
+        return None, "price must be between 0 and 100 (cents)"
+
+    bet = {
+        "id": raw.get("id") or secrets.token_urlsafe(10),
+        "match": match,
+        "bet_on": bet_on,
+        "stake": stake,
+        "price": price,
+        "tournament": (raw.get("tournament") or "").strip(),
+        "surface": (raw.get("surface") or "").strip(),
+        "model_prob": raw.get("model_prob"),
+        "notes": (raw.get("notes") or "").strip(),
+        "created_at": raw.get("created_at") or datetime.utcnow().isoformat(),
+        "member_id": member_id,
+    }
+    return bet, None
+
+
+def _resolve_member_bets(bets):
+    """Look up each bet's outcome from picks.jsonl. Same matching as _resolve_bet_outcomes."""
+    if not bets:
+        return bets
+    picks = load_picks_jsonl(enrich=False)
+    if not picks:
+        return bets
+
+    for bet in bets:
+        if bet.get("outcome"):
+            continue
+        bet_match = bet.get("match", "")
+        bet_on = bet.get("bet_on", "")
+
+        match = None
+        # Strategy 1: exact match name + same bet_on
+        for p in picks:
+            if p.get("match") == bet_match and p.get("bet_on") == bet_on and p.get("outcome"):
+                match = p
+                break
+        # Strategy 2: same match name, any resolved pick
+        if not match:
+            for p in picks:
+                if p.get("match") == bet_match and p.get("outcome"):
+                    match = p
+                    break
+        # Strategy 3: fuzzy match on last names
+        if not match and bet_match:
+            parts = re.split(r'\s+vs\.?\s+', bet_match.lower())
+            if len(parts) == 2:
+                last_a = parts[0].strip().split()[-1]
+                last_b = parts[1].strip().split()[-1]
+                for p in picks:
+                    pm = (p.get("match") or "").lower()
+                    if last_a in pm and last_b in pm and p.get("outcome"):
+                        match = p
+                        break
+
+        if match and match.get("outcome"):
+            if match["outcome"] == "void":
+                bet["outcome"] = "void"
+                bet["pnl"] = 0.0
+                bet["actual_winner"] = match.get("actual_winner")
+            else:
+                actual = match.get("actual_winner") or ""
+                bet_on_last = bet_on.split()[-1].lower() if bet_on else ""
+                winner_last = actual.split()[-1].lower() if actual else ""
+                i_won = (bet_on_last and bet_on_last == winner_last) or (bet_on.lower() == actual.lower())
+                bet["outcome"] = "win" if i_won else "loss"
+                bet["actual_winner"] = actual
+                price = float(bet.get("price") or 0)  # cents (0-100)
+                stake = float(bet.get("stake") or 0)
+                if i_won and price > 0:
+                    # Profit = stake * (1/price - 1); price is 0-1, but we stored 0-100 → divide
+                    p_dec = price / 100.0
+                    bet["pnl"] = round(stake * (1.0 / p_dec - 1.0), 2)
+                else:
+                    bet["pnl"] = round(-stake, 2)
+            bet["resolved_at"] = match.get("resolved_at") or datetime.utcnow().isoformat()
+    return bets
+
+
+def _compute_member_stats(bets):
+    """Aggregate stats from a member's bets."""
+    total = len(bets)
+    open_bets = [b for b in bets if not b.get("outcome")]
+    closed = [b for b in bets if b.get("outcome") in ("win", "loss", "void")]
+    wins = [b for b in closed if b.get("outcome") == "win"]
+    losses = [b for b in closed if b.get("outcome") == "loss"]
+    voids = [b for b in closed if b.get("outcome") == "void"]
+    wagered = sum(float(b.get("stake") or 0) for b in closed if b.get("outcome") != "void")
+    pnl = sum(float(b.get("pnl") or 0) for b in closed)
+    win_rate = (len(wins) / max(1, len(wins) + len(losses))) * 100 if (wins or losses) else 0
+    roi = (pnl / wagered * 100) if wagered > 0 else 0
+    return {
+        "total": total,
+        "open": len(open_bets),
+        "closed": len(closed),
+        "wins": len(wins),
+        "losses": len(losses),
+        "voids": len(voids),
+        "wagered": round(wagered, 2),
+        "pnl": round(pnl, 2),
+        "win_rate": round(win_rate, 1),
+        "roi": round(roi, 1),
+    }
+
+
+# ─── MEMBER API ENDPOINTS (Phase 2 — signals/bets/stats/players) ─────────────
+
+@app.route("/members/api/signals", methods=["GET"])
+def members_api_signals():
+    """Return the most recent signals — unresolved first, then recently resolved.
+    Read-only feed for the Today's Signals tab. ?status=open|all (default: all)"""
+    member = get_current_member()
+    if not member:
+        return jsonify({"error": "Unauthorized"}), 401
+    status = (request.args.get("status") or "all").lower()
+    try:
+        picks = load_picks_jsonl(enrich=False)
+    except Exception as e:
+        logger.error(f"members_api_signals load error: {e}")
+        return jsonify({"signals": [], "error": str(e)}), 500
+
+    # Sort newest first by logged_at
+    picks_sorted = sorted(picks, key=lambda p: p.get("logged_at") or "", reverse=True)
+
+    out = []
+    for p in picks_sorted:
+        if status == "open" and p.get("outcome"):
+            continue
+        out.append({
+            "match": p.get("match"),
+            "bet_on": p.get("bet_on"),
+            "tournament": p.get("tournament"),
+            "surface": p.get("surface"),
+            "round": p.get("round"),
+            "model_prob": p.get("model_prob"),
+            "poly_price": p.get("poly_price"),
+            "edge": p.get("edge"),
+            "confidence": p.get("confidence"),
+            "kelly_stake": p.get("kelly_stake"),
+            "logged_at": p.get("logged_at"),
+            "end_date": p.get("end_date"),
+            "outcome": p.get("outcome"),
+            "actual_winner": p.get("actual_winner"),
+            "poly_link": p.get("poly_link"),
+            "liquidity": p.get("liquidity"),
+            "volume": p.get("volume"),
+        })
+    # Cap to the most recent 200 to keep payload small
+    out = out[:200]
+    return jsonify({"signals": out, "count": len(out)})
+
+
+@app.route("/members/api/bets", methods=["GET", "POST"])
+def members_api_bets():
+    """List or add bets for the currently logged-in member."""
+    member = get_current_member()
+    if not member:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if request.method == "GET":
+        bets = get_member_bets(member["id"])
+        bets = _resolve_member_bets(bets)
+        # Persist resolutions back so future reads are fast
+        set_member_bets(member["id"], bets)
+        # Newest first
+        bets_sorted = sorted(bets, key=lambda b: b.get("created_at") or "", reverse=True)
+        return jsonify({"bets": bets_sorted, "count": len(bets_sorted)})
+
+    # POST — add a bet
+    payload = request.get_json() or {}
+    bet, err = _normalize_bet(payload, member["id"])
+    if err:
+        return jsonify({"error": err}), 400
+    bets = get_member_bets(member["id"])
+    # Reject duplicates (same match + bet_on, still open)
+    for b in bets:
+        if (b.get("match") == bet["match"]
+                and b.get("bet_on") == bet["bet_on"]
+                and not b.get("outcome")):
+            return jsonify({"error": "You already have an open bet on this match + side"}), 409
+    bets.append(bet)
+    set_member_bets(member["id"], bets)
+    return jsonify({"status": "created", "bet": bet}), 201
+
+
+@app.route("/members/api/bets/<bet_id>", methods=["DELETE"])
+def members_api_bets_delete(bet_id):
+    """Remove a bet from the current member's log (any status)."""
+    member = get_current_member()
+    if not member:
+        return jsonify({"error": "Unauthorized"}), 401
+    bets = get_member_bets(member["id"])
+    new_bets = [b for b in bets if b.get("id") != bet_id]
+    if len(new_bets) == len(bets):
+        return jsonify({"error": "not found"}), 404
+    set_member_bets(member["id"], new_bets)
+    return jsonify({"status": "deleted", "id": bet_id})
+
+
+@app.route("/members/api/stats", methods=["GET"])
+def members_api_stats():
+    """Personal P&L summary for the currently logged-in member."""
+    member = get_current_member()
+    if not member:
+        return jsonify({"error": "Unauthorized"}), 401
+    bets = get_member_bets(member["id"])
+    bets = _resolve_member_bets(bets)
+    set_member_bets(member["id"], bets)
+    return jsonify({"stats": _compute_member_stats(bets)})
+
+
+@app.route("/members/api/players", methods=["GET"])
+def members_api_players():
+    """Proxy: serve the same player profiles file as /api/players, gated to members."""
+    member = get_current_member()
+    if not member:
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        profiles_path = DATA_DIR / "player_profiles.json"
+        if not profiles_path.exists():
+            profiles_path = BASE_DIR / "data" / "player_profiles.json"
+        if not profiles_path.exists():
+            return jsonify({"players": [], "message": "Profiles not generated yet."})
+        with open(profiles_path, "r") as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"members_api_players error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ─── STATIC ASSETS ────────────────────────────────────────────────────────────
 
 @app.route("/static/<path:filename>", methods=["GET"])

@@ -27,22 +27,102 @@ header { background: #13151d; border-bottom: 1px solid #2d3139; padding: 14px 24
 .tab:hover { color: #d4740a; }
 .tab.active { color: #d4740a; border-bottom-color: #d4740a; }
 
-/* ── Content ── */
+/* ── Layout ── */
 main { padding: 24px; max-width: 1200px; margin: 0 auto; }
 .panel { display: none; }
 .panel.active { display: block; }
-.card { background: #1a1d27; border: 1px solid #2d3139; padding: 24px; margin-bottom: 18px; }
-.card h2 { font-size: 13px; color: #d4740a; letter-spacing: 0.06em; margin-bottom: 12px; }
+.card { background: #1a1d27; border: 1px solid #2d3139; padding: 22px; margin-bottom: 18px; }
+.card h2 { font-size: 13px; color: #d4740a; letter-spacing: 0.06em; margin-bottom: 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .muted { color: #6c757d; font-size: 12px; line-height: 1.6; }
-.muted code { background: #0f1117; padding: 1px 6px; border: 1px solid #2d3139; color: #c4a44e; font-size: 11px; }
-.stub { padding: 36px 20px; text-align: center; border: 1px dashed #2d3139; }
-.stub .h { font-size: 14px; color: #c4a44e; margin-bottom: 8px; letter-spacing: 0.06em; }
-.stub .b { font-size: 11px; color: #6c757d; line-height: 1.7; max-width: 520px; margin: 0 auto; }
-.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 12px; }
-.kpi { background: #0f1117; border: 1px solid #2d3139; padding: 14px; }
-.kpi .lbl { font-size: 9px; color: #6c757d; letter-spacing: 0.06em; }
-.kpi .val { font-size: 22px; color: #e0e0e0; margin-top: 6px; font-weight: 600; }
-.tag { display: inline-block; font-size: 9px; color: #c4a44e; border: 1px solid #5a4a1f; padding: 2px 7px; letter-spacing: 0.06em; margin-left: 8px; vertical-align: middle; }
+.empty { padding: 26px 18px; text-align:center; color:#6c757d; font-size:12px; border:1px dashed #2d3139; }
+.toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.toolbar .search { flex:1; min-width:200px; background:#0f1117; border:1px solid #2d3139; color:#e0e0e0; padding:8px 12px; font-family:inherit; font-size:12px; }
+.toolbar .search:focus { outline:none; border-color:#d4740a; }
+.toolbar select, .toolbar input { background:#0f1117; border:1px solid #2d3139; color:#e0e0e0; padding:8px 10px; font-family:inherit; font-size:12px; }
+.toolbar button { background:#d4740a; color:white; border:none; padding:8px 14px; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:0.04em; cursor:pointer; }
+.toolbar button:hover { background:#e65100; }
+.toolbar button.ghost { background:transparent; border:1px solid #2d3139; color:#6c757d; }
+.toolbar button.ghost:hover { color:#d4740a; border-color:#d4740a; }
+
+/* ── Signal cards ── */
+.signals-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(310px, 1fr)); gap:12px; }
+.sig { background:#0f1117; border:1px solid #2d3139; padding:14px; display:flex; flex-direction:column; gap:8px; }
+.sig .row { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+.sig .match { font-size:13px; color:#e0e0e0; font-weight:600; }
+.sig .meta { font-size:9px; color:#6c757d; letter-spacing:0.04em; }
+.sig .pick { font-size:11px; color:#c4a44e; }
+.sig .nums { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding-top:6px; border-top:1px dashed #2d3139; }
+.sig .nums .n { text-align:center; }
+.sig .nums .n .l { font-size:8px; color:#6c757d; letter-spacing:0.06em; }
+.sig .nums .n .v { font-size:14px; color:#e0e0e0; font-weight:600; margin-top:2px; }
+.sig .actions { display:flex; gap:6px; padding-top:8px; }
+.sig .actions button { flex:1; background:#1b5e20; color:white; border:none; padding:7px; font-family:inherit; font-size:10px; font-weight:700; letter-spacing:0.04em; cursor:pointer; }
+.sig .actions button.poly { background:#2d3139; }
+.sig .actions a { flex:1; }
+.badge { display:inline-block; font-size:8px; padding:2px 6px; letter-spacing:0.06em; border:1px solid #2d3139; color:#6c757d; }
+.badge.win { color:#4caf50; border-color:#1b5e20; background:#0e1f10; }
+.badge.loss { color:#f44336; border-color:#5a1f1f; background:#1f0f0f; }
+.badge.void { color:#c4a44e; border-color:#5a4a1f; background:#1f1a0f; }
+.badge.open { color:#d4740a; border-color:#5a3a0a; background:#1f120a; }
+.surface-Hard { color:#4fc3f7; }
+.surface-Clay { color:#ff8a65; }
+.surface-Grass { color:#81c784; }
+
+/* ── Tables ── */
+table { width:100%; border-collapse:collapse; font-size:11px; }
+th { text-align:left; padding:8px 6px; font-size:9px; color:#6c757d; text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid #2d3139; }
+td { padding:8px 6px; border-bottom:1px solid #1e2130; vertical-align:middle; }
+.table-wrap { overflow-x:auto; }
+.danger { background:transparent; border:1px solid #5a1f1f; color:#f44336; padding:3px 8px; font-family:inherit; font-size:9px; cursor:pointer; }
+.danger:hover { background:#1f0f0f; }
+.pos { color:#4caf50; }
+.neg { color:#f44336; }
+
+/* ── Bet form ── */
+.bet-form { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; align-items:end; }
+.bet-form label { display:block; font-size:9px; color:#6c757d; letter-spacing:0.06em; margin-bottom:4px; }
+.bet-form input { width:100%; background:#0f1117; border:1px solid #2d3139; color:#e0e0e0; padding:9px 10px; font-family:inherit; font-size:12px; }
+.bet-form input:focus { outline:none; border-color:#d4740a; }
+.bet-form .full { grid-column:1 / -1; }
+
+/* ── KPI cards ── */
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; }
+.kpi { background:#0f1117; border:1px solid #2d3139; padding:16px; }
+.kpi .lbl { font-size:9px; color:#6c757d; letter-spacing:0.06em; }
+.kpi .val { font-size:24px; color:#e0e0e0; margin-top:6px; font-weight:600; }
+
+/* ── Player card ── */
+.player-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:12px; }
+.pcard { background:#0f1117; border:1px solid #2d3139; padding:16px; display:flex; flex-direction:column; gap:10px; }
+.pcard .head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.pcard .name { font-size:14px; color:#e0e0e0; font-weight:700; }
+.pcard .meta { font-size:10px; color:#6c757d; letter-spacing:0.04em; }
+.pcard .rank { font-size:11px; color:#c4a44e; }
+.pcard .row { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.pcard .row .lbl { font-size:9px; color:#6c757d; letter-spacing:0.06em; }
+.pcard .form-strip { display:flex; gap:3px; }
+.pcard .fdot { width:14px; height:14px; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; color:white; }
+.pcard .fdot.W { background:#1b5e20; }
+.pcard .fdot.L { background:#5a1f1f; }
+.pcard .surf { display:grid; grid-template-columns:60px 1fr 50px; gap:8px; align-items:center; font-size:10px; }
+.pcard .surf .bar { height:6px; background:#2d3139; position:relative; overflow:hidden; }
+.pcard .surf .bar .fill { position:absolute; left:0; top:0; bottom:0; background:#d4740a; }
+.pcard .mental { display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; font-size:10px; }
+.pcard .mental .m { background:#1a1d27; padding:6px 8px; }
+.pcard .mental .m .l { font-size:8px; color:#6c757d; letter-spacing:0.04em; }
+.pcard .mental .m .v { font-size:12px; color:#e0e0e0; font-weight:600; margin-top:2px; }
+.pcard .section-lbl { font-size:9px; color:#6c757d; letter-spacing:0.06em; margin-top:4px; }
+
+/* ── Modal ── */
+.modal { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.75); z-index:50; align-items:center; justify-content:center; padding:20px; }
+.modal.open { display:flex; }
+.modal .box { background:#1a1d27; border:1px solid #d4740a; padding:24px; max-width:520px; width:100%; }
+.modal .box h3 { font-size:13px; color:#d4740a; letter-spacing:0.06em; margin-bottom:12px; }
+.modal .box .ctx { font-size:11px; color:#c4a44e; padding:8px 10px; background:#0f1117; border:1px solid #2d3139; margin-bottom:14px; }
+.modal .box .row-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
+.modal .box button { padding:9px 16px; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:0.04em; cursor:pointer; border:none; }
+.modal .box button.primary { background:#d4740a; color:white; }
+.modal .box button.cancel { background:#2d3139; color:#e0e0e0; }
 
 /* ── Footer ── */
 footer { position: fixed; bottom: 0; left: 0; right: 0; background: #13151d; border-top: 1px solid #2d3139; padding: 8px 20px; display: flex; align-items: center; justify-content: center; gap: 0; z-index: 5; }
@@ -56,6 +136,8 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
     .tab { padding: 12px 10px; font-size: 10px; }
     main { padding: 14px; }
     .card { padding: 16px; }
+    .signals-grid { grid-template-columns: 1fr; }
+    .player-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -87,66 +169,126 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
 <!-- TODAY'S SIGNALS -->
 <section class="panel active" id="panel-signals">
     <div class="card">
-        <h2>TODAY'S SIGNALS <span class="tag">PHASE 1 STUB</span></h2>
-        <div class="muted">
-            The full signals feed will land in Phase 3 — pulling live picks from the system's signal generator with model probability, market price, and recommended stake. For now this tab is a placeholder so the navigation shell is in place.
-        </div>
-        <div class="stub" style="margin-top:16px">
-            <div class="h">SIGNALS FEED COMING IN PHASE 3</div>
-            <div class="b">Will surface today's high-confidence picks (sourced from the same generator that drives the admin dashboard) with read-only views for members.</div>
-        </div>
+        <h2>
+            <span>TODAY'S SIGNALS</span>
+            <span class="toolbar" style="font-size:10px">
+                <select id="sigFilter" onchange="renderSignals()">
+                    <option value="open">OPEN ONLY</option>
+                    <option value="all" selected>ALL RECENT</option>
+                </select>
+                <button class="ghost" onclick="loadSignals()">REFRESH</button>
+            </span>
+        </h2>
+        <div id="signalsBody"><div class="empty">Loading signals…</div></div>
     </div>
 </section>
 
 <!-- MY BETS -->
 <section class="panel" id="panel-bets">
     <div class="card">
-        <h2>MY BETS <span class="tag">PHASE 2</span></h2>
-        <div class="muted">
-            Member-scoped bet log. You'll log your own bets here (match, side, stake, odds) and the system will auto-resolve them against the picks database when the match completes.
-        </div>
-        <div class="stub" style="margin-top:16px">
-            <div class="h">PERSONAL BET LOG COMING IN PHASE 2</div>
-            <div class="b">Each member gets their own private bet log stored under their account. We'll wire the form + auto-resolution next.</div>
-        </div>
+        <h2><span>LOG A NEW BET</span></h2>
+        <form class="bet-form" onsubmit="submitBet(event)">
+            <div>
+                <label>MATCH (e.g. "Player A vs Player B")</label>
+                <input id="bf-match" required>
+            </div>
+            <div>
+                <label>BET ON (player)</label>
+                <input id="bf-bet_on" required>
+            </div>
+            <div>
+                <label>STAKE ($)</label>
+                <input id="bf-stake" type="number" step="0.01" min="0.01" required>
+            </div>
+            <div>
+                <label>PRICE (cents, e.g. 65)</label>
+                <input id="bf-price" type="number" step="0.1" min="0.1" max="99.9" required>
+            </div>
+            <div>
+                <label>TOURNAMENT (optional)</label>
+                <input id="bf-tournament">
+            </div>
+            <div>
+                <label>SURFACE (optional)</label>
+                <input id="bf-surface" placeholder="Hard / Clay / Grass">
+            </div>
+            <div class="full">
+                <label>NOTES (optional)</label>
+                <input id="bf-notes">
+            </div>
+            <div class="full" style="display:flex; gap:8px; justify-content:flex-end">
+                <button type="button" class="ghost" onclick="resetBetForm()">CLEAR</button>
+                <button type="submit">LOG BET</button>
+            </div>
+        </form>
+        <div id="bf-msg" style="font-size:11px; margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+        <h2>
+            <span>MY BETS</span>
+            <span class="toolbar" style="font-size:10px">
+                <select id="betFilter" onchange="renderBets()">
+                    <option value="all">ALL</option>
+                    <option value="open">OPEN</option>
+                    <option value="closed">CLOSED</option>
+                </select>
+                <button class="ghost" onclick="loadBets()">REFRESH</button>
+            </span>
+        </h2>
+        <div id="betsBody"><div class="empty">Loading…</div></div>
     </div>
 </section>
 
 <!-- PLAYER CARDS -->
 <section class="panel" id="panel-players">
     <div class="card">
-        <h2>PLAYER CARDS <span class="tag">PHASE 3</span></h2>
-        <div class="muted">
-            The Player Cards / ELO intel tab from the admin dashboard, gated behind member login. Phase 3 will mount the existing component into this shell.
-        </div>
-        <div class="stub" style="margin-top:16px">
-            <div class="h">PLAYER LOOKUP COMING IN PHASE 3</div>
-            <div class="b">Read-through view of the existing Player Cards tab — same surface-specific ELO, head-to-head, and Polymarket trade history.</div>
-        </div>
+        <h2><span>PLAYER CARDS</span>
+            <span class="toolbar" style="font-size:10px">
+                <input class="search" id="playerSearch" placeholder="Search player by name…" oninput="renderPlayers()">
+                <select id="playerTour" onchange="renderPlayers()">
+                    <option value="all">ATP + WTA</option>
+                    <option value="ATP">ATP</option>
+                    <option value="WTA">WTA</option>
+                </select>
+            </span>
+        </h2>
+        <div id="playersBody"><div class="empty">Loading…</div></div>
     </div>
 </section>
 
 <!-- MY PERFORMANCE -->
 <section class="panel" id="panel-performance">
     <div class="card">
-        <h2>MY PERFORMANCE <span class="tag">PHASE 2</span></h2>
-        <div class="muted">
-            Personal P&L derived from your logged bets only. Win rate, ROI, equity curve, broken down by surface and confidence tier.
+        <h2><span>MY PERFORMANCE</span></h2>
+        <div class="kpi-grid" id="kpiBody">
+            <div class="kpi"><div class="lbl">TOTAL BETS</div><div class="val" id="kpi-total">—</div></div>
+            <div class="kpi"><div class="lbl">WIN RATE</div><div class="val" id="kpi-wr">—</div></div>
+            <div class="kpi"><div class="lbl">ROI</div><div class="val" id="kpi-roi">—</div></div>
+            <div class="kpi"><div class="lbl">NET P&amp;L</div><div class="val" id="kpi-pnl">—</div></div>
         </div>
-        <div class="kpi-grid">
-            <div class="kpi"><div class="lbl">TOTAL BETS</div><div class="val">—</div></div>
-            <div class="kpi"><div class="lbl">WIN RATE</div><div class="val">—</div></div>
-            <div class="kpi"><div class="lbl">ROI</div><div class="val">—</div></div>
-            <div class="kpi"><div class="lbl">NET P&amp;L</div><div class="val">—</div></div>
-        </div>
-        <div class="stub" style="margin-top:16px">
-            <div class="h">PERSONAL STATS WIRED IN PHASE 2</div>
-            <div class="b">Numbers above will populate once member bet logging is live and bets start resolving.</div>
-        </div>
+        <div style="margin-top:14px" class="muted" id="kpi-detail">—</div>
     </div>
 </section>
 
 </main>
+
+<!-- ── Track-from-signal modal ── -->
+<div class="modal" id="trackModal">
+  <div class="box">
+    <h3>TRACK THIS BET</h3>
+    <div class="ctx" id="trackCtx"></div>
+    <div class="bet-form">
+      <div><label>STAKE ($)</label><input id="tm-stake" type="number" step="0.01" min="0.01" value="50"></div>
+      <div><label>PRICE (cents)</label><input id="tm-price" type="number" step="0.1" min="0.1" max="99.9"></div>
+      <div class="full"><label>NOTES (optional)</label><input id="tm-notes"></div>
+    </div>
+    <div class="row-actions">
+      <button class="cancel" onclick="closeTrack()">CANCEL</button>
+      <button class="primary" onclick="confirmTrack()">LOG BET</button>
+    </div>
+  </div>
+</div>
 
 <footer>
     <span class="brand-critter">CRITTER</span><span class="brand-labs">LABS</span>
@@ -154,20 +296,328 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
 </footer>
 
 <script>
+// ─── Tab switching ────────────────────────────────────────────────────────
 function showTab(name) {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
     document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
     history.replaceState(null, '', '#' + name);
+    if (name === 'signals' && !state.signalsLoaded) loadSignals();
+    if (name === 'bets' && !state.betsLoaded) loadBets();
+    if (name === 'players' && !state.playersLoaded) loadPlayers();
+    if (name === 'performance') loadStats();
 }
-// Restore from hash
-(function(){
-    const h = (location.hash || '').replace('#','');
-    if (h && document.getElementById('panel-' + h)) showTab(h);
+
+// ─── State ────────────────────────────────────────────────────────────────
+const state = {
+    signals: [], signalsLoaded: false,
+    bets: [], betsLoaded: false,
+    players: [], playersLoaded: false,
+    trackingSignal: null,
+};
+
+function fmt(num, digits) {
+    if (num === null || num === undefined || num === '') return '—';
+    return Number(num).toFixed(digits === undefined ? 1 : digits);
+}
+function pctStr(num) { return num === null || num === undefined ? '—' : Number(num).toFixed(1) + '%'; }
+function priceStr(num) { return num === null || num === undefined ? '—' : Number(num).toFixed(1) + '¢'; }
+function escapeHtml(s) { return (s || '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ─── SIGNALS ──────────────────────────────────────────────────────────────
+async function loadSignals() {
+    document.getElementById('signalsBody').innerHTML = '<div class="empty">Loading signals…</div>';
+    try {
+        const r = await fetch('/members/api/signals');
+        if (r.status === 401) { location.href = '/members'; return; }
+        const data = await r.json();
+        state.signals = data.signals || [];
+        state.signalsLoaded = true;
+        renderSignals();
+    } catch (e) {
+        document.getElementById('signalsBody').innerHTML = '<div class="empty">Error loading signals: ' + e.message + '</div>';
+    }
+}
+
+function renderSignals() {
+    const wrap = document.getElementById('signalsBody');
+    const filter = document.getElementById('sigFilter').value;
+    let list = state.signals;
+    if (filter === 'open') list = list.filter(s => !s.outcome);
+    if (!list.length) {
+        wrap.innerHTML = '<div class="empty">No signals match this filter.</div>';
+        return;
+    }
+    wrap.innerHTML = '<div class="signals-grid">' + list.map(s => {
+        const surf = s.surface ? `<span class="surface-${s.surface}">${escapeHtml(s.surface)}</span>` : '—';
+        const tourn = s.tournament ? escapeHtml(s.tournament) : '—';
+        const outcomeBadge = s.outcome
+            ? `<span class="badge ${s.outcome}">${s.outcome.toUpperCase()}${s.outcome === 'win' && s.actual_winner ? ' • ' + escapeHtml(s.actual_winner.split(' ').pop()) : ''}</span>`
+            : '<span class="badge open">OPEN</span>';
+        const trackBtn = s.outcome
+            ? ''
+            : `<button onclick='openTrack(${JSON.stringify(s).replace(/'/g, "&apos;")})'>TRACK BET</button>`;
+        const polyBtn = s.poly_link
+            ? `<a href="${escapeHtml(s.poly_link)}" target="_blank" rel="noopener"><button class="poly" style="width:100%">POLYMARKET ↗</button></a>`
+            : '';
+        return `<div class="sig">
+            <div class="row">
+                <div class="match">${escapeHtml(s.match || '—')}</div>
+                ${outcomeBadge}
+            </div>
+            <div class="meta">${tourn} • ${surf}${s.round ? ' • ' + escapeHtml(s.round) : ''}</div>
+            <div class="pick">PICK: <strong>${escapeHtml(s.bet_on || '—')}</strong></div>
+            <div class="nums">
+                <div class="n"><div class="l">MODEL</div><div class="v">${pctStr(s.model_prob)}</div></div>
+                <div class="n"><div class="l">MARKET</div><div class="v">${priceStr(s.poly_price)}</div></div>
+                <div class="n"><div class="l">EDGE</div><div class="v">${pctStr(s.edge)}</div></div>
+            </div>
+            <div class="actions">${trackBtn}${polyBtn}</div>
+        </div>`;
+    }).join('') + '</div>';
+}
+
+// ─── TRACK FROM SIGNAL MODAL ──────────────────────────────────────────────
+function openTrack(signal) {
+    state.trackingSignal = signal;
+    document.getElementById('trackCtx').innerHTML =
+        `<strong>${escapeHtml(signal.match)}</strong><br>Pick: ${escapeHtml(signal.bet_on)} • Model ${pctStr(signal.model_prob)} • Market ${priceStr(signal.poly_price)}`;
+    document.getElementById('tm-price').value = signal.poly_price ? Number(signal.poly_price).toFixed(1) : '';
+    document.getElementById('tm-stake').value = 50;
+    document.getElementById('tm-notes').value = '';
+    document.getElementById('trackModal').classList.add('open');
+}
+function closeTrack() {
+    document.getElementById('trackModal').classList.remove('open');
+    state.trackingSignal = null;
+}
+async function confirmTrack() {
+    const s = state.trackingSignal;
+    if (!s) return;
+    const payload = {
+        match: s.match,
+        bet_on: s.bet_on,
+        stake: parseFloat(document.getElementById('tm-stake').value),
+        price: parseFloat(document.getElementById('tm-price').value),
+        tournament: s.tournament,
+        surface: s.surface,
+        model_prob: s.model_prob,
+        notes: document.getElementById('tm-notes').value,
+    };
+    const r = await fetch('/members/api/bets', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (r.ok) {
+        closeTrack();
+        state.betsLoaded = false;
+        showTab('bets');
+    } else {
+        alert('Error: ' + (data.error || 'unknown'));
+    }
+}
+
+// ─── BETS ─────────────────────────────────────────────────────────────────
+async function loadBets() {
+    document.getElementById('betsBody').innerHTML = '<div class="empty">Loading…</div>';
+    try {
+        const r = await fetch('/members/api/bets');
+        if (r.status === 401) { location.href = '/members'; return; }
+        const data = await r.json();
+        state.bets = data.bets || [];
+        state.betsLoaded = true;
+        renderBets();
+        // Also refresh stats since bet status may have changed
+        loadStats();
+    } catch (e) {
+        document.getElementById('betsBody').innerHTML = '<div class="empty">Error: ' + e.message + '</div>';
+    }
+}
+
+function renderBets() {
+    const wrap = document.getElementById('betsBody');
+    const filter = document.getElementById('betFilter').value;
+    let list = state.bets;
+    if (filter === 'open') list = list.filter(b => !b.outcome);
+    if (filter === 'closed') list = list.filter(b => b.outcome);
+    if (!list.length) {
+        wrap.innerHTML = '<div class="empty">No bets to show. Log one above or track a signal from the Signals tab.</div>';
+        return;
+    }
+    wrap.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+        '<th>Match</th><th>Pick</th><th>Stake</th><th>Price</th><th>Status</th><th>P&amp;L</th><th>Logged</th><th></th></tr></thead><tbody>' +
+        list.map(b => {
+            const outcome = b.outcome
+                ? `<span class="badge ${b.outcome}">${b.outcome.toUpperCase()}</span>`
+                : '<span class="badge open">OPEN</span>';
+            const pnl = b.outcome
+                ? `<span class="${(b.pnl || 0) >= 0 ? 'pos' : 'neg'}">${(b.pnl || 0) >= 0 ? '+' : ''}${fmt(b.pnl, 2)}</span>`
+                : '—';
+            const date = b.created_at ? new Date(b.created_at + 'Z').toLocaleDateString() : '—';
+            return `<tr>
+                <td>${escapeHtml(b.match)}</td>
+                <td><strong>${escapeHtml(b.bet_on)}</strong>${b.surface ? ` <span class="surface-${escapeHtml(b.surface)}" style="font-size:9px">${escapeHtml(b.surface)}</span>` : ''}</td>
+                <td>$${fmt(b.stake, 2)}</td>
+                <td>${priceStr(b.price)}</td>
+                <td>${outcome}</td>
+                <td>${pnl}</td>
+                <td style="font-size:10px;color:#6c757d">${date}</td>
+                <td><button class="danger" onclick="deleteBet('${b.id}')">DELETE</button></td>
+            </tr>`;
+        }).join('') + '</tbody></table></div>';
+}
+
+async function submitBet(ev) {
+    ev.preventDefault();
+    const payload = {
+        match: document.getElementById('bf-match').value.trim(),
+        bet_on: document.getElementById('bf-bet_on').value.trim(),
+        stake: parseFloat(document.getElementById('bf-stake').value),
+        price: parseFloat(document.getElementById('bf-price').value),
+        tournament: document.getElementById('bf-tournament').value.trim(),
+        surface: document.getElementById('bf-surface').value.trim(),
+        notes: document.getElementById('bf-notes').value.trim(),
+    };
+    const r = await fetch('/members/api/bets', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    const msg = document.getElementById('bf-msg');
+    if (r.ok) {
+        msg.style.color = '#4caf50';
+        msg.textContent = 'Bet logged.';
+        resetBetForm();
+        loadBets();
+    } else {
+        msg.style.color = '#f44336';
+        msg.textContent = 'Error: ' + (data.error || 'unknown');
+    }
+    setTimeout(() => msg.textContent = '', 4000);
+}
+
+function resetBetForm() {
+    ['bf-match','bf-bet_on','bf-stake','bf-price','bf-tournament','bf-surface','bf-notes'].forEach(id => document.getElementById(id).value = '');
+}
+
+async function deleteBet(id) {
+    if (!confirm('Delete this bet from your log?')) return;
+    const r = await fetch('/members/api/bets/' + id, {method: 'DELETE'});
+    if (r.ok) loadBets();
+    else alert('Delete failed.');
+}
+
+// ─── STATS ────────────────────────────────────────────────────────────────
+async function loadStats() {
+    try {
+        const r = await fetch('/members/api/stats');
+        if (r.status === 401) { location.href = '/members'; return; }
+        const data = await r.json();
+        const s = data.stats || {};
+        document.getElementById('kpi-total').textContent = s.total ?? '—';
+        document.getElementById('kpi-wr').textContent = s.closed ? s.win_rate + '%' : '—';
+        document.getElementById('kpi-roi').textContent = s.wagered > 0 ? (s.roi >= 0 ? '+' : '') + s.roi + '%' : '—';
+        const pnl = s.pnl || 0;
+        const pnlEl = document.getElementById('kpi-pnl');
+        pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+        pnlEl.className = 'val ' + (pnl >= 0 ? 'pos' : 'neg');
+        const detail = `${s.wins || 0} wins / ${s.losses || 0} losses / ${s.voids || 0} voids • ${s.open || 0} open • $${(s.wagered || 0).toFixed(2)} wagered`;
+        document.getElementById('kpi-detail').textContent = detail;
+    } catch (e) {}
+}
+
+// ─── PLAYERS ──────────────────────────────────────────────────────────────
+async function loadPlayers() {
+    document.getElementById('playersBody').innerHTML = '<div class="empty">Loading player profiles…</div>';
+    try {
+        const r = await fetch('/members/api/players');
+        if (r.status === 401) { location.href = '/members'; return; }
+        const data = await r.json();
+        state.players = data.players || [];
+        state.playersLoaded = true;
+        renderPlayers();
+    } catch (e) {
+        document.getElementById('playersBody').innerHTML = '<div class="empty">Error: ' + e.message + '</div>';
+    }
+}
+
+function renderPlayers() {
+    const q = (document.getElementById('playerSearch').value || '').trim().toLowerCase();
+    const tour = document.getElementById('playerTour').value;
+    let list = state.players;
+    if (tour !== 'all') list = list.filter(p => p.tour === tour);
+    if (q) {
+        list = list.filter(p => (p.name || '').toLowerCase().includes(q));
+    } else {
+        // No query: show top-30 by rank
+        list = list.filter(p => p.rank).sort((a, b) => (a.rank || 9999) - (b.rank || 9999)).slice(0, 30);
+    }
+    list = list.slice(0, 60);
+    const wrap = document.getElementById('playersBody');
+    if (!list.length) {
+        wrap.innerHTML = '<div class="empty">No players match your search.</div>';
+        return;
+    }
+    wrap.innerHTML = '<div class="player-grid">' + list.map(p => {
+        const formHtml = (p.form || []).slice(0, 10).map(r => `<span class="fdot ${r}">${r}</span>`).join('');
+        const surfHtml = ['Hard','Clay','Grass'].map(s => {
+            const sd = (p.surfaces || {})[s] || {};
+            const se = (p.surf_elo || {})[s] || {};
+            const wr = sd.wr || 0;
+            return `<div class="surf">
+                <div class="lbl surface-${s}">${s}</div>
+                <div class="bar"><div class="fill" style="width:${Math.min(100, wr)}%"></div></div>
+                <div style="text-align:right;color:#c4a44e">${wr.toFixed(0)}% · ${se.elo || '—'}</div>
+            </div>`;
+        }).join('');
+        const mental = (p.mental || {});
+        const mentalHtml = ['deciding','tiebreak','comeback','finals'].map(k => {
+            const m = mental[k] || {};
+            const lbl = k.toUpperCase();
+            return `<div class="m"><div class="l">${lbl}</div><div class="v">${m.pct ?? '—'}%</div></div>`;
+        }).join('');
+        const handStr = p.hand === 'R' ? 'Right' : p.hand === 'L' ? 'Left' : '—';
+        return `<div class="pcard">
+            <div class="head">
+                <div>
+                    <div class="name">${escapeHtml(p.name || '—')}</div>
+                    <div class="meta">${escapeHtml(p.country || '')} • ${p.age ? Math.floor(p.age) + 'y' : '—'} • ${handStr}-handed • ${escapeHtml(p.tour || '')}</div>
+                </div>
+                <div class="rank">#${p.rank || '—'}</div>
+            </div>
+            <div class="row">
+                <div class="lbl">FORM (LAST 10)</div>
+                <div class="form-strip">${formHtml || '—'}</div>
+            </div>
+            <div class="row">
+                <div class="lbl">ELO</div>
+                <div style="color:#c4a44e">${p.elo || '—'} (${p.elo_pct || '—'}th pct)</div>
+            </div>
+            <div class="section-lbl">SURFACE WIN RATE / ELO</div>
+            ${surfHtml}
+            <div class="section-lbl">MENTAL (DECIDING/TB/COMEBACK/FINALS)</div>
+            <div class="mental">${mentalHtml}</div>
+        </div>`;
+    }).join('') + '</div>';
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────
+(async function init() {
+    // Auth check
+    try {
+        const r = await fetch('/members/api/me');
+        if (r.status === 401) { location.href = '/members'; return; }
+    } catch (e) {}
+    // Restore tab from hash if present
+    const h = (location.hash || '').replace('#', '');
+    if (h && document.getElementById('panel-' + h)) {
+        showTab(h);
+    } else {
+        loadSignals();
+    }
 })();
-// Verify session — bounce to login if cookie expired mid-session
-fetch('/members/api/me').then(r => {
-    if (r.status === 401) location.href = '/members';
-}).catch(()=>{});
 </script>
 
 </body>
