@@ -55,11 +55,70 @@ def log(msg: str):
         pass
 
 
+SPREAD_TOLERANCE_CENTS = 5  # Auto-execute if price gap ≤ this many cents
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
 def get_admin_cookie() -> str:
     if not ADMIN_PASSWORD or not SECRET_KEY:
         log("ERROR: ADMIN_PASSWORD and SECRET_KEY must be set in .env")
         return ""
     return hashlib.sha256(f"{ADMIN_PASSWORD}:{SECRET_KEY}".encode()).hexdigest()
+
+
+def fetch_clob_price(token_id: str) -> float | None:
+    """Fetch current best BUY price from Polymarket CLOB."""
+    import requests
+    try:
+        resp = requests.get(
+            "https://clob.polymarket.com/price",
+            params={"token_id": token_id, "side": "BUY"},
+            headers={"Accept": "application/json", "User-Agent": "python-requests/2.31.0"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return float(resp.json().get("price", 0) or 0)
+    except Exception as e:
+        log(f"  [spread] Price fetch failed: {e}")
+        return None
+
+
+def notify_spread_too_wide(trade: dict, signal_price: float, current_price: float, gap: float):
+    """Send Telegram alert that spread is too wide — ask user to approve at new price."""
+    import urllib.request
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        log("  [spread] No Telegram credentials — can't notify about wide spread")
+        return
+    try:
+        text = (
+            f"⚠️ <b>SPREAD ALERT</b>\n\n"
+            f"\U0001f3be {trade.get('bet_on', '?')}\n"
+            f"{trade.get('match', '?')}\n\n"
+            f"Signal price: <b>{signal_price:.0f}c</b>\n"
+            f"Current price: <b>{current_price*100:.0f}c</b>\n"
+            f"Gap: <b>{gap:.0f}c</b> (>{SPREAD_TOLERANCE_CENTS}c tolerance)\n\n"
+            f"Stake: ${trade.get('stake', 0):.2f}\n\n"
+            f"<i>Order NOT placed. Check Polymarket manually if you still want in.</i>"
+        )
+        payload = json.dumps({
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": text,
+            "parse_mode": "HTML",
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status == 200:
+                log("  [spread] Telegram alert sent — spread too wide")
+            else:
+                log(f"  [spread] Telegram send failed: {resp.status}")
+    except Exception as e:
+        log(f"  [spread] Telegram error: {e}")
 
 
 # ─── CLOB Client (V2) ─────────────────────────────────────────────────────────
@@ -549,22 +608,56 @@ def watch_mode(interval: int = 30, once: bool = False, dry_run: bool = False):
                     bet_on = trade.get("bet_on", "?")
                     match_name = trade.get("match", "?")
                     stake = trade.get("stake", 0)
+                    signal_price = trade.get("entry_price", trade.get("poly_price", 50))
 
                     log(f"\n{'─' * 50}")
                     log(f"EXECUTING: {bet_on}")
                     log(f"  Match: {match_name}")
-                    log(f"  Stake: ${stake:.2f} | Price: {trade.get('entry_price', '?')}c")
+                    log(f"  Stake: ${stake:.2f} | Signal Price: {signal_price}c")
 
-                    result = execute_order(client, trade, dry_run=dry_run)
+                    # ── Spread tolerance check ──
+                    # Fetch current CLOB price and compare to signal price
+                    token_id = trade.get("token_id") or ""
+                    if not token_id:
+                        token_id = resolve_token_id(trade)
+                        if token_id:
+                            trade["token_id"] = token_id
 
-                    if result.get("success"):
-                        log(f"  SUCCESS — placed at {result.get('price')}, size={result.get('size')}")
-                        if not dry_run:
-                            report_execution(pid, True, order=result.get("order"))
+                    skip_trade = False
+                    if token_id:
+                        current_price = fetch_clob_price(token_id)
+                        if current_price and current_price > 0:
+                            current_cents = current_price * 100 if current_price <= 1 else current_price
+                            signal_cents = signal_price if signal_price <= 100 else signal_price / 100
+                            gap = abs(current_cents - signal_cents)
+                            log(f"  Current CLOB: {current_cents:.1f}c | Signal: {signal_cents:.0f}c | Gap: {gap:.1f}c")
+
+                            if gap <= SPREAD_TOLERANCE_CENTS:
+                                # Within tolerance — execute at current market price
+                                if gap > 0:
+                                    log(f"  Spread {gap:.1f}c ≤ {SPREAD_TOLERANCE_CENTS}c — adjusting to market price")
+                                    trade["entry_price"] = round(current_cents, 1)
+                            else:
+                                # Spread too wide — notify and skip
+                                log(f"  Spread {gap:.1f}c > {SPREAD_TOLERANCE_CENTS}c — SKIPPING (notifying via Telegram)")
+                                notify_spread_too_wide(trade, signal_cents, current_price, gap)
+                                if not dry_run:
+                                    report_execution(pid, False, error=f"Spread too wide: {gap:.1f}c (limit: {SPREAD_TOLERANCE_CENTS}c)")
+                                skip_trade = True
                     else:
-                        log(f"  FAILED — {result.get('error')}")
-                        if not dry_run:
-                            report_execution(pid, False, error=result.get("error", ""))
+                        log(f"  No token_id — can't check spread, proceeding with signal price")
+
+                    if not skip_trade:
+                        result = execute_order(client, trade, dry_run=dry_run)
+
+                        if result.get("success"):
+                            log(f"  SUCCESS — placed at {result.get('price')}, size={result.get('size')}")
+                            if not dry_run:
+                                report_execution(pid, True, order=result.get("order"))
+                        else:
+                            log(f"  FAILED — {result.get('error')}")
+                            if not dry_run:
+                                report_execution(pid, False, error=result.get("error", ""))
 
                     executed_ids.add(pid)
 

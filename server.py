@@ -1501,8 +1501,8 @@ def api_bets_raw():
 # ─── Polymarket Trade Data Integration ───
 
 def fetch_poly_trades(since_ts=None):
-    """Fetch user's actual trades from Polymarket Data API."""
-    import urllib.request, urllib.parse
+    """Fetch user's actual trades from Polymarket Data API.
+    Uses requests library (works on Render's proxy — urllib gets 403)."""
     trades = []
     try:
         params = {
@@ -1515,16 +1515,20 @@ def fetch_poly_trades(since_ts=None):
         if since_ts:
             params["start"] = str(int(since_ts))
 
-        qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
-        url = f"{POLY_DATA_API}/activity?{qs}"
-        req_obj = urllib.request.Request(url, headers={
-            "Accept": "application/json",
-            "User-Agent": "python-requests/2.31.0",
-            "Accept-Encoding": "identity",
-            "Connection": "close",
-        })
-        with urllib.request.urlopen(req_obj, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
+        resp = http_requests.get(
+            f"{POLY_DATA_API}/activity",
+            params=params,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "close",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         if isinstance(data, list):
             trades = data
@@ -1919,21 +1923,17 @@ def api_players():
 def api_live_prices():
     """Fetch fresh Polymarket prices for all active signal markets.
     Returns a map of slug → {prices: {outcome: price_cents}, volume}."""
-    import urllib.request, urllib.parse
 
     _GAMMA_HEADERS = {
         "Accept": "application/json",
-        "User-Agent": "python-requests/2.31.0",
-        "Accept-Encoding": "identity",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br",
         "Connection": "close",
     }
     def _gamma_price_get(url, params=None, timeout=3):
-        if params:
-            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
-            url = f"{url}?{qs}"
-        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
-        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
-            return json.loads(resp.read().decode())
+        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
 
     try:
         # Read current picks to get slugs
@@ -2024,21 +2024,17 @@ def api_whales():
     """Fetch whale data for a specific market on-demand.
     Query params: slug (market slug), token_ids (comma-sep CLOB token IDs),
     outcomes (comma-sep outcome names), volume (total market volume)."""
-    import urllib.request, urllib.parse
 
     _GAMMA_HEADERS = {
         "Accept": "application/json",
-        "User-Agent": "python-requests/2.31.0",
-        "Accept-Encoding": "identity",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br",
         "Connection": "close",
     }
     def _gamma_whale_get(url, params=None, timeout=8):
-        if params:
-            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
-            url = f"{url}?{qs}"
-        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
-        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
-            return json.loads(resp.read().decode())
+        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
 
     try:
         slug = request.args.get("slug", "")
@@ -2151,24 +2147,21 @@ def _run_inline_resolver(prefetched_markets=None):
                        (bypasses Cloudflare WAF that blocks datacenter IPs).
     Returns dict with keys: status, message, output.
     """
-    import urllib.request, urllib.parse
     import time
 
     _GAMMA_HEADERS = {
         "Accept": "application/json",
-        "User-Agent": "python-requests/2.31.0",
-        "Accept-Encoding": "identity",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
         "Connection": "close",
     }
 
     def _gamma_get(url, params=None, timeout=10):
-        """Fetch JSON from Polymarket Gamma API using urllib. Falls back gracefully if blocked."""
-        if params:
-            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
-            url = f"{url}?{qs}"
-        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
-        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
-            return json.loads(resp.read().decode())
+        """Fetch JSON from Polymarket Gamma API using requests (works on Render's proxy)."""
+        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
     t0 = time.time()
 
     logger.info("Running inline outcome resolution...")
@@ -3555,9 +3548,9 @@ def after_request(response):
 
 
 def _auto_resolve_loop():
-    """Background thread that auto-resolves bets every 4 hours."""
+    """Background thread that auto-resolves bets every 1 hour."""
     import time as _time
-    AUTO_RESOLVE_INTERVAL = 4 * 3600  # 4 hours
+    AUTO_RESOLVE_INTERVAL = 1 * 3600  # 1 hour (was 4h — too slow for match resolution)
     _time.sleep(120)  # Wait 2 min after startup before first run
     while True:
         try:
@@ -3581,25 +3574,22 @@ def _position_monitor_loop():
     Fetches current prices via Gamma API, checks stop-loss/take-profit/trailing-stop,
     queues exits in pending_trades.json, and sends Telegram alerts."""
     import time as _time
-    import urllib.request
-    import urllib.parse
 
     _time.sleep(90)  # Wait 90s after startup before first run
 
     _GAMMA_HEADERS = {
         "Accept": "application/json",
-        "User-Agent": "python-requests/2.31.0",
-        "Accept-Encoding": "identity",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
         "Connection": "close",
     }
 
     def _gamma_get(url, params=None, timeout=5):
-        if params:
-            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in params.items())
-            url = f"{url}?{qs}"
-        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
-        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
-            return json.loads(resp.read().decode())
+        """Fetch JSON from Polymarket Gamma API using requests (works on Render's proxy)."""
+        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
 
     # Track peak prices across cycles (persists in memory)
     peak_tracker = {}  # key: match|bet_on → peak price in cents
@@ -4504,20 +4494,16 @@ def comeback_signals():
     if not check_admin_cookie():
         return jsonify({"error": "Unauthorized"}), 401
 
-    import urllib.request, urllib.parse
     _GAMMA_HEADERS = {
         "Accept": "application/json",
-        "User-Agent": "python-requests/2.31.0",
-        "Accept-Encoding": "identity",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br",
         "Connection": "close",
     }
     def _gamma_get(url, params=None, timeout=8):
-        if params:
-            qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k,v in params.items())
-            url = f"{url}?{qs}"
-        req_obj = urllib.request.Request(url, headers=_GAMMA_HEADERS)
-        with urllib.request.urlopen(req_obj, timeout=timeout) as resp:
-            return json.loads(resp.read().decode())
+        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
 
     try:
         # 1. Load previous price snapshots
@@ -4971,7 +4957,7 @@ def _start_background_threads():
 
     resolver_thread = threading.Thread(target=_auto_resolve_loop, daemon=True)
     resolver_thread.start()
-    logger.info("[AUTO-RESOLVE] Background resolver started (every 4 hours)")
+    logger.info("[AUTO-RESOLVE] Background resolver started (every 1 hour)")
 
     monitor_thread = threading.Thread(target=_position_monitor_loop, daemon=True)
     monitor_thread.start()
