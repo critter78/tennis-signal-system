@@ -242,16 +242,73 @@ def _parse_wta_html(html):
     return rankings
 
 
+def _stream_html_section(url, start_marker, end_marker, max_bytes=300_000):
+    """Stream an HTML page and extract only the section between start/end markers.
+    Stops downloading as soon as end_marker is found — never holds the full page.
+    This keeps memory under control on Render's 512MB Starter plan."""
+    buffer = ""
+    found_start = False
+    section = ""
+
+    resp = _req.get(url, headers=_BROWSER_HEADERS, timeout=30, stream=True)
+    resp.raise_for_status()
+
+    for chunk in resp.iter_content(chunk_size=8192, decode_unicode=True):
+        if chunk is None:
+            continue
+        # If response is bytes, decode
+        if isinstance(chunk, bytes):
+            chunk = chunk.decode("utf-8", errors="replace")
+
+        buffer += chunk
+
+        if not found_start:
+            idx = buffer.find(start_marker)
+            if idx >= 0:
+                buffer = buffer[idx:]  # trim everything before the marker
+                found_start = True
+            elif len(buffer) > max_bytes:
+                # Marker not found within max_bytes — give up
+                resp.close()
+                return ""
+            else:
+                # Keep only the tail (marker could span chunks)
+                if len(buffer) > len(start_marker) * 2:
+                    buffer = buffer[-(len(start_marker) * 2):]
+                continue
+
+        # We've found the start — now look for the end
+        end_idx = buffer.find(end_marker)
+        if end_idx >= 0:
+            section = buffer[:end_idx + len(end_marker)]
+            resp.close()
+            return section
+
+        # Safety: don't accumulate more than max_bytes after start
+        if len(buffer) > max_bytes:
+            resp.close()
+            return buffer[:max_bytes]
+
+    resp.close()
+    return buffer if found_start else ""
+
+
 def _fetch_atp_rankings(top_n=200):
     """Fetch current ATP singles rankings from atptour.com.
-    Uses regex parsing (no BeautifulSoup) to stay under 512MB on Render."""
+    Streams HTML and extracts only <tbody>...</tbody> to minimize memory."""
     rankings = {}
 
     try:
-        print("  [rankings] Fetching ATP Tour HTML...")
-        resp = _req.get(_ATP_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=30)
-        resp.raise_for_status()
-        rankings = _parse_atp_html(resp.text)
+        print("  [rankings] Streaming ATP Tour HTML (tbody only)...")
+        section = _stream_html_section(
+            _ATP_RANKINGS_URL,
+            start_marker="<tbody",
+            end_marker="</tbody>",
+            max_bytes=200_000,  # ATP table is ~130KB
+        )
+        if section:
+            # Wrap in minimal HTML so parser can find it
+            rankings = _parse_atp_html("<table class='mega-table'>" + section + "</table>")
         if rankings and len(rankings) >= 10:
             print(f"  [rankings] ATP HTML scrape: {len(rankings)} entries")
             return rankings
@@ -265,14 +322,23 @@ def _fetch_atp_rankings(top_n=200):
 
 def _fetch_wta_rankings(top_n=200):
     """Fetch current WTA singles rankings from wtatennis.com.
-    Uses regex parsing (no BeautifulSoup) to stay under 512MB on Render."""
+    Streams HTML and extracts only the rankings table to minimize memory."""
     rankings = {}
 
     try:
-        print("  [rankings] Fetching WTA Tour HTML...")
-        resp = _req.get(_WTA_RANKINGS_URL, headers=_BROWSER_HEADERS, timeout=30)
-        resp.raise_for_status()
-        rankings = _parse_wta_html(resp.text)
+        print("  [rankings] Streaming WTA Tour HTML (table only)...")
+        section = _stream_html_section(
+            _WTA_RANKINGS_URL,
+            start_marker='class="rankings__list',
+            end_marker="</table>",
+            max_bytes=250_000,
+        )
+        if section:
+            # Find the <table tag that precedes the class attribute
+            table_idx = section.rfind("<table", 0, 50)
+            if table_idx < 0:
+                section = "<table " + section
+            rankings = _parse_wta_html(section)
         if rankings and len(rankings) >= 10:
             print(f"  [rankings] WTA HTML scrape: {len(rankings)} entries")
             return rankings
