@@ -299,6 +299,14 @@ def add_pending_trade(trade: dict):
         if p.get("match") == match_key and p.get("bet_on") == bet_key:
             return  # already queued
 
+    # Don't queue if user already placed a manual bet on this match
+    existing_bets = load_existing_bets()
+    for b in existing_bets:
+        if b.get("match") == match_key:
+            outcome = b.get("outcome")
+            if outcome not in ("win", "loss", "void"):
+                return  # active manual bet exists — skip
+
     # Don't re-queue trades that were already confirmed or rejected TODAY
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     history = load_trade_history()
