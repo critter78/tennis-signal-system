@@ -101,6 +101,31 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGRAM_BOT_TOKEN else ""
 
 
+def _urllib_json_get(url, params=None, headers=None, timeout=10):
+    """Fetch JSON via urllib — avoids requests recursion bug on Render."""
+    import urllib.request
+    import urllib.parse
+    if params:
+        url = url + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, method="GET")
+    if headers:
+        for k, v in headers.items():
+            # urllib doesn't support brotli — only accept gzip/deflate
+            if k.lower() == "accept-encoding":
+                v = "gzip, deflate"
+            req.add_header(k, v)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read()
+        encoding = resp.headers.get("Content-Encoding", "")
+        if "gzip" in encoding:
+            import gzip
+            raw = gzip.decompress(raw)
+        elif "deflate" in encoding:
+            import zlib
+            raw = zlib.decompress(raw)
+        return json.loads(raw)
+
+
 def telegram_send(text: str, reply_markup: dict = None) -> bool:
     """Send a Telegram message via urllib (avoids requests recursion on Render)."""
     import urllib.request
@@ -2490,20 +2515,14 @@ def fetch_poly_trades(since_ts=None):
         if since_ts:
             params["start"] = str(int(since_ts))
 
-        resp = http_requests.get(
-            f"{POLY_DATA_API}/activity",
-            params=params,
-            headers={
+        _activity_headers = {
                 "Accept": "application/json",
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept-Encoding": "gzip, deflate, br",
                 "Connection": "close",
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        }
+        data = _urllib_json_get(f"{POLY_DATA_API}/activity", params=params, headers=_activity_headers, timeout=15)
 
         if isinstance(data, list):
             trades = data
@@ -2906,9 +2925,7 @@ def api_live_prices():
         "Connection": "close",
     }
     def _gamma_price_get(url, params=None, timeout=3):
-        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
-        resp.raise_for_status()
-        return resp.json()
+        return _urllib_json_get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
 
     try:
         # Read current picks to get slugs
@@ -3007,9 +3024,7 @@ def api_whales():
         "Connection": "close",
     }
     def _gamma_whale_get(url, params=None, timeout=8):
-        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
-        resp.raise_for_status()
-        return resp.json()
+        return _urllib_json_get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
 
     try:
         slug = request.args.get("slug", "")
@@ -3133,10 +3148,8 @@ def _run_inline_resolver(prefetched_markets=None):
     }
 
     def _gamma_get(url, params=None, timeout=10):
-        """Fetch JSON from Polymarket Gamma API using requests (works on Render's proxy)."""
-        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
-        resp.raise_for_status()
-        return resp.json()
+        """Fetch JSON from Polymarket Gamma API via urllib (avoids requests recursion on Render)."""
+        return _urllib_json_get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
     t0 = time.time()
 
     logger.info("Running inline outcome resolution...")
@@ -4561,10 +4574,8 @@ def _position_monitor_loop():
     }
 
     def _gamma_get(url, params=None, timeout=5):
-        """Fetch JSON from Polymarket Gamma API using requests (works on Render's proxy)."""
-        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
-        resp.raise_for_status()
-        return resp.json()
+        """Fetch JSON from Polymarket Gamma API via urllib (avoids requests recursion on Render)."""
+        return _urllib_json_get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
 
     # Track peak prices across cycles (persists in memory)
     peak_tracker = {}  # key: match|bet_on → peak price in cents
@@ -5562,9 +5573,7 @@ def comeback_signals():
         "Connection": "close",
     }
     def _gamma_get(url, params=None, timeout=8):
-        resp = http_requests.get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
-        resp.raise_for_status()
-        return resp.json()
+        return _urllib_json_get(url, params=params, headers=_GAMMA_HEADERS, timeout=timeout)
 
     try:
         # 1. Load previous price snapshots
