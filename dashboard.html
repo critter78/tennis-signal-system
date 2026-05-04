@@ -3635,6 +3635,8 @@ function renderSignals() {
                     const edgeB = (probB - priceB).toFixed(1);
                     const isBetA = myBets.some(b => b.match === s.match && b.bet_on === pA);
                     const isBetB = myBets.some(b => b.match === s.match && b.bet_on === pB);
+                    const isAutoA = isAutoTrade && betOn === pA;
+                    const isAutoB = isAutoTrade && betOn === pB;
                     const matchE = s.match.replace(/'/g,"\\'");
                     const pAe = pA.replace(/'/g,"\\'");
                     const pBe = pB.replace(/'/g,"\\'");
@@ -3654,8 +3656,8 @@ function renderSignals() {
                     const isEdgeB = edgePick === pB;
                     const roleA = wonA ? '✓ WINNER' : (isEdgeA ? 'EDGE PICK' : 'BET');
                     const roleB = wonB ? '✓ WINNER' : (isEdgeB ? 'EDGE PICK' : 'BET');
-                    const labelA = (!isResolved && isBetA) ? '✓ ACTIVE' : roleA;
-                    const labelB = (!isResolved && isBetB) ? '✓ ACTIVE' : roleB;
+                    const labelA = (!isResolved && (isBetA || isAutoA)) ? '✓ ACTIVE' : roleA;
+                    const labelB = (!isResolved && (isBetB || isAutoB)) ? '✓ ACTIVE' : roleB;
                     const classA = wonA ? 'winner-pick' : (isEdgeA ? 'edge-pick' : '');
                     const classB = wonB ? 'winner-pick' : (isEdgeB ? 'edge-pick' : '');
                     // Gap = model_prob - poly_price (positive = model more confident than market)
@@ -3666,12 +3668,12 @@ function renderSignals() {
                     const gapBgA = gapA >= 10 ? '#4caf5025' : gapA >= 0 ? '#81c78415' : '#f4433615';
                     const gapBgB = gapB >= 10 ? '#4caf5025' : gapB >= 0 ? '#81c78415' : '#f4433615';
                     return `<div class="v5-bet-selector">
-                        <div class="bet-option ${classA} ${isBetA ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pAe}', ${priceA}, ${probA}, ${edgeA}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
+                        <div class="bet-option ${classA} ${(isBetA || isAutoA) ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pAe}', ${priceA}, ${probA}, ${edgeA}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
                             <span class="bo-label">${labelA}</span>
                             <span class="bo-name">${nameA}</span>
                             <span class="bo-prob"><span>${probA.toFixed(0)}%</span><span class="bo-gap" style="color:${gapColorA};background:${gapBgA}">${gapA >= 0 ? '+' : ''}${gapA.toFixed(0)}</span><span>${priceA.toFixed(0)}c</span></span>
                         </div>
-                        <div class="bet-option ${classB} ${isBetB ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pBe}', ${priceB}, ${probB}, ${edgeB}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
+                        <div class="bet-option ${classB} ${(isBetB || isAutoB) ? 'active-bet' : ''}" onclick="toggleSigBet(this, '${matchE}', '${pBe}', ${priceB}, ${probB}, ${edgeB}, ${s.kelly_stake||0}, '${s.market_type||''}', '${tournE}', '${s.surface||''}', '${linkE}')">
                             <span class="bo-label">${labelB}</span>
                             <span class="bo-name">${nameB}</span>
                             <span class="bo-prob"><span>${probB.toFixed(0)}%</span><span class="bo-gap" style="color:${gapColorB};background:${gapBgB}">${gapB >= 0 ? '+' : ''}${gapB.toFixed(0)}</span><span>${priceB.toFixed(0)}c</span></span>
