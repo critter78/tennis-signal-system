@@ -306,8 +306,24 @@ def execute_order(client, trade: dict, dry_run: bool = False) -> dict:
         return {"success": True, "order": order, "price": price, "size": size, "stake": stake}
 
     except Exception as e:
+        err_str = str(e)
         log(f"  CLOB V2 order failed: {e}")
-        return {"success": False, "error": str(e)}
+
+        # ── Stale token_id? Re-resolve from Gamma and retry once ──
+        if "does not exist" in err_str and not trade.get("_retried_resolve"):
+            log("  Orderbook gone — re-resolving token_id from Gamma API...")
+            new_token = resolve_token_id(trade)
+            if new_token and new_token != token_id:
+                log(f"  Got fresh token_id: {new_token[:30]}...")
+                trade["token_id"] = new_token
+                trade["_retried_resolve"] = True
+                return execute_order(client, trade, dry_run=False)
+            elif not new_token:
+                log("  Could not find this match on Polymarket — market may be resolved")
+            else:
+                log("  Same token_id returned — market is truly gone")
+
+        return {"success": False, "error": err_str}
 
 
 # ─── Server Communication ─────────────────────────────────────────────────────

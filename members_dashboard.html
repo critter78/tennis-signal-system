@@ -49,12 +49,13 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .sig-summary { background: #1a1d27; border: 1px solid #2d3139; padding: 14px 18px; margin-bottom: 14px; font-size: 13px; color: #aaa; display: flex; gap: 24px; flex-wrap: wrap; border-radius: 8px; }
 .sig-summary strong { color: #e0e0e0; }
 
-/* ── Signal Cards (v5 style) ── */
-.sig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 18px; }
+/* ══════════════════════════════════════════════════════════════════════
+   SIGNAL CARDS — COPIED FROM MAIN DASHBOARD (lines 158-367)
+   ══════════════════════════════════════════════════════════════════════ */
+.sig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 18px; }
 .sig-card { background: #1a1d27; border-radius: 10px; border: 1px solid #2d3139; padding: 0; overflow: hidden; transition: border-color 0.2s; box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 8px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04); }
 .sig-card:hover { border-color: #d4740a; }
-
-/* Card Header */
+/* v5.1 Card Header */
 .card-hdr { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 14px; background: linear-gradient(135deg, #1a1d27 0%, #22252f 100%); border-bottom: 1px solid #2a2d37; }
 .hdr-names { font-size: 15px; font-weight: 700; color: #fff; background: linear-gradient(180deg, #10121a 0%, #161922 100%); border: 1px solid #2a2d37; border-radius: 5px; padding: 8px 16px; margin-bottom: 4px; box-shadow: inset 0 1px 4px rgba(0,0,0,0.3), inset 0 0 10px rgba(196,135,58,0.15), inset 0 -1px 4px rgba(196,135,58,0.10), inset 1px 0 4px rgba(196,135,58,0.08), inset -1px 0 4px rgba(196,135,58,0.08), 0 1px 0 rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 2px; }
 .hdr-names .pa { color: #fff; white-space: nowrap; }
@@ -64,46 +65,150 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .hdr-surface { font-weight: 700; }
 .hdr-date { color: #6c757d; font-size: 10px; }
 .hdr-round { color: #888; font-size: 10px; }
-
-/* Pick Area */
+.active-tag { display: inline-block; background: #d4740a; color: #fff; font-size: 8px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; }
+.badge-row { display: flex; gap: 4px; justify-content: flex-end; }
+/* v5.1 Tab Bar */
+.v5-tab-bar { display: flex; background: #12141c; border-bottom: 2px solid #2a2d37; padding: 0 6px; }
+.v5-tab-btn { flex: 1; padding: 8px 4px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; font-family: 'IBM Plex Mono', monospace; border-right: 1px solid #2a2d37; }
+.v5-tab-btn:last-child { border-right: none; }
+.v5-tab-btn:hover { color: #aaa; }
+.v5-tab-btn.active { color: #d4740a; border-bottom-color: #d4740a; background: #1a1d2780; }
+.v5-tab-btn .ti { font-size: 16px; display: block; margin-bottom: 3px; line-height: 1; }
+.v5-tab-btn .ti img { width: 24px; height: 24px; display: inline-block; vertical-align: middle; }
+@keyframes boltFlash { 0%,100% { filter: brightness(1); } 20% { filter: brightness(2.5) drop-shadow(0 0 4px #ffd600); } 40% { filter: brightness(0.8); } 60% { filter: brightness(2) drop-shadow(0 0 3px #ffd600); } 80% { filter: brightness(1); } }
+.v5-tab-btn:hover .ti-bolt img { animation: boltFlash 0.6s ease-in-out; }
+/* MATCHUP: two rackets apart -> clash with ball */
+.ti-matchup { display: flex !important; justify-content: center; align-items: center; gap: 1px; margin-bottom: 4px; }
+.ti-matchup .racket-l, .ti-matchup .racket-r { display: inline-block; width: 12px; height: 22px; transition: transform 0.25s ease-out; }
+.ti-matchup .racket-l { transform: translateX(-2px) rotate(-8deg); }
+.ti-matchup .racket-r { transform: translateX(2px) rotate(8deg); }
+.ti-matchup .clash-ball { width: 8px; height: 8px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #c8e64a, #8bc34a 50%, #689f38); box-shadow: inset -1px -1px 2px rgba(0,0,0,0.3); transform: scale(0); transition: transform 0.1s; flex-shrink: 0; }
+@keyframes clashL { 0% { transform: translateX(-2px) rotate(-8deg); } 40% { transform: translateX(3px) rotate(8deg); } 55% { transform: translateX(1px) rotate(4deg); } 70% { transform: translateX(2px) rotate(6deg); } 100% { transform: translateX(1px) rotate(2deg); } }
+@keyframes clashR { 0% { transform: translateX(2px) rotate(8deg); } 40% { transform: translateX(-3px) rotate(-8deg); } 55% { transform: translateX(-1px) rotate(-4deg); } 70% { transform: translateX(-2px) rotate(-6deg); } 100% { transform: translateX(-1px) rotate(-2deg); } }
+@keyframes ballPop { 0%,30% { transform: scale(0); } 40% { transform: scale(1.4); } 55% { transform: scale(0.9); } 65% { transform: scale(1.15); } 80%,100% { transform: scale(1); } }
+.v5-tab-btn:hover .ti-matchup .racket-l { animation: clashL 0.45s ease-out forwards; }
+.v5-tab-btn:hover .ti-matchup .racket-r { animation: clashR 0.45s ease-out forwards; }
+.v5-tab-btn:hover .ti-matchup .clash-ball { animation: ballPop 0.5s ease-out forwards; }
+/* Court icon: hard court default, hover turns to grass GREEN */
+.ti-court img { width: 24px; height: 24px; transition: filter 0.3s; }
+.v5-tab-btn:hover .ti-court img { filter: hue-rotate(-90deg) saturate(1.8) brightness(1.1); }
+/* Market icon: shake on hover */
+.ti-market img { width: 24px; height: 24px; }
+@keyframes moneyShake { 0%,100% { transform: translateX(0) rotate(0); } 15% { transform: translateX(-2px) rotate(-4deg); } 30% { transform: translateX(2px) rotate(4deg); } 45% { transform: translateX(-2px) rotate(-3deg); } 60% { transform: translateX(1px) rotate(2deg); } 75% { transform: translateX(-1px) rotate(-1deg); } }
+.v5-tab-btn:hover .ti-market img { animation: moneyShake 0.5s ease-in-out; }
+.v5-tab-panel { display: none; }
+.v5-tab-panel.active { display: block; }
+/* v5.1 Low data banner */
+.low-data-banner { background: #3e2723; border-bottom: 1px solid #f4433640; color: #ff8a80; font-size: 10px; padding: 6px 14px; display: flex; align-items: center; gap: 6px; }
+/* v5.1 Pick Area */
 .v5-pick-area { padding: 12px 14px 8px; }
 .v5-pick-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
 .v5-pick-lbl { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
 .v5-pick-name { font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 4px; }
 .v5-badge-line { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.v5-bdg { font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.3px; text-transform: uppercase; min-width: 56px; text-align: center; }
+.v5-bdg { font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.3px; text-transform: uppercase; cursor: help; min-width: 56px; text-align: center; }
 .v5-pick-right { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
 .v5-pbox { padding: 6px 0; text-align: center; width: 105px; min-height: 38px; border-radius: 4px; display: flex; flex-direction: column; justify-content: center; }
 .v5-pbox .bl { font-size: 7px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1px; color: rgba(255,255,255,0.85); }
 .v5-pbox .bv { font-size: 15px; font-weight: 700; color: #fff; }
-
-/* Number Grids */
+/* v5.1 Number Grids */
 .v5-nbox { padding: 0 14px 6px; }
 .v5-ngrid { display: grid; gap: 1px; background: #2a2d37; border-radius: 6px; overflow: hidden; }
+.v5-g4 { grid-template-columns: repeat(4,1fr); }
 .v5-g3 { grid-template-columns: repeat(3,1fr); }
 .v5-nc { background: #1a1d27; padding: 7px 4px; text-align: center; }
 .v5-nc .nl { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
 .v5-nc .nv { font-size: 14px; font-weight: 700; }
 .v5-divider { height: 1px; background: linear-gradient(90deg, transparent 0%, #333 15%, #333 85%, transparent 100%); margin: 2px 14px 0; }
-
-/* Card Footer */
+/* v5.1 SYS WR Badge (inline badge hidden - using v5-pbox now) */
+.sys-wr-badge { display: none; }
+/* v5.1 Peak Potential */
+.v5-peak-strip { margin: 2px 14px 8px; padding: 8px 10px; background: #12141c; border-radius: 6px; border: 1px solid #2a2d37; display: flex; justify-content: space-between; align-items: center; }
+.v5-peak-label { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+.v5-peak-value { font-size: 14px; font-weight: 700; color: #4caf50; }
+.v5-peak-sub { font-size: 9px; color: #888; }
+.v5-peak-hit-rate { font-size: 11px; font-weight: 700; color: #4caf50; }
+.v5-peak-hit-sub { font-size: 8px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.3px; }
+.v5-peak-bar-track { width: 90px; height: 6px; background: #2a2d37; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.v5-peak-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #d4740a, #4caf50); }
+/* v5.1 3-col Stats */
+.v5-s3 { padding: 10px 14px; }
+.v5-s3h { display: grid; grid-template-columns: 1fr auto 1fr; margin-bottom: 6px; }
+.v5-s3h .ph { font-size: 12px; font-weight: 700; color: #fff; padding-bottom: 4px; border-bottom: 1px solid #333; }
+.v5-s3h .pr { text-align: right; }
+.v5-s3h .v5-hc { text-align: center; min-width: 100px; padding: 0 6px; }
+.v5-s3r { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 4px 0; border-bottom: 1px solid #1f222c; }
+.v5-s3r:last-child { border-bottom: none; }
+.v5-vl { text-align: left; font-size: 11.5px; color: #ddd; }
+.v5-vr { text-align: right; font-size: 11.5px; color: #ddd; }
+.v5-vc { text-align: center; font-size: 10px; color: #888; min-width: 100px; padding: 0 6px; font-weight: 500; }
+.v5-win-mark { display: inline-block; width: 18px; height: 18px; vertical-align: middle; margin: 0 2px; opacity: 1; }
+.v5-win-mark-r { transform: scaleX(-1); }
+@keyframes freshDotCycle {
+    0%   { background: #4caf50; opacity: 0.2; }
+    16%  { background: #4caf50; opacity: 1; }
+    33%  { background: #ffc107; opacity: 0.2; }
+    50%  { background: #ffc107; opacity: 1; }
+    66%  { background: #ff9800; opacity: 0.2; }
+    83%  { background: #ff9800; opacity: 1; }
+    100% { background: #4caf50; opacity: 0.2; }
+}
+@keyframes freshTextCycle {
+    0%   { color: #e0e0e0; }
+    33%  { color: #4caf50; }
+    66%  { color: #ffc107; }
+    100% { color: #e0e0e0; }
+}
+.fresh-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; animation: freshDotCycle 6s ease-in-out infinite; }
+.fresh-text { animation: freshTextCycle 6s ease-in-out infinite; font-weight: 600; letter-spacing: 0.3px; }
+.vg { color: #4caf50; } .vb { color: #f44336; } .vo { color: #d4740a; font-weight: 700; } .vd { color: #555; } .vblue { color: #42a5f5; }
+/* v5.1 H2H */
+.v5-h2h-bar { text-align: center; padding: 5px 0; margin: 2px 0; border-top: 1px solid #2a2d37; border-bottom: 1px solid #2a2d37; }
+.v5-h2h-label { font-size: 8px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1px; }
+.v5-h2h-v { font-size: 16px; font-weight: 700; color: #d4740a; }
+/* v5.1 ELO Box */
+.v5-elo-box { margin: 8px 14px; padding: 8px 10px; background: #12141c; border-radius: 6px; border: 1px solid #2a2d37; }
+.v5-elo-title { font-size: 10px; color: #d4740a; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; text-align: center; }
+.v5-elo-prob-row { text-align: center; font-size: 10px; color: #ccc; margin-top: 6px; padding-top: 5px; border-top: 1px solid #2a2d37; }
+.v5-elo-prob-val { font-weight: 700; font-size: 12px; }
+/* v5.1 Market Tab */
+.v5-market-section { padding: 12px 14px; }
+.v5-market-header { font-size: 10px; color: #d4740a; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; text-align: center; }
+.v5-market-stat { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-bottom: 1px solid #1f222c; color: #ddd; }
+.v5-market-stat:last-child { border-bottom: none; }
+.v5-market-stat .ml { color: #888; }
+/* v5.1 Footer */
 .v5-card-foot { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-top: 1px solid #2a2d37; }
 .v5-bet-btn { background: #d4740a; color: #fff; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; transition: all 0.2s; }
 .v5-bet-btn:hover { background: #e8943a; }
+.v5-bet-btn.on { background: #4caf50; }
 .v5-plink { color: #42a5f5; font-size: 11px; text-decoration: none; }
 .v5-plink:hover { text-decoration: underline; }
+.live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; margin-right: 4px; animation: v5pulse 2s infinite; }
+@keyframes v5pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+/* v5.1 Deep Stats placeholder */
+.v5-deep-empty { padding: 20px 14px; text-align: center; color: #6c757d; font-size: 12px; }
+.v5-adv-section-title { padding: 6px 14px 2px; font-size: 10px; color: #d4740a; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; margin-bottom: 4px; text-align: center; border-bottom: 1px solid #2a2d37; padding-bottom: 5px; }
+/* Signal badges */
+.sig-badge { font-size: 9px; font-weight: 700; padding: 2px 8px; letter-spacing: 0.04em; display: inline-block; margin-left: 4px; }
+.badge-strong { background: #b71c1c; color: white; }
+.badge-solid { background: #e65100; color: white; }
+.badge-watch { background: #2d3139; color: #aaa; }
+.badge-value { background: #1b5e20; color: #4caf50; }
+.badge-bestvalue { background: #e65100; color: white; }
+.badge-edge { background: #0d47a1; color: #42a5f5; }
+.badge-eloalert { background: #4a148c; color: #ce93d8; }
 
-/* Outcome badge on card */
+/* ══════════════════════════════════════════════════════════════════════
+   MEMBERS-SPECIFIC STYLES
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Outcome badges */
 .outcome-badge { font-size: 9px; font-weight: 700; padding: 2px 8px; letter-spacing: 0.04em; display: inline-block; border-radius: 3px; }
 .outcome-win { background: #0e1f10; color: #4caf50; border: 1px solid #1b5e20; }
 .outcome-loss { background: #1f0f0f; color: #f44336; border: 1px solid #5a1f1f; }
 .outcome-void { background: #1f1a0f; color: #c4a44e; border: 1px solid #5a4a1f; }
 .outcome-open { background: #1f120a; color: #d4740a; border: 1px solid #5a3a0a; }
-
-/* Signal strength badges */
-.badge-strong { background: #b71c1c; color: white; }
-.badge-solid { background: #e65100; color: white; }
-.badge-watch { background: #2d3139; color: #aaa; }
 
 /* Surface colors */
 .surface-Hard { color: #4fc3f7; }
@@ -203,10 +308,6 @@ footer .brand-critter { font-size: 10px; font-weight: 700; letter-spacing: 0.10e
 footer .brand-labs { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; -webkit-text-fill-color: transparent; -webkit-text-stroke: 0.8px #c4873a; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)); margin-left: 1px; }
 footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-left: 6px; }
 
-/* ── Color helpers ── */
-.vg { color: #4caf50; }
-.vb { color: #f44336; }
-
 /* ── Responsive ── */
 @media (max-width: 600px) {
     .header { flex-direction: column !important; gap: 10px; padding: 12px 14px; }
@@ -233,7 +334,7 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
     <div style="display:flex; align-items:center">
         <svg class="header-logo" width="50" height="50" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="38" cy="32" rx="18" ry="22" stroke="#d4740a" stroke-width="3.5" fill="none"/><line x1="38" y1="54" x2="38" y2="74" stroke="#d4740a" stroke-width="4" stroke-linecap="round"/><line x1="28" y1="32" x2="48" y2="32" stroke="#d4740a" stroke-width="1.2" opacity="0.4"/><line x1="33" y1="22" x2="43" y2="22" stroke="#d4740a" stroke-width="1.2" opacity="0.4"/><line x1="33" y1="42" x2="43" y2="42" stroke="#d4740a" stroke-width="1.2" opacity="0.4"/><line x1="38" y1="12" x2="38" y2="52" stroke="#d4740a" stroke-width="1.2" opacity="0.4"/><circle cx="38" cy="32" r="10" stroke="#d4740a" stroke-width="1.2" fill="none" opacity="0.35"/><path d="M38 32 L54 14" stroke="#4caf50" stroke-width="2.5" opacity="1"/><circle cx="54" cy="14" r="5" fill="#4caf50"/><circle cx="29" cy="39" r="3" fill="#4caf50" opacity="0.6"/><circle cx="38" cy="32" r="3.5" fill="#d4740a"/></svg>
         <div>
-            <h1>BREAKPOINT BETTING — MEMBERS</h1>
+            <h1>BREAKPOINT BETTING &mdash; MEMBERS</h1>
             <div class="sub">POWERED BY AMORA EDGE &bull; INVITE-ONLY BETA</div>
         </div>
     </div>
@@ -255,11 +356,13 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
 <!-- TODAY'S SIGNALS -->
 <section class="panel active" id="panel-signals">
     <div class="filters" id="sigFilters">
-        <select id="sigFilter" onchange="renderSignals()">
-            <option value="all" selected>ALL RECENT</option>
-            <option value="open">OPEN ONLY</option>
+        <select id="sigFilterType" onchange="renderSignals()">
+            <option value="all">ALL SIGNALS</option>
+            <option value="edge">EDGE ONLY</option>
+            <option value="outright">OUTRIGHT</option>
+            <option value="h2h">H2H</option>
         </select>
-        <select id="sigSurface" onchange="renderSignals()">
+        <select id="sigFilterSurface" onchange="renderSignals()">
             <option value="all">ALL SURFACES</option>
             <option value="Hard">HARD</option>
             <option value="Clay">CLAY</option>
@@ -267,13 +370,13 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
         </select>
         <select id="sigSort" onchange="renderSignals()">
             <option value="edge">SORT: EDGE</option>
-            <option value="prob">SORT: MODEL PROB</option>
-            <option value="alpha">SORT: A-Z</option>
+            <option value="confidence">SORT: CONFIDENCE</option>
+            <option value="winprob">SORT: WIN PROB</option>
+            <option value="volume">SORT: VOLUME</option>
         </select>
         <button class="ghost" onclick="loadSignals()">REFRESH</button>
     </div>
-    <div class="sig-summary" id="sigSummary" style="display:none"></div>
-    <div id="signalsBody"><div class="empty">Loading signals...</div></div>
+    <div id="signalsGrid"><div class="empty">Loading signals...</div></div>
 </section>
 
 <!-- MY BETS -->
@@ -362,7 +465,7 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
 
 </main>
 
-<!-- ── Track-from-signal modal ── -->
+<!-- Track-from-signal modal -->
 <div class="modal" id="trackModal">
   <div class="box">
     <h3>TRACK THIS BET</h3>
@@ -396,9 +499,18 @@ function showTab(name) {
     if (name === 'performance') loadStats();
 }
 
+// ─── v5.1 TAB SWITCHING (per-card signal/matchup/deep/market) ────────────
+function v5switchTab(btn, tabName) {
+    var card = btn.closest('.sig-card');
+    card.querySelectorAll('.v5-tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    card.querySelectorAll('.v5-tab-panel').forEach(function(p){ p.classList.remove('active'); });
+    btn.classList.add('active');
+    card.querySelector('[data-v5tab="'+tabName+'"]').classList.add('active');
+}
+
 // ─── State ────────────────────────────────────────────────────────────────
 const state = {
-    signals: [], signalsLoaded: false,
+    signals: [], resolved: [], signalsLoaded: false,
     bets: [], betsLoaded: false,
     players: [], playersLoaded: false,
     trackingSignal: null,
@@ -412,12 +524,6 @@ function pctStr(num) { return num === null || num === undefined ? '—' : Number
 function priceStr(num) { return num === null || num === undefined ? '—' : Number(num).toFixed(1) + '¢'; }
 function escapeHtml(s) { return (s || '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function parsePlayers(matchStr) {
-    if (!matchStr) return { pa: '—', pb: '—' };
-    const parts = matchStr.split(/\s+vs\.?\s+/i);
-    return { pa: (parts[0] || '').trim(), pb: (parts[1] || '').trim() || '—' };
-}
-
 function surfaceColor(s) {
     if (!s) return '#6c757d';
     if (s === 'Hard') return '#4fc3f7';
@@ -426,148 +532,428 @@ function surfaceColor(s) {
     return '#6c757d';
 }
 
-function edgeBadge(edge) {
-    const e = parseFloat(edge);
-    if (isNaN(e)) return '';
-    if (e > 15) return '<span class="v5-bdg badge-strong">STRONG EDGE</span>';
-    if (e >= 10) return '<span class="v5-bdg badge-solid">SOLID</span>';
-    if (e >= 5) return '<span class="v5-bdg badge-watch">WATCH</span>';
-    return '';
+// ─── SVG constants (copied from main dashboard) ──────────────────────────
+const tennisBallSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke-linejoin='round' stroke-linecap='round'%3E%3Cdefs%3E%3CradialGradient id='tb-body' cx='40%25' cy='35%25' r='70%25'%3E%3Cstop offset='0%25' stop-color='%23eaff5c'/%3E%3Cstop offset='70%25' stop-color='%23c4dd1f'/%3E%3Cstop offset='100%25' stop-color='%2389a00c'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='24' cy='24' r='17' fill='url(%23tb-body)' stroke='%236b7f10' stroke-width='1'/%3E%3Cpath d='M8.5 19 Q 24 33, 39.5 19' stroke='%23ffffff' stroke-width='1.8' fill='none'/%3E%3Cpath d='M8.5 29 Q 24 15, 39.5 29' stroke='%23ffffff' stroke-width='1.8' fill='none'/%3E%3C/svg%3E";
+
+function winMark(condition, side) {
+    return condition ? '<img class="v5-win-mark' + (side === 'r' ? ' v5-win-mark-r' : '') + '" src="' + tennisBallSvg + '" title="Advantage">' : '';
 }
 
 // ─── SIGNALS ──────────────────────────────────────────────────────────────
 async function loadSignals() {
-    document.getElementById('signalsBody').innerHTML = '<div class="empty">Loading signals...</div>';
+    document.getElementById('signalsGrid').innerHTML = '<div class="empty">Loading signals...</div>';
     try {
-        const r = await fetch('/members/api/signals');
-        if (r.status === 401) { location.href = '/members'; return; }
-        const data = await r.json();
-        state.signals = data.signals || [];
+        // Fetch signals + resolved stats in parallel
+        const [sigRes, statsRes] = await Promise.all([
+            fetch('/members/api/signals'),
+            fetch('/members/api/stats')
+        ]);
+        if (sigRes.status === 401) { location.href = '/members'; return; }
+        const sigData = await sigRes.json();
+        state.signals = sigData.signals || [];
+
+        // Get resolved picks for SYS WR buckets
+        try {
+            const statsData = await statsRes.json();
+            state.resolved = statsData.resolved || [];
+        } catch(e) { state.resolved = []; }
+
         state.signalsLoaded = true;
         renderSignals();
     } catch (e) {
-        document.getElementById('signalsBody').innerHTML = '<div class="empty">Error loading signals: ' + e.message + '</div>';
+        document.getElementById('signalsGrid').innerHTML = '<div class="empty">Error loading signals: ' + e.message + '</div>';
     }
 }
 
 function renderSignals() {
-    const wrap = document.getElementById('signalsBody');
-    const summaryEl = document.getElementById('sigSummary');
-    const filter = document.getElementById('sigFilter').value;
-    const surfFilter = document.getElementById('sigSurface').value;
+    const grid = document.getElementById('signalsGrid');
+    const filterType = document.getElementById('sigFilterType').value;
+    const filterSurface = document.getElementById('sigFilterSurface').value;
     const sortBy = document.getElementById('sigSort').value;
 
-    let list = state.signals;
-    if (filter === 'open') list = list.filter(s => !s.outcome);
-    if (surfFilter !== 'all') list = list.filter(s => s.surface === surfFilter);
+    // Show today's picks, deduplicated by market_id
+    const today = new Date().toISOString().slice(0, 10);
+    const todayPicks = state.signals.filter(p => (p.logged_at || '').startsWith(today));
+    const seen = new Map();
+    todayPicks.forEach(p => {
+        const key = p.market_id || (p.player_a + ' vs ' + p.player_b + '|' + p.market_type);
+        seen.set(key, p);
+    });
+    let latest = Array.from(seen.values());
+    // If no picks today, fall back to latest run
+    if (latest.length === 0) {
+        const latestRun = state.signals.length > 0 ? state.signals[state.signals.length - 1].run_id : null;
+        latest = latestRun ? state.signals.filter(p => p.run_id === latestRun) : state.signals;
+    }
+    // Hide resolved/completed matches
+    latest = latest.filter(p => p.outcome === null || p.outcome === undefined);
+
+    // Apply filters
+    if (filterType === 'edge') latest = latest.filter(p => p.has_edge);
+    else if (filterType === 'outright') latest = latest.filter(p => p.market_type === 'outright');
+    else if (filterType === 'h2h') latest = latest.filter(p => p.market_type === 'h2h');
+    if (filterSurface !== 'all') latest = latest.filter(p => p.surface === filterSurface);
 
     // Sort
-    if (sortBy === 'edge') list = [...list].sort((a, b) => (parseFloat(b.edge) || 0) - (parseFloat(a.edge) || 0));
-    else if (sortBy === 'prob') list = [...list].sort((a, b) => (parseFloat(b.model_prob) || 0) - (parseFloat(a.model_prob) || 0));
-    else if (sortBy === 'alpha') list = [...list].sort((a, b) => (a.match || '').localeCompare(b.match || ''));
+    if (sortBy === 'edge') latest.sort((a, b) => Math.abs(b.edge || 0) - Math.abs(a.edge || 0));
+    else if (sortBy === 'confidence') latest.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+    else if (sortBy === 'winprob') latest.sort((a, b) => (b.model_prob || 0) - (a.model_prob || 0));
+    else if (sortBy === 'volume') latest.sort((a, b) => (b.volume || 0) - (a.volume || 0));
 
-    // Summary bar
-    if (list.length) {
-        const edgeSignals = list.filter(s => parseFloat(s.edge) >= 5);
-        const avgEdge = list.reduce((sum, s) => sum + (parseFloat(s.edge) || 0), 0) / list.length;
-        summaryEl.innerHTML = `<span><strong>${list.length}</strong> signal${list.length !== 1 ? 's' : ''}</span>
-            <span><strong>${edgeSignals.length}</strong> edge signals (≥10%)</span>
-            <span>Avg edge: <strong>${avgEdge.toFixed(1)}%</strong></span>`;
-        summaryEl.style.display = 'flex';
-    } else {
-        summaryEl.style.display = 'none';
-    }
-
-    if (!list.length) {
-        wrap.innerHTML = '<div class="empty">No signals match this filter.</div>';
+    if (latest.length === 0) {
+        grid.innerHTML = '<div class="empty">No signals match your filters.</div>';
         return;
     }
 
-    wrap.innerHTML = '<div class="sig-grid">' + list.map(s => {
-        const { pa, pb } = parsePlayers(s.match);
-        const surf = s.surface || '';
-        const tourn = s.tournament ? escapeHtml(s.tournament) : '—';
-        const surfHtml = surf ? `<span style="color:${surfaceColor(surf)}; font-weight:700">${escapeHtml(surf)}</span>` : '';
-        const roundHtml = s.round ? `<div class="hdr-round">${escapeHtml(s.round)}</div>` : '';
-        const modelProb = parseFloat(s.model_prob);
-        const marketPrice = parseFloat(s.poly_price);
-        const edge = parseFloat(s.edge);
+    const resolved = state.resolved || [];
 
-        // Outcome badge
-        let outcomeBadge = '';
-        if (s.outcome) {
-            const cls = s.outcome === 'win' ? 'outcome-win' : s.outcome === 'loss' ? 'outcome-loss' : 'outcome-void';
-            outcomeBadge = `<span class="outcome-badge ${cls}">${s.outcome.toUpperCase()}${s.outcome === 'win' && s.actual_winner ? ' • ' + escapeHtml(s.actual_winner.split(' ').pop()) : ''}</span>`;
-        } else {
-            outcomeBadge = '<span class="outcome-badge outcome-open">OPEN</span>';
+    // Summary bar
+    const edgeCount = latest.filter(p => p.has_edge).length;
+    const avgEdge = edgeCount > 0 ? (latest.filter(p => p.has_edge).reduce((s, p) => s + Math.abs(p.edge), 0) / edgeCount).toFixed(1) : '0';
+    const totalVol = latest.reduce((s, p) => s + (p.volume || 0), 0);
+    let html = '<div class="sig-summary">' +
+        '<span>Showing: <strong>' + latest.length + '</strong> signals</span>' +
+        '<span>Edge Signals: <strong>' + edgeCount + '</strong></span>' +
+        '<span>Avg Edge: <strong>' + avgEdge + '%</strong></span>' +
+        '<span>Total Volume: <strong>$' + totalVol.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</strong></span>' +
+    '</div>';
+
+    html += '<div class="sig-grid">';
+
+    // ─── SYS WIN RATE calibration buckets ───
+    const sysWrBuckets = [
+        { min: 70, max: 200, label: '70%+',  w: 0, n: 0 },
+        { min: 65, max: 70,  label: '65-70', w: 0, n: 0 },
+        { min: 60, max: 65,  label: '60-65', w: 0, n: 0 },
+        { min: 55, max: 60,  label: '55-60', w: 0, n: 0 },
+        { min: 50, max: 55,  label: '50-55', w: 0, n: 0 },
+        { min: 0,  max: 50,  label: '<50',   w: 0, n: 0 },
+    ];
+    resolved.forEach(r => {
+        const mp = r.model_prob || 0;
+        const bucket = sysWrBuckets.find(b => mp >= b.min && mp < b.max);
+        if (bucket) { bucket.n++; if (r.outcome === 'win') bucket.w++; }
+    });
+    const globalSysWR = resolved.length > 10
+        ? Math.round((resolved.filter(r => r.outcome === 'win').length / resolved.length) * 100)
+        : null;
+    const getSysWR = (mp) => {
+        const b = sysWrBuckets.find(b => mp >= b.min && mp < b.max);
+        if (b && b.n >= 5) {
+            return { wr: Math.round((b.w / b.n) * 100), n: b.n, label: b.label, isBucket: true };
+        }
+        if (globalSysWR != null) {
+            return { wr: globalSysWR, n: resolved.length, label: 'all', isBucket: false };
+        }
+        return null;
+    };
+
+    latest.forEach(s => {
+        const edge = Math.abs(s.edge || 0);
+
+        // Edge tier badge
+        let tierBadge = '';
+        if (edge >= 10) tierBadge = '<span class="sig-badge badge-strong">STRONG</span>';
+        else if (edge >= 7) tierBadge = '<span class="sig-badge badge-solid">SOLID</span>';
+        else if (edge >= 5) tierBadge = '<span class="sig-badge badge-watch">WATCH</span>';
+
+        // Value badge
+        let valBadge = '';
+        const modelP = s.model_prob || 0;
+        const polyP = s.poly_price || 0;
+        const gap = modelP - polyP;
+        if (gap >= 15 && modelP >= 60) valBadge = '<span class="sig-badge badge-bestvalue">BEST VALUE</span>';
+        else if (gap >= 8 && modelP >= 55) valBadge = '<span class="sig-badge badge-value">VALUE</span>';
+        else if (gap >= 3 && modelP > polyP) valBadge = '<span class="sig-badge badge-edge">EDGE+</span>';
+
+        // ELO alert badge
+        let eloBadge = '';
+        const betOnPlayer = s.bet_on || s.predicted_winner || '';
+        const pA = (s.match || '').split(' vs ')[0] || '';
+        if (betOnPlayer === pA.trim() && s.rank_elo_alert_a) {
+            eloBadge = '<span class="sig-badge badge-eloalert">ELO ▲ RANK</span>';
+        } else if (betOnPlayer !== pA.trim() && s.rank_elo_alert_b) {
+            eloBadge = '<span class="sig-badge badge-eloalert">ELO ▲ RANK</span>';
         }
 
-        // Model prob box color
-        const probBg = modelProb >= 65 ? '#1b5e20' : modelProb >= 55 ? '#e65100' : '#2d3139';
-        // Edge box color
-        const edgeBg = edge >= 15 ? '#b71c1c' : edge >= 10 ? '#e65100' : edge >= 5 ? '#2d3139' : '#1a1d27';
+        const tourney = s.tournament || '';
+        const surface = s.surface || '';
+        const round = s.round || '';
+        const polyLink = s.poly_link || 'https://polymarket.com/sports/tennis/games';
+        const winner = s.predicted_winner || s.bet_on || '';
+        const betOn = s.bet_on || winner;
 
-        const trackBtn = s.outcome
-            ? ''
-            : `<button class="v5-bet-btn" onclick='openTrack(${JSON.stringify(s).replace(/'/g, "&apos;")})'>TRACK BET</button>`;
-        const polyBtn = s.poly_link
-            ? `<a class="v5-plink" href="${escapeHtml(s.poly_link)}" target="_blank" rel="noopener">POLYMARKET ↗</a>`
+        // Player stats
+        const wrA = s.sa_wr != null ? s.sa_wr + '%' : '—';
+        const wrB = s.sb_wr != null ? s.sb_wr + '%' : '—';
+        const swrA = s.sa_swr != null ? s.sa_swr + '%' : '—';
+        const swrB = s.sb_swr != null ? s.sb_swr + '%' : '—';
+        const formA = s.sa_form || '—';
+        const formB = s.sb_form || '—';
+        const h2h = s.h2h || { total: 0, p1_wins: 0, p2_wins: 0 };
+        const h2hStr = h2h.total > 0 ? h2h.p1_wins + '-' + h2h.p2_wins : '0-0';
+
+        const edgeSign = (s.edge || 0) >= 0 ? '+' : '';
+        const edgeColor = edge >= 10 ? '#f44336' : edge >= 7 ? '#e65100' : edge >= 5 ? '#d4740a' : '#6c757d';
+
+        // Card ID
+        const cardId = 'sig-' + (s.match || '').replace(/[^a-zA-Z0-9]/g, '');
+
+        // Consensus computation
+        const baseP = s.base_prob || (modelP - (s.lstm_adj||0));
+        const eloP = s.elo_prob;
+        const surfEloP = s.surf_elo_prob;
+        const lstmP = modelP;
+        const lstmReadyPct = Math.min(Math.round((resolved.length / 500) * 100), 100);
+        const lstmBonus = Math.floor(lstmReadyPct / 10) * 2;
+        const lstmWeight = 15 + lstmBonus;
+        const baseWeight = Math.max(20, 45 - lstmBonus);
+        let consensusP, totalW = 0, weightedSum = 0;
+        if (baseP != null) { weightedSum += baseP * baseWeight; totalW += baseWeight; }
+        if (eloP != null) { weightedSum += eloP * 20; totalW += 20; }
+        if (surfEloP != null) { weightedSum += surfEloP * 20; totalW += 20; }
+        if (lstmP != null) { weightedSum += lstmP * lstmWeight; totalW += lstmWeight; }
+        consensusP = totalW > 0 ? Math.max(1, Math.min(99, weightedSum / totalW)) : modelP;
+
+        // Agreement
+        let models = 0, agree = 0;
+        const modelVotes = [];
+        if (baseP != null) { models++; var v = baseP > 50; if (v) agree++; modelVotes.push('BASE ' + baseP.toFixed(1) + '% ' + (v ? '✓' : '✗')); }
+        if (eloP != null) { models++; var v = eloP > 50; if (v) agree++; modelVotes.push('ELO ' + eloP.toFixed(1) + '% ' + (v ? '✓' : '✗')); }
+        if (surfEloP != null) { models++; var v = surfEloP > 50; if (v) agree++; modelVotes.push('SURF ELO ' + surfEloP.toFixed(1) + '% ' + (v ? '✓' : '✗')); }
+        if (lstmP != null) { models++; var v = lstmP > 50; if (v) agree++; modelVotes.push('LSTM ' + lstmP.toFixed(1) + '% ' + (v ? '✓' : '✗')); }
+        const tooltipText = modelVotes.join(' | ');
+        let agreeLabel, agreeBg, agreeColor;
+        if (models <= 1) { agreeLabel = 'LOW DATA'; agreeBg = '#2d3139'; agreeColor = '#6c757d'; }
+        else if (agree === models) { agreeLabel = models + '/' + models + ' AGREE'; agreeBg = '#1b5e20'; agreeColor = '#4caf50'; }
+        else if (agree === 0) { agreeLabel = '0/' + models + ' AGREE'; agreeBg = '#4a1111'; agreeColor = '#f44336'; }
+        else { agreeLabel = agree + '/' + models + ' AGREE'; agreeBg = '#4a2800'; agreeColor = '#d4740a'; }
+
+        // Win prob colors
+        const confColor = modelP >= 65 ? '#4caf50' : modelP >= 50 ? '#d4740a' : '#f44336';
+        const confBg = modelP >= 65 ? '#1b5e20' : modelP >= 50 ? '#4a2800' : '#4a1111';
+        const confBorder = confColor;
+
+        // Edge computation
+        const baseEdge = s.base_edge != null && s.base_edge !== 0 ? s.base_edge : (s.base_prob ? s.base_prob - (s.poly_price || 0) : (s.edge || 0));
+        const lstmAdj = s.lstm_adj || 0;
+        const lstmEdge = baseEdge + lstmAdj;
+
+        // Edge conf label
+        const edgeConfLabel = edge >= 10 ? 'STRONG' : edge >= 7 ? 'SOLID' : edge >= 5 ? 'MODERATE' : 'LOW';
+
+        // Helpers
+        const fmtVs = (v) => v ? v.w + 'W-' + v.l + 'L' : '—';
+        const fmtMove = (mv) => mv != null ? (mv > 0 ? '<span class="vg">▲' + mv + '</span>' : mv < 0 ? '<span class="vb">▼' + Math.abs(mv) + '</span>' : '→0') : '—';
+        const fmtElo = (e, pct) => { if (!e) return '—'; let str = String(e); if (pct != null) str += ' <span style="color:#888;font-size:9px">(P' + pct + ')</span>'; return str; };
+        const fmtYTD = (w, l) => (w != null && l != null && (w+l)>0) ? w+'W-'+l+'L' : '—';
+        const rankA = s.rank_a, rankB = s.rank_b;
+        const actA = s.sa_matches_52w || s.a_n_matches_52w;
+        const actB = s.sb_matches_52w || s.b_n_matches_52w;
+        const eloA = s.sa_elo, eloB = s.sb_elo;
+        const surfEloA = s.sa_surf_elo, surfEloB = s.sb_surf_elo;
+        const eloPctA = s.sa_elo_pct, eloPctB = s.sb_elo_pct;
+
+        // Surface color
+        const sfcColor = surface === 'Clay' ? '#c17a2a' : surface === 'Grass' ? '#4caf50' : '#42a5f5';
+
+        // SYS WR
+        const sysWRData = getSysWR(modelP);
+        const sysWR = sysWRData ? sysWRData.wr : null;
+        const sysWrColor = sysWR == null ? '#6c757d' : sysWR >= 60 ? '#4caf50' : sysWR >= 52 ? '#d4740a' : '#f44336';
+        const sysWrBg = sysWR == null ? '#2d3139' : sysWR >= 60 ? '#1b5e20' : sysWR >= 52 ? '#4a2800' : '#4a1111';
+        const sysWrTooltip = sysWRData
+            ? (sysWRData.isBucket
+                ? 'System win rate when model predicts ' + sysWRData.label + '% — ' + sysWRData.n + ' resolved picks in this bucket'
+                : 'Overall system win rate — ' + sysWRData.n + ' resolved picks (bucket too sparse, showing global)')
             : '';
 
-        return `<div class="sig-card">
-            <div class="card-hdr">
-                <div>
-                    <div class="hdr-names">
-                        <span class="pa">${escapeHtml(pa)}</span>
-                        <span class="pb" style="color:#aaa">vs ${escapeHtml(pb)}</span>
-                    </div>
-                    ${outcomeBadge}
-                </div>
-                <div class="hdr-right">
-                    <div class="hdr-tourney">${tourn}</div>
-                    <div class="hdr-surface">${surfHtml}</div>
-                    ${roundHtml}
-                </div>
-            </div>
-            <div class="v5-pick-area">
-                <div class="v5-pick-top">
-                    <div>
-                        <div class="v5-pick-lbl">PICK</div>
-                        <div class="v5-pick-name">${escapeHtml(s.bet_on || '—')}</div>
-                        <div class="v5-badge-line">${edgeBadge(s.edge)}</div>
-                    </div>
-                    <div class="v5-pick-right">
-                        <div class="v5-pbox" style="background:${probBg}">
-                            <div class="bl">MODEL PROB</div>
-                            <div class="bv">${pctStr(s.model_prob)}</div>
-                        </div>
-                        <div class="v5-pbox" style="background:${edgeBg}">
-                            <div class="bl">EDGE</div>
-                            <div class="bv">${pctStr(s.edge)}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="v5-nbox">
-                <div class="v5-ngrid v5-g3">
-                    <div class="v5-nc"><div class="nl">MODEL</div><div class="nv">${pctStr(s.model_prob)}</div></div>
-                    <div class="v5-nc"><div class="nl">MARKET</div><div class="nv">${priceStr(s.poly_price)}</div></div>
-                    <div class="v5-nc"><div class="nl">EDGE</div><div class="nv" style="color:${edge >= 10 ? '#4caf50' : edge >= 5 ? '#d4740a' : '#e0e0e0'}">${pctStr(s.edge)}</div></div>
-                </div>
-            </div>
-            <div class="v5-card-foot">
-                ${trackBtn}
-                ${polyBtn}
-            </div>
-        </div>`;
-    }).join('') + '</div>';
+        // Peak potential
+        const peakRange = polyP < 20 ? '+80% — +250%' : polyP < 40 ? '+50% — +150%' : polyP < 60 ? '+40% — +100%' : '+20% — +60%';
+
+        // Date display
+        const dateStr = s.logged_at ? new Date(s.logged_at).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '';
+
+        // Track Bet data for modal
+        const trackData = JSON.stringify({
+            match: s.match, bet_on: betOn, poly_price: polyP, model_prob: modelP,
+            tournament: tourney, surface: surface
+        }).replace(/'/g, "&apos;").replace(/"/g, '&quot;');
+
+        html += '\
+        <div class="sig-card" id="' + cardId + '">\
+            <!-- HEADER with plaque names -->\
+            <div class="card-hdr">\
+                <div style="position:relative">\
+                    <div class="hdr-names"><span class="pa">' + (s.player_a||'') + '</span><span class="pb">' + (s.player_b||'') + '</span></div>\
+                </div>\
+                <div class="hdr-right">\
+                    <div class="hdr-tourney">' + (tourney || '') + (surface ? ' <span class="hdr-surface" style="color:'+sfcColor+'">| '+surface+'</span>' : '') + '</div>\
+                    ' + (dateStr ? '<div class="hdr-date">'+dateStr+'</div>' : '') + '\
+                    ' + (round ? '<div class="hdr-round">'+round+'</div>' : '') + '\
+                </div>\
+            </div>\
+            ' + (s.low_data ? '<div class="low-data-banner"><span style="font-size:14px">⚠</span><span><strong>LOW DATA</strong> — Minimal match history. Predictions may be unreliable.</span></div>' : '') + '\
+            <!-- TAB BAR -->\
+            <div class="v5-tab-bar">\
+                <button class="v5-tab-btn active" onclick="v5switchTab(this,\'signal\')"><span class="ti ti-bolt"><img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 48 48\' fill=\'none\' stroke=\'%23f59e0b\' stroke-width=\'2.5\' stroke-linejoin=\'round\' stroke-linecap=\'round\'%3E%3Cline x1=\'6\' y1=\'24\' x2=\'10\' y2=\'24\' stroke-opacity=\'0.5\'/%3E%3Cline x1=\'13\' y1=\'20\' x2=\'13\' y2=\'28\' stroke-opacity=\'0.7\'/%3E%3Cline x1=\'17\' y1=\'16\' x2=\'17\' y2=\'32\' stroke-opacity=\'0.85\'/%3E%3Cline x1=\'21\' y1=\'10\' x2=\'21\' y2=\'38\'/%3E%3Cline x1=\'24\' y1=\'4\' x2=\'24\' y2=\'44\' stroke-width=\'3\'/%3E%3Cline x1=\'27\' y1=\'10\' x2=\'27\' y2=\'38\'/%3E%3Cline x1=\'31\' y1=\'17\' x2=\'31\' y2=\'31\' stroke-opacity=\'0.85\'/%3E%3Cline x1=\'35\' y1=\'21\' x2=\'35\' y2=\'27\' stroke-opacity=\'0.7\'/%3E%3Cline x1=\'38\' y1=\'24\' x2=\'42\' y2=\'24\' stroke-opacity=\'0.5\'/%3E%3C/svg%3E" alt="Signal"></span>Signal</button>\
+                <button class="v5-tab-btn" onclick="v5switchTab(this,\'matchup\')"><span class="ti ti-matchup"><img class="racket-l" src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 28 48\'%3E%3Crect x=\'12\' y=\'28\' width=\'4\' height=\'14\' rx=\'1.5\' fill=\'%23555\' stroke=\'%23333\' stroke-width=\'0.5\'/%3E%3Crect x=\'11.5\' y=\'38\' width=\'5\' height=\'4\' rx=\'1.5\' fill=\'%23e65100\'/%3E%3Cellipse cx=\'14\' cy=\'14\' rx=\'10\' ry=\'13\' fill=\'%232196f3\' stroke=\'%231565c0\' stroke-width=\'1.4\'/%3E%3Cellipse cx=\'14\' cy=\'14\' rx=\'8\' ry=\'10.5\' fill=\'%230d47a1\' opacity=\'0.7\'/%3E%3Cline x1=\'8\' y1=\'7\' x2=\'8\' y2=\'21\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'11\' y1=\'4\' x2=\'11\' y2=\'24\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'14\' y1=\'3\' x2=\'14\' y2=\'25\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'17\' y1=\'4\' x2=\'17\' y2=\'24\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'20\' y1=\'7\' x2=\'20\' y2=\'21\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'5\' y1=\'8\' x2=\'23\' y2=\'8\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'4.5\' y1=\'12\' x2=\'23.5\' y2=\'12\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'4.5\' y1=\'16\' x2=\'23.5\' y2=\'16\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'5\' y1=\'20\' x2=\'23\' y2=\'20\' stroke=\'%2390caf9\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3C/svg%3E" alt=""><span class="clash-ball"></span><img class="racket-r" src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 28 48\'%3E%3Crect x=\'12\' y=\'28\' width=\'4\' height=\'14\' rx=\'1.5\' fill=\'%23555\' stroke=\'%23333\' stroke-width=\'0.5\'/%3E%3Crect x=\'11.5\' y=\'38\' width=\'5\' height=\'4\' rx=\'1.5\' fill=\'%23e65100\'/%3E%3Cellipse cx=\'14\' cy=\'14\' rx=\'10\' ry=\'13\' fill=\'%2300bcd4\' stroke=\'%2300838f\' stroke-width=\'1.4\'/%3E%3Cellipse cx=\'14\' cy=\'14\' rx=\'8\' ry=\'10.5\' fill=\'%23006064\' opacity=\'0.7\'/%3E%3Cline x1=\'8\' y1=\'7\' x2=\'8\' y2=\'21\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'11\' y1=\'4\' x2=\'11\' y2=\'24\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'14\' y1=\'3\' x2=\'14\' y2=\'25\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'17\' y1=\'4\' x2=\'17\' y2=\'24\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'20\' y1=\'7\' x2=\'20\' y2=\'21\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'5\' y1=\'8\' x2=\'23\' y2=\'8\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'4.5\' y1=\'12\' x2=\'23.5\' y2=\'12\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'4.5\' y1=\'16\' x2=\'23.5\' y2=\'16\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Cline x1=\'5\' y1=\'20\' x2=\'23\' y2=\'20\' stroke=\'%2380deea\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3C/svg%3E" alt=""></span>Matchup</button>\
+                <button class="v5-tab-btn" onclick="v5switchTab(this,\'deep\')"><span class="ti ti-court"><img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 48 48\'%3E%3Cdefs%3E%3ClinearGradient id=\'cf\' x1=\'0\' x2=\'0\' y1=\'0\' y2=\'1\'%3E%3Cstop offset=\'0%25\' stop-color=\'%235b9bd5\'/%3E%3Cstop offset=\'100%25\' stop-color=\'%233a78b5\'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x=\'3\' y=\'3\' width=\'42\' height=\'42\' rx=\'1.5\' fill=\'url(%23cf)\' stroke=\'%23fff\' stroke-width=\'1.8\'/%3E%3Cline x1=\'3\' y1=\'24\' x2=\'45\' y2=\'24\' stroke=\'%23fff\' stroke-width=\'1.4\'/%3E%3Cline x1=\'24\' y1=\'3\' x2=\'24\' y2=\'45\' stroke=\'%23fff\' stroke-width=\'0.8\'/%3E%3Crect x=\'10\' y=\'3\' width=\'28\' height=\'42\' fill=\'none\' stroke=\'%23fff\' stroke-width=\'0.8\'/%3E%3Crect x=\'14\' y=\'3\' width=\'20\' height=\'42\' fill=\'none\' stroke=\'%23fff\' stroke-width=\'0.5\' opacity=\'0.5\'/%3E%3Crect x=\'10\' y=\'16\' width=\'28\' height=\'16\' fill=\'none\' stroke=\'%23fff\' stroke-width=\'0.6\'/%3E%3Crect x=\'3\' y=\'22.5\' width=\'42\' height=\'3\' fill=\'%23ddd\' opacity=\'0.2\'/%3E%3Cline x1=\'3\' y1=\'23\' x2=\'45\' y2=\'23\' stroke=\'%23fff\' stroke-width=\'0.3\' stroke-dasharray=\'1 1\' opacity=\'0.6\'/%3E%3Cline x1=\'3\' y1=\'25\' x2=\'45\' y2=\'25\' stroke=\'%23fff\' stroke-width=\'0.3\' stroke-dasharray=\'1 1\' opacity=\'0.6\'/%3E%3Crect x=\'2\' y=\'22\' width=\'1.5\' height=\'4\' fill=\'%23888\' rx=\'0.3\'/%3E%3Crect x=\'44.5\' y=\'22\' width=\'1.5\' height=\'4\' fill=\'%23888\' rx=\'0.3\'/%3E%3C/svg%3E" alt="Serve"></span>Serve &amp; Return</button>\
+                <button class="v5-tab-btn" onclick="v5switchTab(this,\'market\')"><span class="ti ti-market"><img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 48 48\' fill=\'none\' stroke=\'%23f59e0b\' stroke-width=\'2\' stroke-linejoin=\'round\' stroke-linecap=\'round\'%3E%3Cpath d=\'M15 10 L33 10\' stroke-width=\'2.5\'/%3E%3Cpath d=\'M17 10 L19 6 L29 6 L31 10\' stroke-opacity=\'0.7\'/%3E%3Cpath d=\'M21 10 Q 24 13, 27 10\' stroke-opacity=\'0.5\' stroke-width=\'1.5\'/%3E%3Cpath d=\'M15 10 C 8 16, 6 26, 10 34 C 13 40, 18 42, 24 42 C 30 42, 35 40, 38 34 C 42 26, 40 16, 33 10 Z\' fill=\'%23f59e0b\' fill-opacity=\'0.15\'/%3E%3Cpath d=\'M15 10 C 8 16, 6 26, 10 34 C 13 40, 18 42, 24 42 C 30 42, 35 40, 38 34 C 42 26, 40 16, 33 10 Z\'/%3E%3Cpath d=\'M24 18 L24 34\' stroke-width=\'2.2\'/%3E%3Cpath d=\'M28 21 C 28 19, 26 18, 24 18 C 22 18, 20 19, 20 21 C 20 23, 22 24, 24 25 C 26 26, 28 27, 28 29 C 28 31, 26 32, 24 32 C 22 32, 20 31, 20 29\' stroke-width=\'2.2\'/%3E%3C/svg%3E" alt="Market"></span>Market</button>\
+            </div>\
+            <!-- TAB 1: SIGNAL -->\
+            <div class="v5-tab-panel active" data-v5tab="signal">\
+                <div class="v5-pick-area">\
+                    <div class="v5-pick-top">\
+                        <div>\
+                            <div class="v5-pick-lbl">' + (s.market_type === 'outright' ? 'PREDICTED WINNER' : 'PICK') + '</div>\
+                            <div class="v5-pick-name" style="color:inherit">' + betOn + '</div>\
+                            <div class="v5-badge-line">\
+                                <span class="v5-bdg" title="' + tooltipText + '" style="background:' + agreeBg + ';color:' + agreeColor + ';border:1px solid ' + agreeColor + '40">' + agreeLabel + '</span>\
+                                ' + (tierBadge ? '<span class="v5-bdg" style="background:#4a2800;color:#d4740a;border:1px solid #d4740a40">' + (edge >= 10 ? 'STRONG' : edge >= 7 ? 'SOLID' : 'WATCH') + '</span>' : '') + '\
+                                ' + (valBadge ? '<span class="v5-bdg" style="background:#1b5e20;color:#4caf50;border:1px solid #4caf5040">VALUE</span>' : '') + '\
+                                ' + (eloBadge ? '<span class="v5-bdg" style="background:#1a237e;color:#42a5f5;border:1px solid #42a5f540">ELO PICK</span>' : '') + '\
+                            </div>\
+                        </div>\
+                        <div class="v5-pick-right">\
+                            ' + (sysWR != null ? '<div class="v5-pbox" style="background:#0a2a5c;border:1px solid #2196f3" title="' + sysWrTooltip + '"><div class="bl">SYS WIN RATE</div><div class="bv">' + sysWR + '%</div></div>' : '') + '\
+                            <div class="v5-pbox" style="background:' + confBg + ';border:1px solid ' + confBorder + '">\
+                                <div class="bl">MODEL PROB</div>\
+                                <div class="bv">' + modelP.toFixed(1) + '%</div>\
+                            </div>\
+                            <div class="v5-pbox" style="background:#4a2800;border:1px solid #d4740a">\
+                                <div class="bl">EDGE CONF</div>\
+                                <div class="bv">' + edgeConfLabel + '</div>\
+                            </div>\
+                        </div>\
+                    </div>\
+                </div>\
+                <!-- Number grids -->\
+                <div class="v5-nbox"><div class="v5-ngrid v5-g4">\
+                    <div class="v5-nc"><div class="nl">Poly Price</div><div class="nv vd">' + polyP.toFixed(1) + 'c</div></div>\
+                    <div class="v5-nc"><div class="nl">Base Model</div><div class="nv">' + (baseP||0).toFixed(1) + '%</div></div>\
+                    <div class="v5-nc"><div class="nl">LSTM Model</div><div class="nv vblue">' + modelP.toFixed(1) + '%</div></div>\
+                    <div class="v5-nc"><div class="nl">Kelly</div><div class="nv vo">' + (s.kelly_stake||0).toFixed(1) + '%</div></div>\
+                </div></div>\
+                <div class="v5-nbox"><div class="v5-ngrid v5-g4">\
+                    <div class="v5-nc"><div class="nl">Base Edge</div><div class="nv vo">' + (baseEdge >= 0 ? '+' : '') + baseEdge.toFixed(1) + '%</div></div>\
+                    <div class="v5-nc"><div class="nl">LSTM Edge</div><div class="nv vblue">' + (lstmEdge >= 0 ? '+' : '') + lstmEdge.toFixed(1) + '%</div></div>\
+                    <div class="v5-nc"><div class="nl">LSTM Adj</div><div class="nv" style="color:' + (lstmAdj > 0 ? '#4caf50' : lstmAdj < 0 ? '#f44336' : '#6c757d') + '">' + (lstmAdj >= 0 ? '+' : '') + lstmAdj.toFixed(1) + '%</div></div>\
+                    <div class="v5-nc"><div class="nl">Combined</div><div class="nv" style="color:' + edgeColor + ';font-weight:800">' + edgeSign + (s.edge||0).toFixed(1) + '%</div></div>\
+                </div></div>\
+                <div class="v5-nbox"><div class="v5-ngrid v5-g4">\
+                    <div class="v5-nc"><div class="nl">ELO Prob</div><div class="nv vblue">' + (eloP != null ? eloP.toFixed(1)+'%' : '—') + '</div></div>\
+                    <div class="v5-nc"><div class="nl">Surf ELO</div><div class="nv vblue">' + (surfEloP != null ? surfEloP.toFixed(1)+'%' : '—') + '</div></div>\
+                    <div class="v5-nc"><div class="nl">ELO Edge</div><div class="nv ' + (s.elo_edge != null && s.elo_edge >= 3 ? 'vg' : '') + '">' + (s.elo_edge != null ? (s.elo_edge >= 0 ? '+' : '')+s.elo_edge.toFixed(1)+'%' : '—') + '</div></div>\
+                    <div class="v5-nc"><div class="nl">Consensus</div><div class="nv" style="color:#e0e0e0;font-weight:800">' + consensusP.toFixed(1) + '%</div></div>\
+                </div></div>\
+                <!-- Peak Potential Strip -->\
+                <div class="v5-peak-strip" title="Based on historical picks at similar entry prices.">\
+                    <div>\
+                        <div class="v5-peak-label">Peak Potential</div>\
+                        <div class="v5-peak-value">' + peakRange + '</div>\
+                        <div class="v5-peak-sub">Expected price movement during match</div>\
+                    </div>\
+                    <div style="text-align:right">\
+                        <div class="v5-peak-hit-rate">97%</div>\
+                        <div class="v5-peak-hit-sub">Hit 10%+ peak</div>\
+                        <div style="margin-top:4px"><span class="v5-peak-bar-track"><span class="v5-peak-bar-fill" style="width:97%"></span></span> <span style="font-size:8px;color:#888">' + resolved.length + ' picks</span></div>\
+                    </div>\
+                </div>\
+            </div>\
+            <!-- TAB 2: MATCHUP -->\
+            <div class="v5-tab-panel" data-v5tab="matchup">\
+                <div class="v5-s3">\
+                    <div class="v5-s3h">\
+                        <div class="ph">' + (s.player_a||'') + '</div>\
+                        <div class="ph v5-hc"></div>\
+                        <div class="ph pr">' + (s.player_b||'') + '</div>\
+                    </div>\
+                    <div class="v5-h2h-bar">\
+                        <div class="v5-h2h-label">H2H</div>\
+                        <div class="v5-h2h-v">' + h2hStr + '</div>\
+                    </div>\
+                    <div class="v5-s3r"><div class="v5-vl"><strong class="vo" style="font-size:13px">' + (rankA ? '#'+rankA : '—') + '</strong> ' + (rankA && rankB && rankA < rankB ? winMark(true,'l') : '') + '</div><div class="v5-vc">Rank</div><div class="v5-vr">' + (rankB && rankA && rankB < rankA ? winMark(true,'r') : '') + ' <strong class="vo" style="font-size:13px">' + (rankB ? '#'+rankB : '—') + '</strong></div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + swrA + ' ' + (s.sa_swr != null && s.sb_swr != null && s.sa_swr > s.sb_swr ? winMark(true,'l') : '') + '</div><div class="v5-vc">Surface WR</div><div class="v5-vr">' + (s.sa_swr != null && s.sb_swr != null && s.sb_swr > s.sa_swr ? winMark(true,'r') : '') + ' ' + swrB + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + formA + ' ' + (s.sa_momentum != null && s.sb_momentum != null && s.sa_momentum > s.sb_momentum ? winMark(true,'l') : '') + '</div><div class="v5-vc">Momentum</div><div class="v5-vr">' + (s.sa_momentum != null && s.sb_momentum != null && s.sb_momentum > s.sa_momentum ? winMark(true,'r') : '') + ' ' + formB + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (actA != null ? actA + ' matches' : '—') + ' ' + (actA != null && actB != null && actA > actB ? winMark(true,'l') : '') + '</div><div class="v5-vc">Activity</div><div class="v5-vr">' + (actA != null && actB != null && actB > actA ? winMark(true,'r') : '') + ' ' + (actB != null ? actB + ' matches' : '—') + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (s.sa_rest != null ? s.sa_rest + 'd' : '—') + '</div><div class="v5-vc">Rest</div><div class="v5-vr">' + (s.sb_rest != null ? s.sb_rest + 'd' : '—') + '</div></div>\
+                </div>\
+                <div class="v5-divider"></div>\
+                <div class="v5-adv-section-title">Advanced Stats</div>\
+                <div class="v5-s3" style="padding-top:2px">\
+                    <div class="v5-s3r"><div class="v5-vl">' + fmtVs(s.sa_vs_top10) + '</div><div class="v5-vc">vs Top 10</div><div class="v5-vr">' + fmtVs(s.sb_vs_top10) + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + fmtVs(s.sa_vs_top20) + '</div><div class="v5-vc">vs Top 20</div><div class="v5-vr">' + fmtVs(s.sb_vs_top20) + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + fmtMove(s.sa_rank_move_365d) + '</div><div class="v5-vc">Rank Move 12m</div><div class="v5-vr">' + fmtMove(s.sb_rank_move_365d) + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + fmtMove(s.sa_rank_move) + '</div><div class="v5-vc">Rank Move 6m</div><div class="v5-vr">' + fmtMove(s.sb_rank_move) + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + fmtMove(s.sa_rank_move_90d) + '</div><div class="v5-vc">Rank Move 3m</div><div class="v5-vr">' + fmtMove(s.sb_rank_move_90d) + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + fmtYTD(s.sa_wins_ytd, s.sa_losses_ytd) + '</div><div class="v5-vc">YTD Record</div><div class="v5-vr">' + fmtYTD(s.sb_wins_ytd, s.sb_losses_ytd) + '</div></div>\
+                </div>\
+                ' + (eloA || eloB ? '\
+                <div class="v5-elo-box">\
+                    <div class="v5-elo-title">ELO Details</div>\
+                    <div class="v5-s3" style="padding:0">\
+                        <div class="v5-s3r"><div class="v5-vl">' + fmtElo(eloA, eloPctA) + ' ' + (eloA && eloB && eloA > eloB ? winMark(true,'l') : '') + '</div><div class="v5-vc">ELO</div><div class="v5-vr">' + (eloA && eloB && eloB > eloA ? winMark(true,'r') : '') + ' ' + fmtElo(eloB, eloPctB) + '</div></div>\
+                        <div class="v5-s3r"><div class="v5-vl">' + (surfEloA || '—') + ' ' + (surfEloA && surfEloB && surfEloA > surfEloB ? winMark(true,'l') : '') + '</div><div class="v5-vc">Surface ELO</div><div class="v5-vr">' + (surfEloA && surfEloB && surfEloB > surfEloA ? winMark(true,'r') : '') + ' ' + (surfEloB || '—') + '</div></div>\
+                    </div>\
+                    ' + (eloA && eloB ? '<div class="v5-elo-prob-row">ELO Gap: '+ Math.abs(eloA-eloB) +'pts → <span class="v5-elo-prob-val ' + (eloA > eloB ? 'vg' : 'vblue') + '">~' + (eloP||50).toFixed(0) + '% ' + (eloA > eloB ? (s.player_a||'') : (s.player_b||'')) + '</span></div>' : '') + '\
+                </div>' : '') + '\
+            </div>\
+            <!-- TAB 3: SERVE & RETURN -->\
+            <div class="v5-tab-panel" data-v5tab="deep">\
+                ' + (s.sa_aces != null || s.sb_aces != null ? '\
+                <div class="v5-s3" style="padding-bottom:0">\
+                    <div class="v5-s3h"><div class="ph">' + (s.player_a||'') + '</div><div class="ph v5-hc"></div><div class="ph pr">' + (s.player_b||'') + '</div></div>\
+                </div>\
+                <div class="v5-s3" style="padding-top:0;padding-bottom:4px">\
+                    <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Serve</div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (s.sa_aces != null ? s.sa_aces.toFixed(1) : '—') + ' ' + (s.sa_aces != null && s.sb_aces != null && s.sa_aces > s.sb_aces ? winMark(true,'l') : '') + '</div><div class="v5-vc">Aces/Match</div><div class="v5-vr">' + (s.sb_aces != null && s.sa_aces != null && s.sb_aces > s.sa_aces ? winMark(true,'r') : '') + ' ' + (s.sb_aces != null ? s.sb_aces.toFixed(1) : '—') + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (s.sa_dfs != null ? s.sa_dfs.toFixed(1) : '—') + ' ' + (s.sa_dfs != null && s.sb_dfs != null && s.sa_dfs < s.sb_dfs ? winMark(true,'l') : '') + '</div><div class="v5-vc">DFs/Match</div><div class="v5-vr">' + (s.sb_dfs != null && s.sa_dfs != null && s.sb_dfs < s.sa_dfs ? winMark(true,'r') : '') + ' ' + (s.sb_dfs != null ? s.sb_dfs.toFixed(1) : '—') + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (s.sa_first_in != null ? s.sa_first_in.toFixed(1)+'%' : '—') + ' ' + (s.sa_first_in != null && s.sb_first_in != null && s.sa_first_in > s.sb_first_in ? winMark(true,'l') : '') + '</div><div class="v5-vc">1st Serve %</div><div class="v5-vr">' + (s.sb_first_in != null && s.sa_first_in != null && s.sb_first_in > s.sa_first_in ? winMark(true,'r') : '') + ' ' + (s.sb_first_in != null ? s.sb_first_in.toFixed(1)+'%' : '—') + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (s.sa_first_won != null ? s.sa_first_won.toFixed(1)+'%' : '—') + ' ' + (s.sa_first_won != null && s.sb_first_won != null && s.sa_first_won > s.sb_first_won ? winMark(true,'l') : '') + '</div><div class="v5-vc">1st Srv Win %</div><div class="v5-vr">' + (s.sb_first_won != null && s.sa_first_won != null && s.sb_first_won > s.sa_first_won ? winMark(true,'r') : '') + ' ' + (s.sb_first_won != null ? s.sb_first_won.toFixed(1)+'%' : '—') + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (s.sa_second_won != null ? s.sa_second_won.toFixed(1)+'%' : '—') + ' ' + (s.sa_second_won != null && s.sb_second_won != null && s.sa_second_won > s.sb_second_won ? winMark(true,'l') : '') + '</div><div class="v5-vc">2nd Srv Win %</div><div class="v5-vr">' + (s.sb_second_won != null && s.sa_second_won != null && s.sb_second_won > s.sa_second_won ? winMark(true,'r') : '') + ' ' + (s.sb_second_won != null ? s.sb_second_won.toFixed(1)+'%' : '—') + '</div></div>\
+                </div>\
+                <div class="v5-divider"></div>\
+                <div class="v5-s3" style="padding-top:4px">\
+                    <div class="v5-adv-section-title" style="padding:0 0 6px 0;margin:0">Return & Pressure</div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (s.sa_bp_saved != null ? s.sa_bp_saved.toFixed(1)+'%' : '—') + ' ' + (s.sa_bp_saved != null && s.sb_bp_saved != null && s.sa_bp_saved > s.sb_bp_saved ? winMark(true,'l') : '') + '</div><div class="v5-vc">BP Saved %</div><div class="v5-vr">' + (s.sb_bp_saved != null && s.sa_bp_saved != null && s.sb_bp_saved > s.sa_bp_saved ? winMark(true,'r') : '') + ' ' + (s.sb_bp_saved != null ? s.sb_bp_saved.toFixed(1)+'%' : '—') + '</div></div>\
+                    <div class="v5-s3r"><div class="v5-vl">' + (s.sa_bp_convert != null ? s.sa_bp_convert.toFixed(1)+'%' : '—') + ' ' + (s.sa_bp_convert != null && s.sb_bp_convert != null && s.sa_bp_convert > s.sb_bp_convert ? winMark(true,'l') : '') + '</div><div class="v5-vc">BP Convert %</div><div class="v5-vr">' + (s.sb_bp_convert != null && s.sa_bp_convert != null && s.sb_bp_convert > s.sa_bp_convert ? winMark(true,'r') : '') + ' ' + (s.sb_bp_convert != null ? s.sb_bp_convert.toFixed(1)+'%' : '—') + '</div></div>\
+                </div>\
+                ' : '\
+                <div class="v5-deep-empty">\
+                    <div style="font-size:24px;margin-bottom:8px">📊</div>\
+                    Serve &amp; return stats unavailable.<br>\
+                    <span style="font-size:9px;color:#666;line-height:1.6">TML database covers ATP only — WTA &amp; lower-tier players may not have serve data.</span>\
+                </div>\
+                ') + '\
+            </div>\
+            <!-- TAB 4: MARKET -->\
+            <div class="v5-tab-panel" data-v5tab="market">\
+                <div class="v5-market-section">\
+                    <div class="v5-market-header">Market Overview</div>\
+                    <div class="v5-market-stat"><span class="ml">Total Volume</span><span style="color:#4caf50;font-weight:700">$' + (s.volume||0).toLocaleString() + '</span></div>\
+                    <div class="v5-market-stat"><span class="ml">Liquidity</span><span>$' + (s.liquidity||0).toLocaleString() + '</span></div>\
+                    <div class="v5-market-stat"><span class="ml">Poly Price (live)</span><span><span class="live-dot"></span>' + (s.player_a||'') + ' ' + (s.poly_price_a||0).toFixed(1) + 'c · ' + (s.player_b||'') + ' ' + (s.poly_price_b||0).toFixed(1) + 'c</span></div>\
+                    ' + (s.end_date ? '<div class="v5-market-stat"><span class="ml">Closes</span><span style="color:#888">' + s.end_date + '</span></div>' : '') + '\
+                </div>\
+            </div>\
+            <!-- FOOTER -->\
+            <div class="v5-card-foot">\
+                <button class="v5-bet-btn" onclick=\'openTrack(' + trackData + ')\'>Track Bet</button>\
+                <a href="' + polyLink + '" target="_blank" class="v5-plink"><span class="live-dot"></span>Open on Polymarket →</a>\
+            </div>\
+        </div>';
+    });
+
+    html += '</div>';
+    grid.innerHTML = html;
 }
 
 // ─── TRACK FROM SIGNAL MODAL ──────────────────────────────────────────────
 function openTrack(signal) {
     state.trackingSignal = signal;
     document.getElementById('trackCtx').innerHTML =
-        `<strong>${escapeHtml(signal.match)}</strong><br>Pick: ${escapeHtml(signal.bet_on)} • Model ${pctStr(signal.model_prob)} • Market ${priceStr(signal.poly_price)}`;
+        '<strong>' + escapeHtml(signal.match) + '</strong><br>Pick: ' + escapeHtml(signal.bet_on) + ' • Model ' + pctStr(signal.model_prob) + ' • Market ' + priceStr(signal.poly_price);
     document.getElementById('tm-price').value = signal.poly_price ? Number(signal.poly_price).toFixed(1) : '';
     document.getElementById('tm-stake').value = 50;
     document.getElementById('tm-notes').value = '';
@@ -578,9 +964,9 @@ function closeTrack() {
     state.trackingSignal = null;
 }
 async function confirmTrack() {
-    const s = state.trackingSignal;
+    var s = state.trackingSignal;
     if (!s) return;
-    const payload = {
+    var payload = {
         match: s.match,
         bet_on: s.bet_on,
         stake: parseFloat(document.getElementById('tm-stake').value),
@@ -590,12 +976,12 @@ async function confirmTrack() {
         model_prob: s.model_prob,
         notes: document.getElementById('tm-notes').value,
     };
-    const r = await fetch('/members/api/bets', {
+    var r = await fetch('/members/api/bets', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload),
     });
-    const data = await r.json();
+    var data = await r.json();
     if (r.ok) {
         closeTrack();
         state.betsLoaded = false;
@@ -609,9 +995,9 @@ async function confirmTrack() {
 async function loadBets() {
     document.getElementById('betsBody').innerHTML = '<div class="empty">Loading...</div>';
     try {
-        const r = await fetch('/members/api/bets');
+        var r = await fetch('/members/api/bets');
         if (r.status === 401) { location.href = '/members'; return; }
-        const data = await r.json();
+        var data = await r.json();
         state.bets = data.bets || [];
         state.betsLoaded = true;
         renderBets();
@@ -622,41 +1008,41 @@ async function loadBets() {
 }
 
 function renderBets() {
-    const wrap = document.getElementById('betsBody');
-    const filter = document.getElementById('betFilter').value;
-    let list = state.bets;
-    if (filter === 'open') list = list.filter(b => !b.outcome);
-    if (filter === 'closed') list = list.filter(b => b.outcome);
+    var wrap = document.getElementById('betsBody');
+    var filter = document.getElementById('betFilter').value;
+    var list = state.bets;
+    if (filter === 'open') list = list.filter(function(b){ return !b.outcome; });
+    if (filter === 'closed') list = list.filter(function(b){ return b.outcome; });
     if (!list.length) {
         wrap.innerHTML = '<div class="empty">No bets to show. Log one above or track a signal from the Signals tab.</div>';
         return;
     }
     wrap.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
         '<th>Match</th><th>Pick</th><th>Stake</th><th>Price</th><th>Status</th><th>P&amp;L</th><th>Logged</th><th></th></tr></thead><tbody>' +
-        list.map(b => {
-            const outcome = b.outcome
-                ? `<span class="badge ${b.outcome}">${b.outcome.toUpperCase()}</span>`
+        list.map(function(b) {
+            var outcome = b.outcome
+                ? '<span class="badge ' + b.outcome + '">' + b.outcome.toUpperCase() + '</span>'
                 : '<span class="badge open">OPEN</span>';
-            const pnl = b.outcome
-                ? `<span class="${(b.pnl || 0) >= 0 ? 'pos' : 'neg'}">${(b.pnl || 0) >= 0 ? '+' : ''}${fmt(b.pnl, 2)}</span>`
+            var pnl = b.outcome
+                ? '<span class="' + ((b.pnl || 0) >= 0 ? 'pos' : 'neg') + '">' + ((b.pnl || 0) >= 0 ? '+' : '') + fmt(b.pnl, 2) + '</span>'
                 : '—';
-            const date = b.created_at ? new Date(b.created_at + 'Z').toLocaleDateString() : '—';
-            return `<tr>
-                <td>${escapeHtml(b.match)}</td>
-                <td><strong>${escapeHtml(b.bet_on)}</strong>${b.surface ? ` <span class="surface-${escapeHtml(b.surface)}" style="font-size:9px">${escapeHtml(b.surface)}</span>` : ''}</td>
-                <td>$${fmt(b.stake, 2)}</td>
-                <td>${priceStr(b.price)}</td>
-                <td>${outcome}</td>
-                <td>${pnl}</td>
-                <td style="font-size:10px;color:#6c757d">${date}</td>
-                <td><button class="danger" onclick="deleteBet('${b.id}')">DELETE</button></td>
-            </tr>`;
+            var date = b.created_at ? new Date(b.created_at + 'Z').toLocaleDateString() : '—';
+            return '<tr>' +
+                '<td>' + escapeHtml(b.match) + '</td>' +
+                '<td><strong>' + escapeHtml(b.bet_on) + '</strong>' + (b.surface ? ' <span class="surface-' + escapeHtml(b.surface) + '" style="font-size:9px">' + escapeHtml(b.surface) + '</span>' : '') + '</td>' +
+                '<td>$' + fmt(b.stake, 2) + '</td>' +
+                '<td>' + priceStr(b.price) + '</td>' +
+                '<td>' + outcome + '</td>' +
+                '<td>' + pnl + '</td>' +
+                '<td style="font-size:10px;color:#6c757d">' + date + '</td>' +
+                '<td><button class="danger" onclick="deleteBet(\'' + b.id + '\')">DELETE</button></td>' +
+            '</tr>';
         }).join('') + '</tbody></table></div>';
 }
 
 async function submitBet(ev) {
     ev.preventDefault();
-    const payload = {
+    var payload = {
         match: document.getElementById('bf-match').value.trim(),
         bet_on: document.getElementById('bf-bet_on').value.trim(),
         stake: parseFloat(document.getElementById('bf-stake').value),
@@ -665,13 +1051,13 @@ async function submitBet(ev) {
         surface: document.getElementById('bf-surface').value.trim(),
         notes: document.getElementById('bf-notes').value.trim(),
     };
-    const r = await fetch('/members/api/bets', {
+    var r = await fetch('/members/api/bets', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload),
     });
-    const data = await r.json();
-    const msg = document.getElementById('bf-msg');
+    var data = await r.json();
+    var msg = document.getElementById('bf-msg');
     if (r.ok) {
         msg.style.color = '#4caf50';
         msg.textContent = 'Bet logged.';
@@ -681,16 +1067,16 @@ async function submitBet(ev) {
         msg.style.color = '#f44336';
         msg.textContent = 'Error: ' + (data.error || 'unknown');
     }
-    setTimeout(() => msg.textContent = '', 4000);
+    setTimeout(function(){ msg.textContent = ''; }, 4000);
 }
 
 function resetBetForm() {
-    ['bf-match','bf-bet_on','bf-stake','bf-price','bf-tournament','bf-surface','bf-notes'].forEach(id => document.getElementById(id).value = '');
+    ['bf-match','bf-bet_on','bf-stake','bf-price','bf-tournament','bf-surface','bf-notes'].forEach(function(id){ document.getElementById(id).value = ''; });
 }
 
 async function deleteBet(id) {
     if (!confirm('Delete this bet from your log?')) return;
-    const r = await fetch('/members/api/bets/' + id, {method: 'DELETE'});
+    var r = await fetch('/members/api/bets/' + id, {method: 'DELETE'});
     if (r.ok) loadBets();
     else alert('Delete failed.');
 }
@@ -698,26 +1084,26 @@ async function deleteBet(id) {
 // ─── STATS ────────────────────────────────────────────────────────────────
 async function loadStats() {
     try {
-        const r = await fetch('/members/api/stats');
+        var r = await fetch('/members/api/stats');
         if (r.status === 401) { location.href = '/members'; return; }
-        const data = await r.json();
-        const s = data.stats || {};
-        document.getElementById('kpi-total').textContent = s.total ?? '—';
+        var data = await r.json();
+        var s = data.stats || {};
+        document.getElementById('kpi-total').textContent = s.total != null ? s.total : '—';
 
-        const wrEl = document.getElementById('kpi-wr');
+        var wrEl = document.getElementById('kpi-wr');
         wrEl.textContent = s.closed ? s.win_rate + '%' : '—';
         wrEl.className = 'value ' + (s.win_rate >= 55 ? 'green' : s.win_rate >= 45 ? 'amber' : 'red');
 
-        const roiEl = document.getElementById('kpi-roi');
+        var roiEl = document.getElementById('kpi-roi');
         roiEl.textContent = s.wagered > 0 ? (s.roi >= 0 ? '+' : '') + s.roi + '%' : '—';
         roiEl.className = 'value ' + (s.roi > 0 ? 'green' : s.roi < 0 ? 'red' : 'white');
 
-        const pnl = s.pnl || 0;
-        const pnlEl = document.getElementById('kpi-pnl');
+        var pnl = s.pnl || 0;
+        var pnlEl = document.getElementById('kpi-pnl');
         pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
         pnlEl.className = 'value ' + (pnl >= 0 ? 'green' : 'red');
 
-        const detail = `${s.wins || 0} wins / ${s.losses || 0} losses / ${s.voids || 0} voids • ${s.open || 0} open • $${(s.wagered || 0).toFixed(2)} wagered`;
+        var detail = (s.wins || 0) + ' wins / ' + (s.losses || 0) + ' losses / ' + (s.voids || 0) + ' voids • ' + (s.open || 0) + ' open • $' + (s.wagered || 0).toFixed(2) + ' wagered';
         document.getElementById('kpi-detail').textContent = detail;
     } catch (e) {}
 }
@@ -726,9 +1112,9 @@ async function loadStats() {
 async function loadPlayers() {
     document.getElementById('playersBody').innerHTML = '<div class="empty">Loading player profiles...</div>';
     try {
-        const r = await fetch('/members/api/players');
+        var r = await fetch('/members/api/players');
         if (r.status === 401) { location.href = '/members'; return; }
-        const data = await r.json();
+        var data = await r.json();
         state.players = data.players || [];
         state.playersLoaded = true;
         renderPlayers();
@@ -738,109 +1124,60 @@ async function loadPlayers() {
 }
 
 function renderPlayers() {
-    const q = (document.getElementById('playerSearch').value || '').trim().toLowerCase();
-    const tour = document.getElementById('playerTour').value;
-    let list = state.players;
-    if (tour !== 'all') list = list.filter(p => p.tour === tour);
+    var q = (document.getElementById('playerSearch').value || '').trim().toLowerCase();
+    var tour = document.getElementById('playerTour').value;
+    var list = state.players;
+    if (tour !== 'all') list = list.filter(function(p){ return p.tour === tour; });
     if (q) {
-        list = list.filter(p => (p.name || '').toLowerCase().includes(q));
+        list = list.filter(function(p){ return (p.name || '').toLowerCase().includes(q); });
     } else {
-        list = list.filter(p => p.rank).sort((a, b) => (a.rank || 9999) - (b.rank || 9999)).slice(0, 30);
+        list = list.filter(function(p){ return p.rank; }).sort(function(a, b){ return (a.rank || 9999) - (b.rank || 9999); }).slice(0, 30);
     }
     list = list.slice(0, 60);
-    const wrap = document.getElementById('playersBody');
+    var wrap = document.getElementById('playersBody');
     if (!list.length) {
         wrap.innerHTML = '<div class="empty">No players match your search.</div>';
         return;
     }
-    wrap.innerHTML = '<div class="pc-grid">' + list.map(p => {
-        const handStr = p.hand === 'R' ? 'Right' : p.hand === 'L' ? 'Left' : '—';
-
-        // Form dots
-        const formHtml = (p.form || []).slice(0, 10).map(r => `<span class="pc-form-dot ${r === 'W' ? 'pc-fw' : 'pc-fl'}">${r}</span>`).join('');
-
-        // ELO row
-        const surfElos = ['Hard','Clay','Grass'].map(s => {
-            const se = (p.surf_elo || {})[s] || {};
-            return `<div class="pc-elo-cell">
-                <div class="pc-elo-lbl" style="color:${surfaceColor(s)}">${s}</div>
-                <div class="pc-elo-val">${se.elo || '—'}</div>
-            </div>`;
+    wrap.innerHTML = '<div class="pc-grid">' + list.map(function(p) {
+        var handStr = p.hand === 'R' ? 'Right' : p.hand === 'L' ? 'Left' : '—';
+        var formHtml = (p.form || []).slice(0, 10).map(function(r){ return '<span class="pc-form-dot ' + (r === 'W' ? 'pc-fw' : 'pc-fl') + '">' + r + '</span>'; }).join('');
+        var surfElos = ['Hard','Clay','Grass'].map(function(s) {
+            var se = (p.surf_elo || {})[s] || {};
+            return '<div class="pc-elo-cell"><div class="pc-elo-lbl" style="color:' + surfaceColor(s) + '">' + s + '</div><div class="pc-elo-val">' + (se.elo || '—') + '</div></div>';
+        }).join('');
+        var surfBarsHtml = ['Hard','Clay','Grass'].map(function(s) {
+            var sd = (p.surfaces || {})[s] || {};
+            var se = (p.surf_elo || {})[s] || {};
+            var wr = sd.wr || 0;
+            var barColor = s === 'Hard' ? '#4fc3f7' : s === 'Clay' ? '#ff8a65' : '#81c784';
+            return '<div class="pc-surf-row"><div class="pc-surf-lbl" style="color:' + surfaceColor(s) + '">' + s + '</div><div class="pc-surf-bar"><div class="pc-surf-fill" style="width:' + Math.min(100, wr) + '%; background:' + barColor + '"></div></div><div class="pc-surf-val">' + wr.toFixed(0) + '%</div><div class="pc-surf-elo">' + (se.elo || '—') + '</div></div>';
+        }).join('');
+        var mental = p.mental || {};
+        var mentalHtml = ['deciding','tiebreak','comeback','finals'].map(function(k) {
+            var m = mental[k] || {};
+            var pct = m.pct != null ? m.pct : '—';
+            var color = pct >= 60 ? '#4caf50' : pct >= 45 ? '#ffd740' : '#f44336';
+            return '<div class="pc-mental-item"><div class="pc-mental-val" style="color:' + (typeof pct === 'number' ? color : '#e0e0e0') + '">' + pct + (typeof pct === 'number' ? '%' : '') + '</div><div class="pc-mental-lbl">' + k.toUpperCase() + '</div></div>';
         }).join('');
 
-        // Surface bars
-        const surfBarsHtml = ['Hard','Clay','Grass'].map(s => {
-            const sd = (p.surfaces || {})[s] || {};
-            const se = (p.surf_elo || {})[s] || {};
-            const wr = sd.wr || 0;
-            const barColor = s === 'Hard' ? '#4fc3f7' : s === 'Clay' ? '#ff8a65' : '#81c784';
-            return `<div class="pc-surf-row">
-                <div class="pc-surf-lbl" style="color:${surfaceColor(s)}">${s}</div>
-                <div class="pc-surf-bar"><div class="pc-surf-fill" style="width:${Math.min(100, wr)}%; background:${barColor}"></div></div>
-                <div class="pc-surf-val">${wr.toFixed(0)}%</div>
-                <div class="pc-surf-elo">${se.elo || '—'}</div>
-            </div>`;
-        }).join('');
-
-        // Mental
-        const mental = p.mental || {};
-        const mentalHtml = ['deciding','tiebreak','comeback','finals'].map(k => {
-            const m = mental[k] || {};
-            const pct = m.pct ?? '—';
-            const color = pct >= 60 ? '#4caf50' : pct >= 45 ? '#ffd740' : '#f44336';
-            return `<div class="pc-mental-item">
-                <div class="pc-mental-val" style="color:${typeof pct === 'number' ? color : '#e0e0e0'}">${pct}${typeof pct === 'number' ? '%' : ''}</div>
-                <div class="pc-mental-lbl">${k.toUpperCase()}</div>
-            </div>`;
-        }).join('');
-
-        return `<div class="pc">
-            <div class="pc-hdr">
-                <div>
-                    <div class="pc-name">${escapeHtml(p.name || '—')}</div>
-                    <div class="pc-meta">
-                        <span>${escapeHtml(p.country || '')}</span>
-                        <span>${p.age ? Math.floor(p.age) + 'y' : '—'}</span>
-                        <span>${handStr}-handed</span>
-                        <span>${escapeHtml(p.tour || '')}</span>
-                    </div>
-                </div>
-                <div class="pc-rk">
-                    <div class="pc-rk-num">#${p.rank || '—'}</div>
-                    <div class="pc-rk-lbl">RANK</div>
-                </div>
-            </div>
-            <div class="pc-elo-row">
-                <div class="pc-elo-cell">
-                    <div class="pc-elo-lbl">OVERALL</div>
-                    <div class="pc-elo-val">${p.elo || '—'}</div>
-                    ${p.elo_pct ? `<div class="pc-elo-pct">${p.elo_pct}th pct</div>` : ''}
-                </div>
-                ${surfElos}
-            </div>
-            <div class="pc-sec">
-                <div class="pc-sec-title">RECENT FORM</div>
-                <div class="pc-form-strip">${formHtml || '—'}</div>
-            </div>
-            <div class="pc-sec">
-                <div class="pc-sec-title">SURFACE WIN RATE</div>
-                ${surfBarsHtml}
-            </div>
-            <div class="pc-sec">
-                <div class="pc-sec-title">MENTAL GAME</div>
-                <div class="pc-mental-grid">${mentalHtml}</div>
-            </div>
-        </div>`;
+        return '<div class="pc">' +
+            '<div class="pc-hdr"><div><div class="pc-name">' + escapeHtml(p.name || '—') + '</div><div class="pc-meta"><span>' + escapeHtml(p.country || '') + '</span><span>' + (p.age ? Math.floor(p.age) + 'y' : '—') + '</span><span>' + handStr + '-handed</span><span>' + escapeHtml(p.tour || '') + '</span></div></div><div class="pc-rk"><div class="pc-rk-num">#' + (p.rank || '—') + '</div><div class="pc-rk-lbl">RANK</div></div></div>' +
+            '<div class="pc-elo-row"><div class="pc-elo-cell"><div class="pc-elo-lbl">OVERALL</div><div class="pc-elo-val">' + (p.elo || '—') + '</div>' + (p.elo_pct ? '<div class="pc-elo-pct">' + p.elo_pct + 'th pct</div>' : '') + '</div>' + surfElos + '</div>' +
+            '<div class="pc-sec"><div class="pc-sec-title">RECENT FORM</div><div class="pc-form-strip">' + (formHtml || '—') + '</div></div>' +
+            '<div class="pc-sec"><div class="pc-sec-title">SURFACE WIN RATE</div>' + surfBarsHtml + '</div>' +
+            '<div class="pc-sec"><div class="pc-sec-title">MENTAL GAME</div><div class="pc-mental-grid">' + mentalHtml + '</div></div>' +
+        '</div>';
     }).join('') + '</div>';
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────
 (async function init() {
     try {
-        const r = await fetch('/members/api/me');
+        var r = await fetch('/members/api/me');
         if (r.status === 401) { location.href = '/members'; return; }
     } catch (e) {}
-    const h = (location.hash || '').replace('#', '');
+    var h = (location.hash || '').replace('#', '');
     if (h && document.getElementById('panel-' + h)) {
         showTab(h);
     } else {
