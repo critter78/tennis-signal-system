@@ -2354,6 +2354,26 @@ def admin_disable_member():
     return jsonify({"status": "ok", "member_id": member_id, "new_status": new_status})
 
 
+@app.route("/admin/reset-members", methods=["POST"])
+def admin_reset_members():
+    """Wipe all invites and members — fresh start."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    # Keep only the critter admin account
+    members = load_members()
+    keep_id = None
+    for mid, m in members.items():
+        if m.get("email") == "critter@breakpointbetting.net":
+            keep_id = mid
+            break
+    if keep_id:
+        save_members({keep_id: members[keep_id]})
+    else:
+        save_members({})
+    save_invites({})
+    return jsonify({"status": "ok", "kept": keep_id})
+
+
 # ─── EXISTING API ROUTES ─────────────────────────────────────────────────────
 
 @app.route("/card", methods=["GET"])
