@@ -793,7 +793,7 @@ window.PICKS_DATA = [];
         <div class="stat-card"><div class="label">Open Positions</div><div class="value" style="color:#42a5f5" id="at-stat-open">0</div></div>
         <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:#f59e0b" id="at-stat-pending">0</div></div>
         <div class="stat-card"><div class="label">Confirmed</div><div class="value green" id="at-stat-confirmed">0</div></div>
-        <div class="stat-card"><div class="label">Rejected</div><div class="value" style="color:#6c757d" id="at-stat-rejected">0</div></div>
+        <div class="stat-card"><div class="label">Record</div><div class="value green" id="at-stat-record">—</div></div>
         <div class="stat-card"><div class="label">Kill Switch</div><div class="value" style="color:#4caf50" id="at-stat-kill">OFF</div></div>
         <div class="stat-card"><div class="label">Total Invested</div><div class="value white" id="at-dash-invested">$0</div></div>
         <div class="stat-card"><div class="label">Unrealized P&L</div><div class="value" id="at-dash-unrealized" style="color:#6c757d">$0</div></div>
@@ -4474,6 +4474,17 @@ function renderAtDashboard() {
     // Update stat badges
     const openEl = document.getElementById('at-stat-open');
     if (openEl) openEl.textContent = open.length;
+
+    // Record (W-L)
+    const losses = closed.filter(t => t.outcome === 'loss');
+    const recordEl = document.getElementById('at-stat-record');
+    if (recordEl) {
+        if (closed.length > 0) {
+            recordEl.innerHTML = `<span style="color:#4caf50">${wins.length}W</span> <span style="color:#6c757d">-</span> <span style="color:#f44336">${losses.length}L</span>`;
+        } else {
+            recordEl.textContent = '—';
+        }
+    }
 
     // Quick P&L
     const totalInvested = confirmed.reduce((s,t) => s + (t.actual_stake || t.stake || 0), 0);
