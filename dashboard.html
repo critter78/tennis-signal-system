@@ -1650,20 +1650,23 @@ const pnlStr = totalPnl >= 0 ? `+$${totalPnl.toFixed(0)}` : `-$${Math.abs(totalP
 const avgEdge = withEdge.length > 0 ? (withEdge.reduce((s, p) => s + Math.abs(p.edge), 0) / withEdge.length).toFixed(1) + '%' : '—';
 const bestEdge = picks.length > 0 ? Math.max(...picks.map(p => Math.abs(p.edge || 0))).toFixed(1) + '%' : '—';
 
-// Model Win Rate — rolling 7-day window
+// Betting Win Rate — rolling 7-day from placed bets
 const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-const recent7d = resolved.filter(p => (p.resolved_at || p.logged_at || '') >= sevenDaysAgo);
-const wins7d = recent7d.filter(p => p.outcome === 'win');
-const losses7d = recent7d.filter(p => p.outcome === 'loss');
-const wr7d = recent7d.length > 0 ? (wins7d.length / recent7d.length * 100).toFixed(1) + '%' : '—';
-const wrColor = recent7d.length > 0 && wins7d.length/recent7d.length >= 0.5 ? '#4caf50' : '#f44336';
-const winRateCard = recent7d.length > 0
+const bets7d = myBets.filter(b => (b.logged_at || b.timestamp || '') >= sevenDaysAgo);
+const resolvedBets7d = bets7d.filter(b => b.outcome === 'win' || b.outcome === 'loss');
+const betWins7d = resolvedBets7d.filter(b => b.outcome === 'win');
+const betLosses7d = resolvedBets7d.filter(b => b.outcome === 'loss');
+const pending7d = bets7d.length - resolvedBets7d.length;
+const wr7d = resolvedBets7d.length > 0 ? (betWins7d.length / resolvedBets7d.length * 100).toFixed(1) + '%' : '—';
+const wrColor = resolvedBets7d.length > 0 && betWins7d.length/resolvedBets7d.length >= 0.5 ? '#4caf50' : '#f44336';
+const pendingNote = pending7d > 0 ? ` <span style="color:#fdd835;font-weight:400">(${pending7d} pending)</span>` : '';
+const winRateCard = resolvedBets7d.length > 0
     ? `<div class="stat-card" style="border-color:${wrColor}50;background:linear-gradient(135deg,#1a1d27 60%,${wrColor}08)">
         <div class="label">Win Rate (7 Day)</div>
         <div class="value" style="color:${wrColor}">${wr7d}</div>
-        <div style="font-size:10px;color:#aaa;margin-top:2px;font-weight:600"><span style="color:#4caf50">${wins7d.length}W</span> <span style="color:#6c757d">—</span> <span style="color:#f44336">${losses7d.length}L</span> <span style="color:#6c757d;font-weight:400">(${recent7d.length} resolved)</span></div>
+        <div style="font-size:10px;color:#aaa;margin-top:2px;font-weight:600"><span style="color:#4caf50">${betWins7d.length}W</span> <span style="color:#6c757d">—</span> <span style="color:#f44336">${betLosses7d.length}L</span>${pendingNote}</div>
     </div>`
-    : statCard('Win Rate (7 Day)', '—', 'white');
+    : statCard('Win Rate (7 Day)', bets7d.length > 0 ? 'pending' : '—', 'white');
 
 document.getElementById('statsRow').innerHTML = [
     statCard('Total Signals', picks.length, 'white'),
