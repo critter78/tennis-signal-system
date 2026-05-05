@@ -17,12 +17,15 @@ Usage:
     # → (8, "WTA")
 """
 
+import gzip
 import json
 import os
 import re
 import sys
 import time
-import requests as _req
+import urllib.request
+import urllib.parse
+import zlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from difflib import SequenceMatcher
@@ -242,55 +245,51 @@ def _parse_wta_html(html):
     return rankings
 
 
+def _urllib_get(url, headers=None, timeout=30):
+    """Fetch URL via urllib — avoids requests recursion bug on Render."""
+    req = urllib.request.Request(url, method="GET")
+    hdrs = headers or _BROWSER_HEADERS
+    for k, v in hdrs.items():
+        if k.lower() == "accept-encoding":
+            v = "gzip, deflate"
+        req.add_header(k, v)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read()
+        encoding = resp.headers.get("Content-Encoding", "")
+        if "gzip" in encoding:
+            raw = gzip.decompress(raw)
+        elif "deflate" in encoding:
+            raw = zlib.decompress(raw)
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+        return raw
+
+
+def _urllib_json_get(url, headers=None, timeout=15):
+    """Fetch JSON via urllib — avoids requests recursion bug on Render."""
+    hdrs = headers or _JSON_HEADERS
+    text = _urllib_get(url, headers=hdrs, timeout=timeout)
+    return json.loads(text)
+
+
 def _stream_html_section(url, start_marker, end_marker, max_bytes=300_000):
-    """Stream an HTML page and extract only the section between start/end markers.
-    Stops downloading as soon as end_marker is found — never holds the full page.
-    This keeps memory under control on Render's 512MB Starter plan."""
-    buffer = ""
-    found_start = False
-    section = ""
+    """Fetch an HTML page via urllib and extract only the section between
+    start/end markers. Uses urllib to avoid requests recursion bug on Render."""
+    try:
+        html = _urllib_get(url, headers=_BROWSER_HEADERS, timeout=30)
+    except Exception as e:
+        print(f"  [rankings] _stream_html_section fetch failed: {e}", file=sys.stderr)
+        return ""
 
-    resp = _req.get(url, headers=_BROWSER_HEADERS, timeout=30, stream=True)
-    resp.raise_for_status()
+    start_idx = html.find(start_marker)
+    if start_idx < 0:
+        return ""
 
-    for chunk in resp.iter_content(chunk_size=8192, decode_unicode=True):
-        if chunk is None:
-            continue
-        # If response is bytes, decode
-        if isinstance(chunk, bytes):
-            chunk = chunk.decode("utf-8", errors="replace")
+    end_idx = html.find(end_marker, start_idx)
+    if end_idx < 0:
+        return html[start_idx:start_idx + max_bytes]
 
-        buffer += chunk
-
-        if not found_start:
-            idx = buffer.find(start_marker)
-            if idx >= 0:
-                buffer = buffer[idx:]  # trim everything before the marker
-                found_start = True
-            elif len(buffer) > max_bytes:
-                # Marker not found within max_bytes — give up
-                resp.close()
-                return ""
-            else:
-                # Keep only the tail (marker could span chunks)
-                if len(buffer) > len(start_marker) * 2:
-                    buffer = buffer[-(len(start_marker) * 2):]
-                continue
-
-        # We've found the start — now look for the end
-        end_idx = buffer.find(end_marker)
-        if end_idx >= 0:
-            section = buffer[:end_idx + len(end_marker)]
-            resp.close()
-            return section
-
-        # Safety: don't accumulate more than max_bytes after start
-        if len(buffer) > max_bytes:
-            resp.close()
-            return buffer[:max_bytes]
-
-    resp.close()
-    return buffer if found_start else ""
+    return html[start_idx:end_idx + len(end_marker)]
 
 
 def _fetch_atp_rankings(top_n=200):
@@ -355,10 +354,8 @@ def _fetch_wta_rankings(top_n=200):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _fetch_json(url, timeout=15):
-    """Fetch JSON from a URL with proper headers."""
-    resp = _req.get(url, headers=_JSON_HEADERS, timeout=timeout)
-    resp.raise_for_status()
-    return resp.json()
+    """Fetch JSON from a URL with proper headers (via urllib)."""
+    return _urllib_json_get(url, headers=_JSON_HEADERS, timeout=timeout)
 
 
 def _parse_sofascore_rankings(data, tour="ATP"):
@@ -429,9 +426,9 @@ def _fetch_tml_rankings():
         try:
             # TML stores recent matches with player rankings embedded
             url = f"{_TML_BASE}/tennis-match-database"
-            resp = _req.get(url, headers=_BROWSER_HEADERS, timeout=20)
-            if resp.status_code == 200 and _HAS_BS4:
-                soup = BeautifulSoup(resp.text, "html.parser")
+            resp_text = _urllib_get(url, headers=_BROWSER_HEADERS, timeout=20)
+            if resp_text and _HAS_BS4:
+                soup = BeautifulSoup(resp_text, "html.parser")
                 # Look for player ranking data in match listings
                 for row in soup.find_all("tr"):
                     cells = row.find_all("td")
