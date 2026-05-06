@@ -2049,29 +2049,19 @@ def members_api_signals():
     # Sort newest first by logged_at
     picks_sorted = sorted(picks, key=lambda p: p.get("logged_at") or "", reverse=True)
 
+    # Strip sensitive/personal keys; pass everything else through so the
+    # members dashboard has all the fields it needs for rendering.
+    _sensitive_keys = {
+        "myOutcome", "myStake", "myOdds", "actual_shares", "entry_price",
+        "exit_price", "pnl", "shares", "trade_id", "clob_order_id",
+        "wallet", "api_key", "secret",
+    }
     out = []
     for p in picks_sorted:
         if status == "open" and p.get("outcome"):
             continue
-        out.append({
-            "match": p.get("match"),
-            "bet_on": p.get("bet_on"),
-            "tournament": p.get("tournament"),
-            "surface": p.get("surface"),
-            "round": p.get("round"),
-            "model_prob": p.get("model_prob"),
-            "poly_price": p.get("poly_price"),
-            "edge": p.get("edge"),
-            "confidence": p.get("confidence"),
-            "kelly_stake": p.get("kelly_stake"),
-            "logged_at": p.get("logged_at"),
-            "end_date": p.get("end_date"),
-            "outcome": p.get("outcome"),
-            "actual_winner": p.get("actual_winner"),
-            "poly_link": p.get("poly_link"),
-            "liquidity": p.get("liquidity"),
-            "volume": p.get("volume"),
-        })
+        clean = {k: v for k, v in p.items() if k not in _sensitive_keys}
+        out.append(clean)
     # Cap to the most recent 200 to keep payload small
     out = out[:200]
     return jsonify({"signals": out, "count": len(out)})
@@ -2133,7 +2123,17 @@ def members_api_stats():
     bets = get_member_bets(member["id"])
     bets = _resolve_member_bets(bets)
     set_member_bets(member["id"], bets)
-    return jsonify({"stats": _compute_member_stats(bets)})
+    # Also return resolved system picks for SYS WR calibration on dashboard
+    try:
+        all_picks = load_picks_jsonl(enrich=False)
+        resolved_picks = [
+            {"model_prob": p.get("model_prob"), "outcome": p.get("outcome")}
+            for p in all_picks
+            if p.get("outcome") in ("win", "loss")
+        ]
+    except Exception:
+        resolved_picks = []
+    return jsonify({"stats": _compute_member_stats(bets), "resolved": resolved_picks})
 
 
 @app.route("/members/api/players", methods=["GET"])
