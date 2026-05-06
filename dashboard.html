@@ -148,6 +148,9 @@
         .perf-range-btn { background:#1a1d27; color:#6c757d; border:1px solid #2d3139; padding:5px 12px; font-size:10px; font-weight:600; font-family:'IBM Plex Mono',monospace; cursor:pointer; letter-spacing:0.04em; transition:all 0.2s; }
         .perf-range-btn:hover { color:#e0e0e0; border-color:#d4740a; }
         .perf-range-btn.active { color:#d4740a; border-color:#d4740a; background:#1a1d27; }
+        .at-range-btn { background:#1a1d27; color:#6c757d; border:1px solid #2d3139; padding:5px 12px; font-size:10px; font-weight:600; font-family:'IBM Plex Mono',monospace; cursor:pointer; letter-spacing:0.04em; transition:all 0.2s; }
+        .at-range-btn:hover { color:#e0e0e0; border-color:#d4740a; }
+        .at-range-btn.active { color:#d4740a; border-color:#d4740a; background:#1a1d27; }
 
         .filters { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
         .filters select, .filters input { background: #1a1d27; color: #e0e0e0; border: 1px solid #2d3139; padding: 6px 10px; font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
@@ -787,13 +790,36 @@ window.PICKS_DATA = [];
         </div>
     </div>
 
-    <!-- AT Top Stats Bar (operational) -->
+    <!-- AT Time Filter Bar -->
+    <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center">
+        <button class="at-range-btn" data-range="all" onclick="setAtRange('all',this)">All Time</button>
+        <button class="at-range-btn" data-range="today" onclick="setAtRange('today',this)">Today</button>
+        <button class="at-range-btn" data-range="yesterday" onclick="setAtRange('yesterday',this)">Yesterday</button>
+        <button class="at-range-btn active" data-range="7d" onclick="setAtRange('7d',this)">Last 7d</button>
+        <button class="at-range-btn" data-range="30d" onclick="setAtRange('30d',this)">Last 30d</button>
+        <span style="color:#6c757d; font-size:10px; margin:0 4px">|</span>
+        <input type="date" id="atDateFrom" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2d3139; padding:5px 8px; font-size:11px; font-family:'IBM Plex Mono',monospace" onchange="setAtRange('custom')">
+        <span style="color:#6c757d; font-size:10px">to</span>
+        <input type="date" id="atDateTo" style="background:#1a1d27; color:#e0e0e0; border:1px solid #2d3139; padding:5px 8px; font-size:11px; font-family:'IBM Plex Mono',monospace" onchange="setAtRange('custom')">
+        <span style="color:#6c757d; font-size:10px; margin:0 4px">|</span>
+        <button id="atResolveBtn" onclick="resolveOutcomesNow()" style="background:#4caf50; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.5px">RESOLVE OUTCOMES</button>
+    </div>
+
+    <!-- AT Filtered Performance Stats -->
+    <div id="atPerfCards" class="stats-row" style="margin-bottom:16px">
+        <div class="stat-card"><div class="label">Bets</div><div class="value white" id="at-perf-bets">0</div></div>
+        <div class="stat-card"><div class="label">Record</div><div class="value green" id="at-perf-record">—</div></div>
+        <div class="stat-card"><div class="label">Win Rate</div><div class="value" id="at-perf-winrate">—</div></div>
+        <div class="stat-card"><div class="label">P&L</div><div class="value" id="at-perf-pnl">$0</div></div>
+        <div class="stat-card"><div class="label">Staked</div><div class="value amber" id="at-perf-staked">$0</div></div>
+        <div class="stat-card"><div class="label">ROI</div><div class="value" id="at-perf-roi">—</div></div>
+    </div>
+
+    <!-- AT Operational Stats Bar -->
     <div class="stats-row at-stats-bar" style="margin-bottom:16px">
-        <div class="stat-card"><div class="label">Mode</div><div class="value" id="at-stat-mode"><span style="font-size:10px; font-weight:700; padding:3px 10px; border-radius:4px; background:#d4740a25; color:#d4740a; border:1px solid #d4740a50">SEMI-AUTO</span></div></div>
         <div class="stat-card"><div class="label">Open Positions</div><div class="value" style="color:#42a5f5" id="at-stat-open">0</div></div>
         <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:#f59e0b" id="at-stat-pending">0</div></div>
         <div class="stat-card"><div class="label">Confirmed</div><div class="value green" id="at-stat-confirmed">0</div></div>
-        <div class="stat-card"><div class="label">Record</div><div class="value green" id="at-stat-record">—</div></div>
         <div class="stat-card"><div class="label">Kill Switch</div><div class="value" style="color:#4caf50" id="at-stat-kill">OFF</div></div>
         <div class="stat-card"><div class="label">Total Invested</div><div class="value white" id="at-dash-invested">$0</div></div>
         <div class="stat-card"><div class="label">Unrealized P&L</div><div class="value" id="at-dash-unrealized" style="color:#6c757d">$0</div></div>
@@ -4463,6 +4489,47 @@ async function saveAutoTraderConfig() {
     }
 }
 
+// ─── AT TIME FILTER ───
+let _atCurrentRange = '7d';
+
+function setAtRange(range, btn) {
+    _atCurrentRange = range;
+    document.querySelectorAll('.at-range-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    else if (range !== 'custom') {
+        const b = document.querySelector(`.at-range-btn[data-range="${range}"]`);
+        if (b) b.classList.add('active');
+    }
+    renderAtDashboard();
+}
+
+function getAtDateRange() {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+    switch (_atCurrentRange) {
+        case 'today': return { from: todayStr, to: todayStr };
+        case 'yesterday': return { from: yesterdayStr, to: yesterdayStr };
+        case '7d': {
+            const d = new Date(now); d.setDate(d.getDate() - 6);
+            return { from: d.toISOString().slice(0, 10), to: todayStr };
+        }
+        case '30d': {
+            const d = new Date(now); d.setDate(d.getDate() - 29);
+            return { from: d.toISOString().slice(0, 10), to: todayStr };
+        }
+        case 'custom': {
+            const f = document.getElementById('atDateFrom').value;
+            const t = document.getElementById('atDateTo').value;
+            return { from: f || '2000-01-01', to: t || todayStr };
+        }
+        default: return { from: '2000-01-01', to: '2099-12-31' };
+    }
+}
+
 // ─── AT DASHBOARD RENDERING ───
 function renderAtDashboard() {
     const trades = _atTradeHistory;
@@ -4471,28 +4538,59 @@ function renderAtDashboard() {
     const closed = confirmed.filter(t => t.outcome === 'win' || t.outcome === 'loss');
     const wins = closed.filter(t => t.outcome === 'win');
 
-    // Update stat badges
+    // Update operational stat badges (not time-filtered)
     const openEl = document.getElementById('at-stat-open');
     if (openEl) openEl.textContent = open.length;
 
-    // Record (W-L)
-    const losses = closed.filter(t => t.outcome === 'loss');
-    const recordEl = document.getElementById('at-stat-record');
-    if (recordEl) {
-        if (closed.length > 0) {
-            recordEl.innerHTML = `<span style="color:#4caf50">${wins.length}W</span> <span style="color:#6c757d">-</span> <span style="color:#f44336">${losses.length}L</span>`;
-        } else {
-            recordEl.textContent = '—';
-        }
+    // ─── TIME-FILTERED PERFORMANCE CARDS ───
+    const range = getAtDateRange();
+    const filteredConfirmed = confirmed.filter(t => {
+        const d = (t.timestamp || t.confirmed_at || t.created_at || '').slice(0, 10);
+        return d >= range.from && d <= range.to;
+    });
+    const filteredClosed = filteredConfirmed.filter(t => t.outcome === 'win' || t.outcome === 'loss');
+    const filteredWins = filteredClosed.filter(t => t.outcome === 'win');
+    const filteredLosses = filteredClosed.filter(t => t.outcome === 'loss');
+    const filteredPnl = filteredClosed.reduce((s,t) => s + (t.pnl || 0), 0);
+    const filteredStaked = filteredConfirmed.reduce((s,t) => s + (t.actual_stake || t.stake || 0), 0);
+    const filteredWR = filteredClosed.length > 0 ? (filteredWins.length / filteredClosed.length * 100).toFixed(1) : null;
+    const filteredROI = filteredStaked > 0 ? (filteredPnl / filteredStaked * 100).toFixed(1) : null;
+
+    const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    const setInner = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
+    const setColor = (id, color) => { const el = document.getElementById(id); if (el) el.style.color = color; };
+
+    // Bets count
+    setHtml('at-perf-bets', filteredConfirmed.length);
+
+    // Record
+    if (filteredClosed.length > 0) {
+        setInner('at-perf-record', `<span style="color:#4caf50">${filteredWins.length}W</span> <span style="color:#6c757d">-</span> <span style="color:#f44336">${filteredLosses.length}L</span>`);
+    } else {
+        setHtml('at-perf-record', '—');
+        setColor('at-perf-record', '#6c757d');
     }
 
-    // Quick P&L
+    // Win Rate
+    setHtml('at-perf-winrate', filteredWR !== null ? filteredWR + '%' : '—');
+    setColor('at-perf-winrate', filteredWR !== null && parseFloat(filteredWR) >= 50 ? '#4caf50' : '#f44336');
+
+    // P&L
+    setHtml('at-perf-pnl', (filteredPnl >= 0 ? '+' : '') + '$' + filteredPnl.toFixed(2));
+    setColor('at-perf-pnl', filteredPnl >= 0 ? '#4caf50' : '#f44336');
+
+    // Staked
+    setHtml('at-perf-staked', '$' + filteredStaked.toFixed(2));
+
+    // ROI
+    setHtml('at-perf-roi', filteredROI !== null ? filteredROI + '%' : '—');
+    setColor('at-perf-roi', filteredROI !== null && parseFloat(filteredROI) >= 0 ? '#4caf50' : '#f44336');
+
+    // ─── OVERALL STATS (for bankroll hero + operational row) ───
     const totalInvested = confirmed.reduce((s,t) => s + (t.actual_stake || t.stake || 0), 0);
     const realizedPnl = closed.reduce((s,t) => s + (t.pnl || 0), 0);
     const winRate = closed.length > 0 ? (wins.length / closed.length * 100).toFixed(1) + '%' : '—';
 
-    const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    const setColor = (id, color) => { const el = document.getElementById(id); if (el) el.style.color = color; };
     setHtml('at-dash-invested', '$' + totalInvested.toFixed(0));
     setHtml('at-dash-realized', (realizedPnl >= 0 ? '+$' : '-$') + Math.abs(realizedPnl).toFixed(2));
     setColor('at-dash-realized', realizedPnl >= 0 ? '#4caf50' : '#f44336');
