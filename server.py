@@ -22,6 +22,32 @@ import subprocess
 import logging
 import requests as http_requests  # renamed to avoid Flask conflict
 
+# Multi-channel notifications (Telegram/WhatsApp/Email/SMS) — drop-in package.
+# Channels auto-disable when their env vars aren't set, so safe to import always.
+try:
+    from notifications import (
+        Notifier,
+        EmailChannel,
+        TelegramChannel,
+        WhatsAppChannel,
+        SMSChannel,
+    )
+    # Build manually so we can set a longer dedup window than the 600s default
+    _NOTIFIER = Notifier(
+        channels=[TelegramChannel(), WhatsAppChannel(), EmailChannel(), SMSChannel()],
+        dedup_window_seconds=int(os.environ.get("NOTIFIER_DEDUP_SECONDS", "3600")),
+    )
+except Exception as _notif_err:
+    import sys as _sys
+    print(f"  [notifications] import failed: {_notif_err}", file=_sys.stderr)
+    _NOTIFIER = None
+    EmailChannel = None  # type: ignore
+
+# Threshold for "high-confidence" picks — fanout to admin + members
+SIGNAL_ALERT_THRESHOLD = float(os.environ.get("SIGNAL_ALERT_THRESHOLD", "75"))
+# Public dashboard URL used in alert email/Telegram links
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://breakpointbetting.net")
+
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
@@ -1187,7 +1213,7 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
 </head><body>
 
 <h1>ADMIN PANEL</h1>
-<div class="sub"><a href="/" class="back-link">&larr; Back to Dashboard</a></div>
+<div class="sub"><a href="/" class="back-link">&larr; Back to Dashboard</a> &middot; <a href="/admin/members" class="back-link" style="color:#c4a44e">MEMBERS ADMIN &rarr;</a></div>
 
 <div class="section">
     <h2>SYSTEM ACTIONS</h2>
@@ -1605,6 +1631,279 @@ setInterval(loadInvites, 60000);
 </body></html>
 """
 
+# ─── PHASE 3: DEDICATED MEMBERS ADMIN PAGE ───────────────────────────────────
+
+ADMIN_MEMBERS_PAGE = """
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BreakPoint Betting — Members Admin</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23c8e645' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing:border-box; margin:0; padding:0; font-family:'IBM Plex Mono', monospace; }
+body { background:#0f1117; color:#e0e0e0; min-height:100vh; padding:30px; }
+h1 { font-size:16px; color:#d4740a; letter-spacing:0.06em; margin-bottom:6px; }
+.sub { font-size:11px; color:#6c757d; margin-bottom:24px; }
+.sub a { color:#d4740a; text-decoration:none; }
+.section { background:#1a1d27; border:1px solid #2d3139; padding:20px; margin-bottom:18px; }
+.section.copper { border-color:#5a4a1f; }
+.section h2 { font-size:13px; color:#d4740a; letter-spacing:0.06em; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+.section.copper h2 { color:#c4a44e; }
+.section h2 .count { font-size:10px; color:#6c757d; font-weight:400; }
+.row-form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+.row-form input, .row-form select { background:#0f1117; border:1px solid #2d3139; color:#e0e0e0; padding:9px 12px; font-family:inherit; font-size:12px; min-width:140px; }
+.row-form input:focus, .row-form select:focus { outline:none; border-color:#d4740a; }
+.row-form input[type="text"], .row-form input[type="email"] { flex:1; min-width:220px; }
+button { background:#d4740a; color:white; border:none; padding:9px 16px; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:0.04em; cursor:pointer; }
+button:hover { background:#e65100; }
+button.ghost { background:transparent; border:1px solid #2d3139; color:#6c757d; }
+button.ghost:hover { color:#d4740a; border-color:#d4740a; }
+button.copper { background:#c4873a; }
+button.copper:hover { background:#d4740a; }
+button.danger { background:transparent; border:1px solid #5a1f1f; color:#f44336; padding:4px 10px; font-size:10px; }
+button.danger:hover { background:#1f0f0f; }
+button.small { padding:4px 10px; font-size:10px; }
+table { width:100%; border-collapse:collapse; font-size:11px; }
+th { text-align:left; padding:8px 6px; font-size:9px; color:#6c757d; text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid #2d3139; }
+td { padding:8px 6px; border-bottom:1px solid #1e2130; vertical-align:middle; }
+.active { color:#4caf50; }
+.inactive { color:#f44336; }
+.copper-text { color:#c4a44e; }
+.muted { color:#6c757d; font-size:11px; }
+.flash { padding:9px 12px; font-size:11px; margin-top:10px; display:none; }
+.flash.ok { color:#4caf50; border:1px solid #1b5e20; background:#0e1f10; }
+.flash.err { color:#f44336; border:1px solid #5a1f1f; background:#1f0f0f; }
+.kpi-row { display:flex; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+.kpi { background:#0f1117; border:1px solid #2d3139; padding:12px 16px; min-width:130px; }
+.kpi .l { font-size:9px; color:#6c757d; letter-spacing:0.06em; }
+.kpi .v { font-size:20px; color:#e0e0e0; margin-top:4px; font-weight:600; }
+.back { color:#d4740a; text-decoration:none; font-size:11px; }
+.back:hover { text-decoration:underline; }
+@media (max-width:600px) { body { padding:14px; } .row-form input, .row-form select { min-width:140px; } table { font-size:10px; } th, td { padding:6px 4px; } }
+</style>
+</head><body>
+<h1>MEMBERS ADMIN</h1>
+<div class="sub"><a href="/admin" class="back">&larr; back to admin</a> &middot; manage member accounts, invites, and outbound alerts</div>
+
+<div class="kpi-row" id="kpiRow"></div>
+
+<!-- ── Send a test alert ── -->
+<div class="section copper">
+    <h2>NOTIFICATION TEST</h2>
+    <div class="muted" style="margin-bottom:10px">Fires a sample alert through every channel that has env vars set (Telegram / WhatsApp / Email / SMS). Use this to verify your bot tokens, SMTP creds, and Twilio credentials are wired up on Render.</div>
+    <div class="row-form">
+        <select id="testTier">
+            <option value="1">TIER 1 (Telegram only)</option>
+            <option value="2" selected>TIER 2 (Telegram + WhatsApp + Email)</option>
+            <option value="3">TIER 3 (all four — incl. SMS)</option>
+        </select>
+        <button class="copper" onclick="sendTestAlert()">SEND TEST ALERT</button>
+    </div>
+    <div class="flash" id="testFlash"></div>
+</div>
+
+<!-- ── Invite generator + email invite ── -->
+<div class="section copper">
+    <h2>GENERATE INVITE <span class="count" id="inviteCounts"></span></h2>
+    <div class="row-form">
+        <input type="text" id="invLabel" placeholder="Label (e.g. 'For Mike — beta tester')">
+        <input type="number" id="invDays" placeholder="Expiry days (blank = never)" style="max-width:200px">
+        <button class="copper" onclick="generateInvite()">GENERATE CODE</button>
+    </div>
+    <div class="flash" id="invFlash"></div>
+    <div style="margin-top:14px; padding-top:14px; border-top:1px dashed #2d3139">
+        <div class="muted" style="margin-bottom:8px">Or send an existing invite directly to a recipient via email:</div>
+        <div class="row-form">
+            <select id="invToSend"><option value="">-- choose an active invite --</option></select>
+            <input type="email" id="invRecipient" placeholder="recipient@example.com">
+            <button class="copper" onclick="emailInvite()">EMAIL INVITE</button>
+        </div>
+        <div class="flash" id="emailInvFlash"></div>
+    </div>
+</div>
+
+<!-- ── All invites ── -->
+<div class="section">
+    <h2>ALL INVITES <span class="count" id="invitesTotal"></span></h2>
+    <div id="invitesTable"></div>
+</div>
+
+<!-- ── Members ── -->
+<div class="section">
+    <h2>MEMBERS <span class="count" id="membersTotal"></span></h2>
+    <div id="membersTable"></div>
+</div>
+
+<script>
+async function loadAll() {
+    const res = await fetch('/admin/invites');
+    if (res.status === 401) { location.href = '/'; return; }
+    const data = await res.json();
+
+    // KPIs
+    document.getElementById('kpiRow').innerHTML = `
+        <div class="kpi"><div class="l">MEMBERS</div><div class="v">${data.counts.members_total}</div></div>
+        <div class="kpi"><div class="l">INVITES (ACTIVE)</div><div class="v">${data.counts.invites_active}</div></div>
+        <div class="kpi"><div class="l">INVITES (TOTAL)</div><div class="v">${data.counts.invites_total}</div></div>
+    `;
+    document.getElementById('inviteCounts').textContent = data.counts.invites_active + ' active / ' + data.counts.invites_total + ' total';
+    document.getElementById('invitesTotal').textContent = '(' + data.counts.invites_total + ')';
+    document.getElementById('membersTotal').textContent = '(' + data.counts.members_total + ')';
+
+    // Active-invite picker
+    const sel = document.getElementById('invToSend');
+    const previousValue = sel.value;
+    sel.innerHTML = '<option value="">-- choose an active invite --</option>' + data.invites
+        .filter(i => i.status === 'active')
+        .map(i => `<option value="${i.code}">${i.code} — ${i.label || '(no label)'}</option>`)
+        .join('');
+    if (previousValue) sel.value = previousValue;
+
+    // Invites table
+    const it = document.getElementById('invitesTable');
+    if (!data.invites.length) {
+        it.innerHTML = '<div class="muted" style="padding:10px">No invites yet — generate one above.</div>';
+    } else {
+        let html = '<table><thead><tr><th>Code</th><th>Label</th><th>Status</th><th>Used By</th><th>Expires</th><th>Actions</th></tr></thead><tbody>';
+        for (const inv of data.invites) {
+            const exp = inv.expires_at ? new Date(inv.expires_at + 'Z').toLocaleDateString() : '—';
+            const used = inv.used_by_email || '—';
+            const statusCls = inv.status === 'active' ? 'active' : 'inactive';
+            const actions = inv.status === 'active'
+                ? `<button class="small ghost" onclick="copyInvite('${inv.code}')">COPY LINK</button> <button class="danger" onclick="revokeInvite('${inv.code}')">REVOKE</button>`
+                : '';
+            html += `<tr>
+                <td class="copper-text">${inv.code}</td>
+                <td>${escapeHtml(inv.label || '—')}</td>
+                <td><span class="${statusCls}">${inv.status.toUpperCase()}</span></td>
+                <td class="muted">${escapeHtml(used)}</td>
+                <td class="muted">${exp}</td>
+                <td>${actions}</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        it.innerHTML = html;
+    }
+
+    // Members table
+    const mt = document.getElementById('membersTable');
+    if (!data.members.length) {
+        mt.innerHTML = '<div class="muted" style="padding:10px">No members yet. Email an invite above.</div>';
+    } else {
+        let html = '<table><thead><tr><th>Email</th><th>Joined</th><th>Last Login</th><th>Status</th><th>Invite</th><th>Actions</th></tr></thead><tbody>';
+        for (const m of data.members) {
+            const created = m.created_at ? new Date(m.created_at + 'Z').toLocaleDateString() : '—';
+            const last = m.last_login_at ? new Date(m.last_login_at + 'Z').toLocaleString() : '—';
+            const statusCls = m.status === 'active' ? 'active' : 'inactive';
+            const toggleLbl = m.status === 'active' ? 'DISABLE' : 'ENABLE';
+            html += `<tr>
+                <td>${escapeHtml(m.email || '—')}</td>
+                <td class="muted">${created}</td>
+                <td class="muted">${last}</td>
+                <td><span class="${statusCls}">${m.status.toUpperCase()}</span></td>
+                <td class="copper-text" style="font-size:10px">${m.invite_code || '—'}</td>
+                <td>
+                    <button class="small ghost" onclick="toggleMember('${m.id}','${m.status}')">${toggleLbl}</button>
+                    <button class="danger" onclick="deleteMember('${m.id}','${escapeHtml(m.email || '')}')">DELETE</button>
+                </td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        mt.innerHTML = html;
+    }
+}
+
+function escapeHtml(s) { return (s || '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function flash(id, message, ok) {
+    const el = document.getElementById(id);
+    el.className = 'flash ' + (ok ? 'ok' : 'err');
+    el.textContent = message;
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 6000);
+}
+
+async function generateInvite() {
+    const label = document.getElementById('invLabel').value;
+    const days = document.getElementById('invDays').value;
+    const body = { label };
+    if (days) body.duration_days = parseInt(days);
+    const r = await fetch('/admin/create-invite', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const data = await r.json();
+    if (r.ok && data.url) {
+        flash('invFlash', 'Created: ' + data.url + ' (copied to clipboard)', true);
+        navigator.clipboard.writeText(data.url).catch(()=>{});
+        document.getElementById('invLabel').value = '';
+        document.getElementById('invDays').value = '';
+        loadAll();
+    } else {
+        flash('invFlash', 'Error: ' + (data.error || 'unknown'), false);
+    }
+}
+
+function copyInvite(code) {
+    const url = window.location.origin + '/members?invite=' + code;
+    navigator.clipboard.writeText(url).then(() => flash('invFlash', 'Copied: ' + url, true));
+}
+
+async function revokeInvite(code) {
+    if (!confirm('Revoke invite ' + code + '?')) return;
+    const r = await fetch('/admin/revoke-invite', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})});
+    if (r.ok) loadAll();
+    else { const d = await r.json(); flash('invFlash', 'Error: ' + (d.error || 'failed'), false); }
+}
+
+async function emailInvite() {
+    const code = document.getElementById('invToSend').value;
+    const recipient = document.getElementById('invRecipient').value.trim();
+    if (!code) { flash('emailInvFlash', 'Choose an invite first.', false); return; }
+    if (!recipient) { flash('emailInvFlash', 'Enter a recipient email.', false); return; }
+    const r = await fetch('/admin/email-invite', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code, recipient_email: recipient})});
+    const data = await r.json();
+    if (r.ok && data.ok) {
+        flash('emailInvFlash', 'Sent invite to ' + recipient, true);
+        document.getElementById('invRecipient').value = '';
+    } else {
+        flash('emailInvFlash', 'Error: ' + (data.error || 'send failed') + (data.error === 'smtp_not_configured' ? ' — set SMTP_HOST/USER/PASS + EMAIL_FROM env vars on Render' : ''), false);
+    }
+}
+
+async function toggleMember(memberId, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    if (!confirm('Set member to ' + newStatus + '?')) return;
+    await fetch('/admin/disable-member', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({member_id: memberId, status: newStatus})});
+    loadAll();
+}
+
+async function deleteMember(memberId, email) {
+    if (!confirm('PERMANENTLY delete member ' + email + '? Their bets will also be removed.')) return;
+    const r = await fetch('/admin/delete-member', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({member_id: memberId})});
+    if (r.ok) loadAll();
+    else { const d = await r.json(); alert('Error: ' + (d.error || 'failed')); }
+}
+
+async function sendTestAlert() {
+    const tier = parseInt(document.getElementById('testTier').value);
+    const r = await fetch('/admin/test-alert', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tier})});
+    const data = await r.json();
+    if (r.ok) {
+        const fired = (data.results || []).filter(x => x.ok).map(x => x.channel).join(', ') || '(none)';
+        const failed = (data.results || []).filter(x => !x.ok).map(x => x.channel + ': ' + (x.error || 'failed')).join('; ');
+        let msg = 'Fired: ' + fired;
+        if (failed) msg += ' • Failed: ' + failed;
+        flash('testFlash', msg, fired !== '(none)');
+    } else {
+        flash('testFlash', 'Error: ' + (data.error || 'failed'), false);
+    }
+}
+
+loadAll();
+setInterval(loadAll, 60000);
+</script>
+</body></html>
+"""
+
 
 # ─── POLYMARKET RESOLUTION HELPERS ────────────────────────────────────────────
 
@@ -1817,6 +2116,7 @@ def members_signup():
         "created_at": datetime.utcnow().isoformat(),
         "last_login_at": datetime.utcnow().isoformat(),
         "status": "active",
+        "notify_email": True,  # Phase 3: default to opted-in for new picks
     }
     save_members(members)
     consume_invite(invite_code, member_id)
@@ -1859,7 +2159,25 @@ def members_api_me():
         "id": member["id"],
         "email": member["email"],
         "created_at": member.get("created_at"),
+        "notify_email": member.get("notify_email", True),
     })
+
+
+@app.route("/members/api/preferences", methods=["PUT"])
+def members_api_preferences():
+    """Update notification preferences for the current member."""
+    member = get_current_member()
+    if not member:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    members = load_members()
+    rec = members.get(member["id"])
+    if not rec:
+        return jsonify({"error": "not found"}), 404
+    if "notify_email" in data:
+        rec["notify_email"] = bool(data["notify_email"])
+    save_members(members)
+    return jsonify({"status": "ok", "notify_email": rec.get("notify_email", True)})
 
 
 # ─── MEMBER BETS — STORAGE + RESOLUTION ──────────────────────────────────────
@@ -2028,6 +2346,196 @@ def _compute_member_stats(bets):
         "win_rate": round(win_rate, 1),
         "roi": round(roi, 1),
     }
+
+
+# ─── PHASE 3: SIGNAL ALERT FAN-OUT ───────────────────────────────────────────
+
+def _signal_alert_text(p):
+    """Format a single pick into (subject, body) for Notifier-style channels."""
+    bet_on = p.get("bet_on") or "?"
+    match = p.get("match") or "?"
+    surf = p.get("surface") or "—"
+    tourn = p.get("tournament") or "—"
+    mp = p.get("model_prob")
+    pp = p.get("poly_price")
+    edge = p.get("edge")
+    link = f"{PUBLIC_BASE_URL}/members/dashboard"
+    poly_link = p.get("poly_link") or ""
+
+    subject = f"BreakPoint signal: {bet_on}"
+    if mp is not None:
+        subject += f" ({float(mp):.0f}%)"
+
+    parts = [
+        f"*Match:* {match}",
+        f"*Pick:* {bet_on}",
+        f"*Tournament:* {tourn} — {surf}",
+        "",
+    ]
+    if mp is not None:
+        parts.append(f"*Model prob:* {float(mp):.1f}%")
+    if pp is not None:
+        parts.append(f"*Market price:* {float(pp):.1f}¢")
+    if edge is not None:
+        try:
+            parts.append(f"*Edge:* {float(edge):+.1f}%")
+        except Exception:
+            pass
+    parts.append("")
+    if poly_link:
+        parts.append(f"[Open on Polymarket]({poly_link})")
+    parts.append(f"[Members dashboard]({link})")
+    body = "\n".join(parts)
+    return subject, body
+
+
+def _members_alert_email_body(picks):
+    """Build a single batched plain-text email body covering N new picks."""
+    lines = [
+        f"New high-confidence signals on BreakPoint Betting ({SIGNAL_ALERT_THRESHOLD:.0f}%+ model prob):",
+        "",
+    ]
+    for p in picks:
+        mp = p.get("model_prob")
+        pp = p.get("poly_price")
+        edge_part = ""
+        if p.get("edge") is not None:
+            try:
+                edge_part = f" / edge {float(p['edge']):+.1f}%"
+            except Exception:
+                pass
+        mp_part = f"{float(mp):.1f}%" if mp is not None else "—"
+        pp_part = f"{float(pp):.1f}¢" if pp is not None else "—"
+        lines.append(
+            f"• {p.get('bet_on')} ({p.get('match')}) — model {mp_part} / market {pp_part}{edge_part}"
+        )
+    lines.extend([
+        "",
+        f"View live in your dashboard: {PUBLIC_BASE_URL}/members/dashboard",
+        "",
+        "(You're receiving this because email alerts are on for your account.",
+        f"Turn them off in your dashboard header: {PUBLIC_BASE_URL}/members/dashboard)",
+    ])
+    return "\n".join(lines)
+
+
+def _recent_picks(window_minutes=10):
+    """Return picks logged within the last N minutes — alert candidates."""
+    try:
+        picks = load_picks_jsonl(enrich=False)
+    except Exception:
+        return []
+    cutoff = datetime.utcnow() - timedelta(minutes=window_minutes)
+    fresh = []
+    for p in picks:
+        la = p.get("logged_at")
+        if not la:
+            continue
+        try:
+            t = datetime.fromisoformat(la.replace("Z", ""))
+            if t > cutoff:
+                fresh.append(p)
+        except Exception:
+            continue
+    return fresh
+
+
+def notify_admin_about_picks(picks):
+    """Tiered admin alerts via Notifier (fans to whichever channels are env-configured).
+    Conviction tiers: 75-79=1 (TG), 80-86=2 (TG+WA+email), 87+=3 (all four)."""
+    if not _NOTIFIER:
+        return {"sent": 0, "skipped": "notifier_missing"}
+    sent = 0
+    for p in picks:
+        prob = p.get("model_prob") or 0
+        try:
+            prob = float(prob)
+        except Exception:
+            continue
+        if prob < SIGNAL_ALERT_THRESHOLD:
+            continue
+        subject, body = _signal_alert_text(p)
+        if prob >= 87:
+            tier = 3
+        elif prob >= 80:
+            tier = 2
+        else:
+            tier = 1
+        dedup = f"signal:{(p.get('match') or '').lower()}|{(p.get('bet_on') or '').lower()}"
+        try:
+            r = _NOTIFIER.send_tiered(subject, body, conviction=tier, dedup_key=dedup)
+            if r.get("ok"):
+                sent += 1
+        except Exception as e:
+            logger.warning(f"[notify-admin] {e}")
+    return {"sent": sent}
+
+
+def notify_members_about_picks(picks):
+    """Email each active opted-in member a batched summary of fresh high-conf picks."""
+    if EmailChannel is None:
+        return {"sent": 0, "skipped": "no_email_channel"}
+    eligible = []
+    for p in picks:
+        try:
+            if float(p.get("model_prob") or 0) >= SIGNAL_ALERT_THRESHOLD:
+                eligible.append(p)
+        except Exception:
+            continue
+    if not eligible:
+        return {"sent": 0, "skipped": "no_eligible_picks"}
+
+    members = load_members()
+    recipients = [
+        m for m in members.values()
+        if m.get("status") == "active" and m.get("notify_email", True) and m.get("email")
+    ]
+    if not recipients:
+        return {"sent": 0, "skipped": "no_recipients"}
+
+    n = len(eligible)
+    subject = f"BreakPoint: {n} new high-confidence pick{'s' if n != 1 else ''}"
+    body = _members_alert_email_body(eligible)
+
+    sent = 0
+    failures = []
+    for m in recipients:
+        try:
+            ch = EmailChannel(to_addrs=[m["email"]])
+            if not ch.is_configured():
+                # SMTP not set on host — skip everyone
+                return {"sent": 0, "skipped": "smtp_not_configured"}
+            r = ch.send(subject, body)
+            if r.get("ok"):
+                sent += 1
+            else:
+                failures.append({"email": m["email"], "error": r.get("error")})
+        except Exception as e:
+            failures.append({"email": m["email"], "error": str(e)})
+    return {"sent": sent, "recipients": len(recipients), "failures": failures}
+
+
+def _send_invite_email(invite_code, recipient_email, base_url=None):
+    """Send a single invite-link email. Returns the EmailChannel.send result."""
+    if EmailChannel is None:
+        return {"ok": False, "error": "email_channel_unavailable"}
+    base = base_url or PUBLIC_BASE_URL
+    link = f"{base}/members?invite={invite_code}"
+    subject = "Your BreakPoint Betting invite"
+    body = (
+        "You've been invited to BreakPoint Betting — invite-only beta access "
+        "to live tennis-signal picks, your personal bet log, and player intel.\n\n"
+        f"Redeem your invite:\n{link}\n\n"
+        "(This invite will mark used the first time it's redeemed.)\n\n"
+        "— BreakPoint Betting / CritterLabs"
+    )
+    ch = EmailChannel(to_addrs=[recipient_email])
+    if not ch.is_configured():
+        return {"ok": False, "error": "smtp_not_configured"}
+    try:
+        return ch.send(subject, body)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # ─── MEMBER API ENDPOINTS (Phase 2 — signals/bets/stats/players) ─────────────
@@ -2359,6 +2867,95 @@ def admin_revoke_invite():
     invites[code]["status"] = "revoked"
     save_invites(invites)
     return jsonify({"status": "revoked", "code": code})
+
+
+@app.route("/admin/members", methods=["GET"])
+def admin_members_page():
+    """Dedicated members admin dashboard."""
+    if not check_admin_cookie():
+        return make_response(redirect("/")), 302
+    return make_response(ADMIN_MEMBERS_PAGE), 200
+
+
+@app.route("/admin/email-invite", methods=["POST"])
+def admin_email_invite():
+    """Send an existing invite link to a recipient via email."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    code = (data.get("code") or "").strip()
+    recipient = (data.get("recipient_email") or "").strip().lower()
+    if not code or not recipient:
+        return jsonify({"error": "code and recipient_email required"}), 400
+    invites = load_invites()
+    inv = invites.get(code)
+    if not inv:
+        return jsonify({"error": "invite not found"}), 404
+    if inv.get("status") != "active":
+        return jsonify({"error": f"invite is {inv.get('status')} — cannot email"}), 400
+
+    base = request.host_url.rstrip("/") if request.host_url else PUBLIC_BASE_URL
+    result = _send_invite_email(code, recipient, base_url=base)
+    if result.get("ok"):
+        logger.info(f"[ADMIN] Emailed invite {code} → {recipient}")
+        return jsonify({"ok": True, "code": code, "recipient": recipient})
+    return jsonify({"ok": False, "error": result.get("error", "send failed")}), 500
+
+
+@app.route("/admin/test-alert", methods=["POST"])
+def admin_test_alert():
+    """Fire a sample alert via the global Notifier — to verify channel env vars."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _NOTIFIER:
+        return jsonify({"error": "notifier_unavailable"}), 503
+    data = request.get_json() or {}
+    try:
+        tier = int(data.get("tier", 2))
+    except Exception:
+        tier = 2
+    subject = "BreakPoint test alert"
+    body = (
+        "*This is a test alert from BreakPoint Betting.*\n\n"
+        f"Tier {tier} fan-out check at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}.\n\n"
+        f"If you see this on a channel, that channel's env vars are wired up.\n\n"
+        f"[Members dashboard]({PUBLIC_BASE_URL}/members/dashboard)"
+    )
+    # Use a unique dedup key per test so re-running always fires
+    dedup = f"test:{secrets.token_hex(4)}"
+    try:
+        r = _NOTIFIER.send_tiered(subject, body, conviction=tier, dedup_key=dedup)
+        return jsonify({
+            "ok": r.get("ok", False),
+            "results": r.get("channel_results", []),
+            "configured_channels": _NOTIFIER.configured(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/delete-member", methods=["POST"])
+def admin_delete_member():
+    """Hard-delete a member account and their bet history."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    member_id = (data.get("member_id") or "").strip()
+    if not member_id:
+        return jsonify({"error": "member_id required"}), 400
+    members = load_members()
+    if member_id not in members:
+        return jsonify({"error": "not found"}), 404
+    deleted_email = members[member_id].get("email", "?")
+    del members[member_id]
+    save_members(members)
+    # Also purge their bets
+    all_bets = _load_member_bets_all()
+    if member_id in all_bets:
+        del all_bets[member_id]
+        _save_member_bets_all(all_bets)
+    logger.info(f"[ADMIN] Deleted member {deleted_email} ({member_id})")
+    return jsonify({"status": "deleted", "member_id": member_id, "email": deleted_email})
 
 
 @app.route("/admin/disable-member", methods=["POST"])
@@ -3111,10 +3708,25 @@ def generate_card():
 
         if result.returncode == 0:
             latest_card_path = get_latest_betting_card()
+
+            # Phase 3: fan out alerts for any fresh high-confidence picks
+            # (lookback window 15 min — wider than the 10 min default since
+            # 04_betting_card.py can take a couple minutes to complete).
+            alert_summary = {"admin": None, "members": None}
+            try:
+                fresh = _recent_picks(window_minutes=15)
+                if fresh:
+                    alert_summary["admin"] = notify_admin_about_picks(fresh)
+                    alert_summary["members"] = notify_members_about_picks(fresh)
+                    logger.info(f"[GENERATE] Alert fanout: {alert_summary}")
+            except Exception as e:
+                logger.warning(f"[GENERATE] Alert fanout failed: {e}")
+
             return jsonify({
                 "status": "success",
                 "message": "Card generation completed",
-                "latest_card": latest_card_path
+                "latest_card": latest_card_path,
+                "alerts": alert_summary,
             }), 200
         else:
             logger.error(f"Card generation failed: {result.stderr}")

@@ -339,6 +339,10 @@ footer .rights { font-size: 9px; color: #5a5f6a; letter-spacing: 0.03em; margin-
         </div>
     </div>
     <div class="session">
+        <label class="alerts-toggle" title="Email me when new high-confidence signals fire" style="display:flex;align-items:center;gap:6px;font-size:10px;color:#6c757d;letter-spacing:0.06em;cursor:pointer;user-select:none">
+            <input type="checkbox" id="alertsToggle" onchange="toggleAlerts(this.checked)" style="accent-color:#d4740a;cursor:pointer">
+            <span>EMAIL ALERTS</span>
+        </label>
         <span class="email" id="memberEmail">{{MEMBER_EMAIL}}</span>
         <a class="logout" href="/members/logout">SIGN OUT</a>
     </div>
@@ -1171,11 +1175,25 @@ function renderPlayers() {
     }).join('') + '</div>';
 }
 
+// ─── Phase 3: notification preferences ────────────────────────────────────
+async function toggleAlerts(enabled) {
+    try {
+        await fetch('/members/api/preferences', {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({notify_email: enabled}),
+        });
+    } catch (e) {}
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────
 (async function init() {
     try {
         var r = await fetch('/members/api/me');
         if (r.status === 401) { location.href = '/members'; return; }
+        var me = await r.json();
+        var t = document.getElementById('alertsToggle');
+        if (t) t.checked = me.notify_email !== false;
     } catch (e) {}
     var h = (location.hash || '').replace('#', '');
     if (h && document.getElementById('panel-' + h)) {
