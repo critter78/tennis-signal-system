@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BreakPoint Email Templates — Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', system-ui, sans-serif; background: #0f1117; color: #e0e0e0; padding: 24px; line-height: 1.5; }
+.page-h { max-width: 1200px; margin: 0 auto 24px; }
+.page-h h1 { font-family: 'IBM Plex Mono', monospace; font-size: 18px; color: #d4740a; letter-spacing: 0.06em; }
+.page-h .sub { font-size: 13px; color: #6c757d; margin-top: 6px; }
+.grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.col { background: #1a1d27; border: 1px solid #2d3139; padding: 18px; }
+.col-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #2d3139; }
+.col-h h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #d4740a; letter-spacing: 0.06em; }
+.tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; padding: 3px 8px; letter-spacing: 0.06em; }
+.tag.now { background: #1f120a; border: 1px solid #5a3a0a; color: #d4740a; }
+.tag.upgrade { background: #0e1f10; border: 1px solid #1b5e20; color: #4caf50; }
+.email-section + .email-section { margin-top: 24px; }
+.section-h { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #6c757d; letter-spacing: 0.08em; margin-bottom: 8px; }
+
+/* ── Mock email-client wrappers ── */
+.client { background: #f7f8fa; color: #1a1a1a; border: 1px solid #d0d2d7; border-radius: 6px; overflow: hidden; }
+.client .head { background: #fff; padding: 14px 18px; border-bottom: 1px solid #e6e8eb; font-size: 13px; }
+.client .head .from { color: #5a5f6a; font-size: 12px; }
+.client .head .subj { color: #1a1a1a; font-weight: 600; margin-top: 4px; }
+.client .body { background: #fff; padding: 18px; }
+
+/* Plain-text version */
+.plaintext { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2c2e33; white-space: pre-wrap; line-height: 1.55; }
+
+/* HTML upgrade — designed to render the same in Gmail/Apple Mail/Outlook */
+.html-mail { font-family: 'Inter', Arial, sans-serif; max-width: 560px; margin: 0 auto; }
+.html-mail .hero { background: linear-gradient(180deg, #b87333 0%, #a55f1f 100%); padding: 22px; text-align: center; color: #fff; }
+.html-mail .hero .brand { font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; opacity: 0.92; }
+.html-mail .hero h1 { font-size: 22px; font-weight: 700; margin-top: 6px; }
+.html-mail .hero .meta { font-size: 12px; opacity: 0.9; margin-top: 4px; }
+.html-mail .pick { padding: 18px 22px; border-bottom: 1px solid #ececec; }
+.html-mail .pick .match { font-size: 13px; color: #6c757d; }
+.html-mail .pick .name { font-size: 17px; color: #1a1a1a; font-weight: 700; margin-top: 2px; }
+.html-mail .pick .meta { font-size: 11px; color: #8a8f99; letter-spacing: 0.04em; margin-top: 3px; }
+.html-mail .pick .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.html-mail .pick .cell { background: #f7f8fa; padding: 10px; text-align: center; border-radius: 4px; }
+.html-mail .pick .cell .l { font-size: 9px; color: #6c757d; letter-spacing: 0.06em; }
+.html-mail .pick .cell .v { font-size: 18px; color: #1a1a1a; font-weight: 700; margin-top: 3px; }
+.html-mail .pick .cta { display: flex; gap: 8px; margin-top: 14px; }
+.html-mail .pick .cta a { flex: 1; text-align: center; padding: 9px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-decoration: none; border-radius: 4px; }
+.html-mail .pick .cta .primary { background: #b87333; color: #fff; }
+.html-mail .pick .cta .ghost { background: #fff; color: #1a1a1a; border: 1px solid #d0d2d7; }
+.html-mail .footer { background: #fafbfc; padding: 16px 22px; text-align: center; font-size: 11px; color: #8a8f99; border-top: 1px solid #ececec; }
+.html-mail .footer a { color: #b87333; text-decoration: none; }
+.html-mail .footer .brand-line { font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.10em; color: #6c757d; margin-bottom: 4px; }
+
+/* Member batched HTML */
+.html-mail .summary-h { padding: 18px 22px 8px; }
+.html-mail .summary-h .lede { font-size: 13px; color: #1a1a1a; line-height: 1.6; }
+.html-mail .summary-h .lede strong { color: #b87333; }
+.html-mail .row-pick { display: grid; grid-template-columns: 1fr auto auto auto; gap: 14px; padding: 12px 22px; border-top: 1px solid #f0f1f3; align-items: baseline; font-size: 12px; }
+.html-mail .row-pick .who { font-size: 13px; color: #1a1a1a; font-weight: 600; }
+.html-mail .row-pick .who small { color: #8a8f99; font-weight: 400; display: block; font-size: 11px; margin-top: 1px; }
+.html-mail .row-pick .num { font-size: 11px; color: #5a5f6a; text-align: right; }
+.html-mail .row-pick .num strong { display: block; font-size: 14px; color: #1a1a1a; font-weight: 700; }
+.html-mail .summary-cta { padding: 16px 22px; text-align: center; border-top: 1px solid #ececec; }
+.html-mail .summary-cta a { display: inline-block; padding: 11px 22px; background: #b87333; color: #fff; text-decoration: none; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; border-radius: 4px; }
+
+footer.page-foot { max-width: 1200px; margin: 28px auto 0; text-align: center; color: #6c757d; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="page-h">
+    <h1>BREAKPOINT BETTING — EMAIL TEMPLATE PREVIEW</h1>
+    <div class="sub">Compare what currently ships (left) vs. proposed HTML upgrade (right). Both columns show the admin per-pick alert and the member batched alert. Sample data: 3 hypothetical picks.</div>
+</div>
+
+<div class="grid">
+
+<!-- ============================================================
+     LEFT COLUMN: CURRENT PLAIN TEXT (what ships today)
+     ============================================================ -->
+<div class="col">
+    <div class="col-h">
+        <h2>CURRENT — PLAIN TEXT</h2>
+        <span class="tag now">SHIPPING NOW</span>
+    </div>
+
+    <div class="email-section">
+        <div class="section-h">ADMIN ALERT (one email per pick)</div>
+        <div class="client">
+            <div class="head">
+                <div class="from">From: alerts@breakpointbetting.net &lt;you@gmail.com&gt;</div>
+                <div class="subj">BreakPoint signal: Carlos Alcaraz (78%)</div>
+            </div>
+            <div class="body">
+<pre class="plaintext">*Match:* Carlos Alcaraz vs Daniil Medvedev
+*Pick:* Carlos Alcaraz
+*Tournament:* Roland Garros — Clay
+
+*Model prob:* 78.4%
+*Market price:* 64.2¢
+*Edge:* +14.2%
+
+[Open on Polymarket](https://polymarket.com/event/atp-alcaraz-medvedev-2026-05-31)
+[Members dashboard](https://breakpointbetting.net/members/dashboard)</pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="email-section">
+        <div class="section-h">MEMBER ALERT (one batched email per member)</div>
+        <div class="client">
+            <div class="head">
+                <div class="from">From: alerts@breakpointbetting.net</div>
+                <div class="subj">BreakPoint: 3 new high-confidence picks</div>
+            </div>
+            <div class="body">
+<pre class="plaintext">New high-confidence signals on BreakPoint Betting (75%+ model prob):
+
+• Carlos Alcaraz (Carlos Alcaraz vs Daniil Medvedev) — model 78.4% / market 64.2¢ / edge +14.2%
+• Iga Swiatek (Iga Swiatek vs Coco Gauff) — model 82.1% / market 71.0¢ / edge +11.1%
+• Jannik Sinner (Jannik Sinner vs Alexander Zverev) — model 87.5% / market 73.0¢ / edge +14.5%
+
+View live in your dashboard: https://breakpointbetting.net/members/dashboard
+
+(You're receiving this because email alerts are on for your account.
+Turn them off in your dashboard header: https://breakpointbetting.net/members/dashboard)</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     RIGHT COLUMN: PROPOSED HTML UPGRADE
+     ============================================================ -->
+<div class="col">
+    <div class="col-h">
+        <h2>PROPOSED — HTML BRANDED</h2>
+        <span class="tag upgrade">~30 MIN UPGRADE</span>
+    </div>
+
+    <div class="email-section">
+        <div class="section-h">ADMIN ALERT — single pick</div>
+        <div class="client">
+            <div class="head">
+                <div class="from">From: BreakPoint Betting &lt;alerts@breakpointbetting.net&gt;</div>
+                <div class="subj">🎾 SIGNAL: Carlos Alcaraz (78%) — Roland Garros</div>
+            </div>
+            <div class="body" style="background:#f7f8fa">
+                <div class="html-mail">
+                    <div class="hero">
+                        <div class="brand">BREAKPOINT BETTING</div>
+                        <h1>🎾 Carlos Alcaraz</h1>
+                        <div class="meta">Roland Garros · Clay · Round of 16</div>
+                    </div>
+                    <div class="pick">
+                        <div class="match">vs Daniil Medvedev</div>
+                        <div class="name">Pick: Carlos Alcaraz</div>
+                        <div class="meta">SIGNAL FIRED 12:34 UTC · TIER 2</div>
+                        <div class="row">
+                            <div class="cell"><div class="l">MODEL</div><div class="v">78.4%</div></div>
+                            <div class="cell"><div class="l">MARKET</div><div class="v">64.2¢</div></div>
+                            <div class="cell"><div class="l">EDGE</div><div class="v" style="color:#1b5e20">+14.2%</div></div>
+                        </div>
+                        <div class="cta">
+                            <a class="primary" href="#">VIEW DASHBOARD</a>
+                            <a class="ghost" href="#">POLYMARKET ↗</a>
+                        </div>
+                    </div>
+                    <div class="footer">
+                        <div class="brand-line">CRITTER LABS · BREAKPOINT</div>
+                        <div>Powered by Amora Edge · <a href="#">Adjust alert preferences</a></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="email-section">
+        <div class="section-h">MEMBER ALERT — batched</div>
+        <div class="client">
+            <div class="head">
+                <div class="from">From: BreakPoint Betting &lt;alerts@breakpointbetting.net&gt;</div>
+                <div class="subj">🎾 3 new high-confidence picks — May 9</div>
+            </div>
+            <div class="body" style="background:#f7f8fa">
+                <div class="html-mail">
+                    <div class="hero">
+                        <div class="brand">BREAKPOINT BETTING</div>
+                        <h1>3 new picks</h1>
+                        <div class="meta">All 75%+ model probability</div>
+                    </div>
+                    <div class="summary-h">
+                        <div class="lede">Hi Critter — <strong>3 new signals</strong> just fired on the BreakPoint dashboard. Tap any row to track.</div>
+                    </div>
+                    <div class="row-pick">
+                        <div class="who">Carlos Alcaraz <small>vs Medvedev · Roland Garros · Clay</small></div>
+                        <div class="num"><strong>78%</strong>MODEL</div>
+                        <div class="num"><strong>64¢</strong>MKT</div>
+                        <div class="num" style="color:#1b5e20"><strong>+14%</strong>EDGE</div>
+                    </div>
+                    <div class="row-pick">
+                        <div class="who">Iga Swiatek <small>vs Gauff · Roland Garros · Clay</small></div>
+                        <div class="num"><strong>82%</strong>MODEL</div>
+                        <div class="num"><strong>71¢</strong>MKT</div>
+                        <div class="num" style="color:#1b5e20"><strong>+11%</strong>EDGE</div>
+                    </div>
+                    <div class="row-pick">
+                        <div class="who">Jannik Sinner <small>vs Zverev · Roland Garros · Clay</small></div>
+                        <div class="num"><strong>88%</strong>MODEL</div>
+                        <div class="num"><strong>73¢</strong>MKT</div>
+                        <div class="num" style="color:#1b5e20"><strong>+15%</strong>EDGE</div>
+                    </div>
+                    <div class="summary-cta">
+                        <a href="#">VIEW IN DASHBOARD →</a>
+                    </div>
+                    <div class="footer">
+                        <div class="brand-line">CRITTER LABS · BREAKPOINT</div>
+                        <div>Powered by Amora Edge · <a href="#">Adjust alert preferences</a></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<footer class="page-foot">
+Both columns assume identical underlying data. The HTML upgrade also gracefully degrades to a plain-text alternative for clients that strip HTML.
+</footer>
+
+</body>
+</html>

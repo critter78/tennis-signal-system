@@ -150,6 +150,9 @@ class EmailChannel(NotificationChannel):
     def send(self, subject: str, body: str,
              level: str = "info",
              metadata: Optional[dict] = None) -> dict:
+        """Send an email. Pass metadata={"body_html": "<html>...</html>"} to add
+        an HTML alternative — clients that support HTML will render it; others
+        fall back to the plain-text `body`."""
         if not self.is_configured():
             return {"ok": False, "channel": self.name, "error": "not_configured"}
 
@@ -158,8 +161,12 @@ class EmailChannel(NotificationChannel):
         msg["From"] = self.from_addr
         msg["To"] = ", ".join(self.to_addrs)
 
-        # Plain-text body. Easy upgrade later: HTML alternative.
+        # Plain-text part FIRST (RFC 2046: clients pick the LAST supported
+        # part, so HTML must come after plain to be preferred).
         msg.attach(MIMEText(body, "plain"))
+        body_html = (metadata or {}).get("body_html") if metadata else None
+        if body_html:
+            msg.attach(MIMEText(body_html, "html"))
 
         try:
             with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15) as srv:
@@ -168,7 +175,8 @@ class EmailChannel(NotificationChannel):
                 srv.login(self.smtp_user, self.smtp_pass)
                 srv.sendmail(self.from_addr, self.to_addrs, msg.as_string())
             return {"ok": True, "channel": self.name,
-                    "recipients": len(self.to_addrs)}
+                    "recipients": len(self.to_addrs),
+                    "html": bool(body_html)}
         except Exception as e:
             return {"ok": False, "channel": self.name, "error": str(e)}
 

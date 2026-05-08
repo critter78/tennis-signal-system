@@ -2419,6 +2419,221 @@ def _members_alert_email_body(picks):
     return "\n".join(lines)
 
 
+# ─── PHASE 3: HTML EMAIL TEMPLATES (BreakPoint copper branding) ──────────────
+
+def _esc_html(s):
+    """Minimal HTML escape for inline values."""
+    if s is None:
+        return ""
+    return (str(s)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
+
+_HTML_BASE_STYLES = (
+    "font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;"
+    "line-height:1.5;-webkit-font-smoothing:antialiased"
+)
+
+
+def _html_email_shell(inner_html, preheader=""):
+    """Wrap a section of body HTML in the standard BreakPoint email scaffold."""
+    base = PUBLIC_BASE_URL.rstrip("/")
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>BreakPoint Betting</title></head>
+<body style="margin:0;padding:0;background:#f4f5f7;{_HTML_BASE_STYLES}">
+  <span style="display:none!important;visibility:hidden;mso-hide:all;font-size:1px;color:#f4f5f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">{_esc_html(preheader)}</span>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7;padding:24px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:560px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+        {inner_html}
+        <tr><td style="background:#fafbfc;padding:16px 22px;text-align:center;font-size:11px;color:#8a8f99;border-top:1px solid #ececec">
+          <div style="font-family:'Courier New',monospace;letter-spacing:0.10em;color:#6c757d;margin-bottom:4px">CRITTER LABS &middot; BREAKPOINT</div>
+          <div>Powered by Amora Edge &middot; <a href="{base}/members/dashboard" style="color:#b87333;text-decoration:none">Adjust alert preferences</a></div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>"""
+
+
+def _signal_alert_html(p):
+    """Build the HTML body for a single-pick admin alert."""
+    base = PUBLIC_BASE_URL.rstrip("/")
+    bet_on = _esc_html(p.get("bet_on") or "?")
+    match = _esc_html(p.get("match") or "?")
+    surf = _esc_html(p.get("surface") or "—")
+    tourn = _esc_html(p.get("tournament") or "—")
+    rnd = _esc_html(p.get("round") or "")
+
+    def _num(v, fmt):
+        if v is None:
+            return "—"
+        try:
+            return fmt.format(float(v))
+        except Exception:
+            return "—"
+
+    mp_str = _num(p.get("model_prob"), "{:.1f}%")
+    pp_str = _num(p.get("poly_price"), "{:.1f}¢")
+    edge_val = p.get("edge")
+    try:
+        edge_num = float(edge_val) if edge_val is not None else None
+    except Exception:
+        edge_num = None
+    edge_str = f"{edge_num:+.1f}%" if edge_num is not None else "—"
+    edge_color = "#1b5e20" if (edge_num or 0) >= 0 else "#5a1f1f"
+
+    poly_link = _esc_html(p.get("poly_link") or "")
+    poly_btn = (
+        f'<a href="{poly_link}" style="flex:1;display:inline-block;text-align:center;'
+        f'padding:11px 8px;background:#ffffff;color:#1a1a1a;text-decoration:none;'
+        f'font-size:11px;font-weight:700;letter-spacing:0.05em;border-radius:4px;'
+        f'border:1px solid #d0d2d7">POLYMARKET &uarr;</a>'
+    ) if poly_link else ""
+
+    sub_line = f"{tourn} &middot; {surf}"
+    if rnd:
+        sub_line += f" &middot; {rnd}"
+
+    inner = f"""
+        <tr><td style="background:linear-gradient(180deg,#b87333 0%,#a55f1f 100%);padding:22px;text-align:center;color:#ffffff">
+          <div style="font-family:'Courier New',monospace;font-size:13px;letter-spacing:0.12em;opacity:0.92">BREAKPOINT BETTING</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px">&#127934; {bet_on}</div>
+          <div style="font-size:12px;opacity:0.9;margin-top:4px">{sub_line}</div>
+        </td></tr>
+        <tr><td style="padding:18px 22px">
+          <div style="font-size:13px;color:#6c757d">vs {match}</div>
+          <div style="font-size:11px;color:#8a8f99;letter-spacing:0.04em;margin-top:6px">SIGNAL FIRED</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="8" border="0" style="margin-top:10px">
+            <tr>
+              <td width="33%" style="background:#f7f8fa;padding:10px;text-align:center;border-radius:4px">
+                <div style="font-size:9px;color:#6c757d;letter-spacing:0.06em">MODEL</div>
+                <div style="font-size:18px;color:#1a1a1a;font-weight:700;margin-top:3px">{mp_str}</div>
+              </td>
+              <td width="33%" style="background:#f7f8fa;padding:10px;text-align:center;border-radius:4px">
+                <div style="font-size:9px;color:#6c757d;letter-spacing:0.06em">MARKET</div>
+                <div style="font-size:18px;color:#1a1a1a;font-weight:700;margin-top:3px">{pp_str}</div>
+              </td>
+              <td width="33%" style="background:#f7f8fa;padding:10px;text-align:center;border-radius:4px">
+                <div style="font-size:9px;color:#6c757d;letter-spacing:0.06em">EDGE</div>
+                <div style="font-size:18px;font-weight:700;margin-top:3px;color:{edge_color}">{edge_str}</div>
+              </td>
+            </tr>
+          </table>
+          <div style="margin-top:14px;display:flex;gap:8px">
+            <a href="{base}/members/dashboard" style="flex:1;display:inline-block;text-align:center;padding:11px 8px;background:#b87333;color:#ffffff;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:0.05em;border-radius:4px">VIEW DASHBOARD</a>
+            {poly_btn}
+          </div>
+        </td></tr>
+    """
+    return _html_email_shell(inner, preheader=f"{bet_on} signal — model {mp_str}, market {pp_str}")
+
+
+def _members_alert_html_body(picks):
+    """Build the HTML body for the batched members alert email."""
+    base = PUBLIC_BASE_URL.rstrip("/")
+    n = len(picks)
+    rows_html = []
+    for p in picks:
+        bet_on = _esc_html(p.get("bet_on") or "?")
+        match = _esc_html(p.get("match") or "")
+        # short context: opponent + tournament + surface
+        opp = ""
+        if "vs" in match:
+            try:
+                parts = match.split(" vs ")
+                opp = parts[1] if parts[0].strip() == p.get("bet_on") else parts[0]
+            except Exception:
+                opp = match
+        else:
+            opp = match
+        opp = _esc_html(opp)
+        ctx_line = f"vs {opp}"
+        if p.get("tournament"):
+            ctx_line += f" &middot; {_esc_html(p.get('tournament'))}"
+        if p.get("surface"):
+            ctx_line += f" &middot; {_esc_html(p.get('surface'))}"
+
+        def _num(v, fmt):
+            if v is None:
+                return "—"
+            try:
+                return fmt.format(float(v))
+            except Exception:
+                return "—"
+        mp_str = _num(p.get("model_prob"), "{:.0f}%")
+        pp_str = _num(p.get("poly_price"), "{:.0f}¢")
+        edge_val = p.get("edge")
+        try:
+            edge_num = float(edge_val) if edge_val is not None else None
+        except Exception:
+            edge_num = None
+        edge_str = f"{edge_num:+.0f}%" if edge_num is not None else "—"
+        edge_color = "#1b5e20" if (edge_num or 0) >= 0 else "#5a1f1f"
+        rows_html.append(f"""
+        <tr><td style="padding:12px 22px;border-top:1px solid #f0f1f3">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="font-size:13px;color:#1a1a1a;font-weight:600">{bet_on}<br>
+                <span style="color:#8a8f99;font-weight:400;font-size:11px">{ctx_line}</span>
+              </td>
+              <td align="right" style="font-size:11px;color:#5a5f6a;padding-left:8px">
+                <strong style="display:block;font-size:14px;color:#1a1a1a">{mp_str}</strong>MODEL
+              </td>
+              <td align="right" style="font-size:11px;color:#5a5f6a;padding-left:8px">
+                <strong style="display:block;font-size:14px;color:#1a1a1a">{pp_str}</strong>MKT
+              </td>
+              <td align="right" style="font-size:11px;color:#5a5f6a;padding-left:8px">
+                <strong style="display:block;font-size:14px;color:{edge_color}">{edge_str}</strong>EDGE
+              </td>
+            </tr>
+          </table>
+        </td></tr>""")
+
+    inner = f"""
+        <tr><td style="background:linear-gradient(180deg,#b87333 0%,#a55f1f 100%);padding:22px;text-align:center;color:#ffffff">
+          <div style="font-family:'Courier New',monospace;font-size:13px;letter-spacing:0.12em;opacity:0.92">BREAKPOINT BETTING</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px">{n} new pick{'s' if n != 1 else ''}</div>
+          <div style="font-size:12px;opacity:0.9;margin-top:4px">All {SIGNAL_ALERT_THRESHOLD:.0f}%+ model probability</div>
+        </td></tr>
+        <tr><td style="padding:18px 22px 6px;font-size:13px;color:#1a1a1a;line-height:1.6">
+          <strong style="color:#b87333">{n} new signal{'s' if n != 1 else ''}</strong> just fired on the BreakPoint dashboard. Tap any pick to track.
+        </td></tr>
+        {''.join(rows_html)}
+        <tr><td style="padding:16px 22px;text-align:center;border-top:1px solid #ececec">
+          <a href="{base}/members/dashboard" style="display:inline-block;padding:11px 22px;background:#b87333;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.05em;border-radius:4px">VIEW IN DASHBOARD &rarr;</a>
+        </td></tr>
+    """
+    return _html_email_shell(inner, preheader=f"{n} new high-confidence pick{'s' if n != 1 else ''}")
+
+
+def _invite_email_html(invite_code, base_url=None):
+    """HTML body for an invite email."""
+    base = (base_url or PUBLIC_BASE_URL).rstrip("/")
+    link = f"{base}/members?invite={_esc_html(invite_code)}"
+    inner = f"""
+        <tr><td style="background:linear-gradient(180deg,#b87333 0%,#a55f1f 100%);padding:24px;text-align:center;color:#ffffff">
+          <div style="font-family:'Courier New',monospace;font-size:13px;letter-spacing:0.12em;opacity:0.92">BREAKPOINT BETTING</div>
+          <div style="font-size:22px;font-weight:700;margin-top:8px">You're invited.</div>
+          <div style="font-size:12px;opacity:0.9;margin-top:6px">Invite-only beta access</div>
+        </td></tr>
+        <tr><td style="padding:22px;font-size:14px;color:#1a1a1a;line-height:1.6">
+          <p style="margin:0 0 14px">You've been invited to <strong>BreakPoint Betting</strong> — invite-only beta access to live tennis-signal picks, your personal bet log, and player intel.</p>
+          <p style="margin:0 0 18px;color:#5a5f6a;font-size:13px">Tap below to redeem your invite and create your account. The invite is single-use.</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="{link}" style="display:inline-block;padding:14px 28px;background:#b87333;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:0.05em;border-radius:4px">REDEEM INVITE &rarr;</a>
+          </div>
+          <p style="margin:0;color:#8a8f99;font-size:11px;text-align:center">Or paste this link into your browser:<br><span style="color:#b87333;word-break:break-all">{link}</span></p>
+        </td></tr>
+    """
+    return _html_email_shell(inner, preheader="Your invite to BreakPoint Betting")
+
+
 def _recent_picks(window_minutes=10):
     """Return picks logged within the last N minutes — alert candidates."""
     try:
@@ -2442,7 +2657,8 @@ def _recent_picks(window_minutes=10):
 
 def notify_admin_about_picks(picks):
     """Tiered admin alerts via Notifier (fans to whichever channels are env-configured).
-    Conviction tiers: 75-79=1 (TG), 80-86=2 (TG+WA+email), 87+=3 (all four)."""
+    Conviction tiers: 75-79=1 (TG), 80-86=2 (TG+WA+email), 87+=3 (all four).
+    Email channel gets a branded HTML alternative; non-email channels ignore it."""
     if not _NOTIFIER:
         return {"sent": 0, "skipped": "notifier_missing"}
     sent = 0
@@ -2455,6 +2671,7 @@ def notify_admin_about_picks(picks):
         if prob < SIGNAL_ALERT_THRESHOLD:
             continue
         subject, body = _signal_alert_text(p)
+        body_html = _signal_alert_html(p)
         if prob >= 87:
             tier = 3
         elif prob >= 80:
@@ -2463,7 +2680,12 @@ def notify_admin_about_picks(picks):
             tier = 1
         dedup = f"signal:{(p.get('match') or '').lower()}|{(p.get('bet_on') or '').lower()}"
         try:
-            r = _NOTIFIER.send_tiered(subject, body, conviction=tier, dedup_key=dedup)
+            r = _NOTIFIER.send_tiered(
+                subject, body,
+                conviction=tier,
+                dedup_key=dedup,
+                metadata={"body_html": body_html},
+            )
             if r.get("ok"):
                 sent += 1
         except Exception as e:
@@ -2496,6 +2718,7 @@ def notify_members_about_picks(picks):
     n = len(eligible)
     subject = f"BreakPoint: {n} new high-confidence pick{'s' if n != 1 else ''}"
     body = _members_alert_email_body(eligible)
+    body_html = _members_alert_html_body(eligible)
 
     sent = 0
     failures = []
@@ -2505,7 +2728,7 @@ def notify_members_about_picks(picks):
             if not ch.is_configured():
                 # SMTP not set on host — skip everyone
                 return {"sent": 0, "skipped": "smtp_not_configured"}
-            r = ch.send(subject, body)
+            r = ch.send(subject, body, metadata={"body_html": body_html})
             if r.get("ok"):
                 sent += 1
             else:
@@ -2516,7 +2739,8 @@ def notify_members_about_picks(picks):
 
 
 def _send_invite_email(invite_code, recipient_email, base_url=None):
-    """Send a single invite-link email. Returns the EmailChannel.send result."""
+    """Send a single invite-link email (multipart: plain + branded HTML).
+    Returns the EmailChannel.send result."""
     if EmailChannel is None:
         return {"ok": False, "error": "email_channel_unavailable"}
     base = base_url or PUBLIC_BASE_URL
@@ -2529,11 +2753,12 @@ def _send_invite_email(invite_code, recipient_email, base_url=None):
         "(This invite will mark used the first time it's redeemed.)\n\n"
         "— BreakPoint Betting / CritterLabs"
     )
+    body_html = _invite_email_html(invite_code, base_url=base)
     ch = EmailChannel(to_addrs=[recipient_email])
     if not ch.is_configured():
         return {"ok": False, "error": "smtp_not_configured"}
     try:
-        return ch.send(subject, body)
+        return ch.send(subject, body, metadata={"body_html": body_html})
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
