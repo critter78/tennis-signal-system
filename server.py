@@ -3026,16 +3026,47 @@ def admin_test_alert():
     except Exception:
         tier = 2
     subject = "BreakPoint test alert"
+    timestamp_utc = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
     body = (
         "*This is a test alert from BreakPoint Betting.*\n\n"
-        f"Tier {tier} fan-out check at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}.\n\n"
+        f"Tier {tier} fan-out check at {timestamp_utc}.\n\n"
         f"If you see this on a channel, that channel's env vars are wired up.\n\n"
         f"[Members dashboard]({PUBLIC_BASE_URL}/members/dashboard)"
     )
+    # Branded HTML alternative (only the email channel renders this; other
+    # channels read the plain-text `body` and ignore metadata).
+    tier_desc = {
+        1: "Telegram only",
+        2: "Telegram + WhatsApp + Email",
+        3: "Telegram + WhatsApp + Email + SMS",
+    }.get(tier, "?")
+    base = PUBLIC_BASE_URL.rstrip("/")
+    inner = f"""
+        <tr><td style="background:linear-gradient(180deg,#b87333 0%,#a55f1f 100%);padding:22px;text-align:center;color:#ffffff">
+          <div style="font-family:'Courier New',monospace;font-size:13px;letter-spacing:0.12em;opacity:0.92">BREAKPOINT BETTING</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px">Test alert &middot; Tier {tier}</div>
+          <div style="font-size:12px;opacity:0.9;margin-top:4px">{timestamp_utc}</div>
+        </td></tr>
+        <tr><td style="padding:22px;font-size:14px;color:#1a1a1a;line-height:1.6">
+          <p style="margin:0 0 12px"><strong>This is a test alert from BreakPoint Betting.</strong></p>
+          <p style="margin:0 0 12px;color:#5a5f6a;font-size:13px">If you see this email, the SMTP / Resend wiring is working end-to-end with HTML rendering enabled.</p>
+          <p style="margin:0;color:#8a8f99;font-size:11px">Tier {tier} = {tier_desc}</p>
+          <div style="text-align:center;margin:22px 0 6px">
+            <a href="{base}/admin/members" style="display:inline-block;padding:11px 22px;background:#b87333;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.05em;border-radius:4px">OPEN MEMBERS ADMIN &rarr;</a>
+          </div>
+        </td></tr>
+    """
+    body_html = _html_email_shell(inner, preheader=f"BreakPoint test alert (Tier {tier})")
+
     # Use a unique dedup key per test so re-running always fires
     dedup = f"test:{secrets.token_hex(4)}"
     try:
-        r = _NOTIFIER.send_tiered(subject, body, conviction=tier, dedup_key=dedup)
+        r = _NOTIFIER.send_tiered(
+            subject, body,
+            conviction=tier,
+            dedup_key=dedup,
+            metadata={"body_html": body_html},
+        )
         return jsonify({
             "ok": r.get("ok", False),
             "results": r.get("channel_results", []),

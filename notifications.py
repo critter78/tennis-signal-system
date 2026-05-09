@@ -85,23 +85,43 @@ class TelegramChannel(NotificationChannel):
 
         # Markdown-V1 supports *bold*, _italic_, `code` and [link](url)
         text = f"*{subject}*\n\n{body}"
+
+        # NOTE: use urllib.request, NOT requests, to avoid a recursion bug
+        # observed on Render's runtime where requests.post against the
+        # Telegram bot API repeatedly hits "maximum recursion depth exceeded".
+        # The BreakPoint Betting server.py already does this for its own
+        # telegram_send() helper for the same reason.
+        import urllib.request
+        import urllib.error
+        payload = {
+            "chat_id":                  self.chat_id,
+            "text":                     text,
+            "parse_mode":               "Markdown",
+            "disable_web_page_preview": True,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         try:
-            r = requests.post(
-                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                json={
-                    "chat_id":                  self.chat_id,
-                    "text":                     text,
-                    "parse_mode":               "Markdown",
-                    "disable_web_page_preview": True,
-                },
-                timeout=10,
-            )
-            r.raise_for_status()
-            return {"ok": True, "channel": self.name,
-                    "message_id": r.json().get("result", {}).get("message_id")}
-        except requests.HTTPError as e:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body_bytes = resp.read()
+                try:
+                    parsed = json.loads(body_bytes.decode("utf-8"))
+                except Exception:
+                    parsed = {}
+                return {"ok": True, "channel": self.name,
+                        "message_id": (parsed.get("result") or {}).get("message_id")}
+        except urllib.error.HTTPError as e:
+            try:
+                err_body = e.read().decode("utf-8", errors="replace")[:200]
+            except Exception:
+                err_body = ""
             return {"ok": False, "channel": self.name,
-                    "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}"}
+                    "error": f"HTTP {e.code}: {err_body}"}
         except Exception as e:
             return {"ok": False, "channel": self.name, "error": str(e)}
 
