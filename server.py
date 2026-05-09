@@ -1208,12 +1208,22 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
 .revoke-btn { background: #f44336; color: white; border: none; padding: 4px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; cursor: pointer; }
 .back-link { color: #d4740a; text-decoration: none; font-size: 12px; }
 .back-link:hover { text-decoration: underline; }
+.admin-nav { display:flex; gap:0; margin-bottom:24px; border-bottom:1px solid #2d3139; align-items:flex-end; flex-wrap:wrap; }
+.admin-nav .nav-tab { padding:10px 18px; font-size:11px; font-weight:700; letter-spacing:0.06em; color:#6c757d; text-decoration:none; border-bottom:2px solid transparent; }
+.admin-nav .nav-tab:hover { color:#d4740a; }
+.admin-nav .nav-tab.active { color:#d4740a; border-bottom-color:#d4740a; }
+.admin-nav .nav-back { margin-left:auto; padding:10px 12px; font-size:11px; color:#6c757d; text-decoration:none; letter-spacing:0.04em; }
+.admin-nav .nav-back:hover { color:#d4740a; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head><body>
 
 <h1>ADMIN PANEL</h1>
-<div class="sub"><a href="/" class="back-link">&larr; Back to Dashboard</a> &middot; <a href="/admin/members" class="back-link" style="color:#c4a44e">MEMBERS ADMIN &rarr;</a></div>
+<nav class="admin-nav">
+    <a class="nav-tab active" href="/admin">SYSTEM</a>
+    <a class="nav-tab" href="/admin/members">MEMBERS</a>
+    <a class="nav-back" href="/">&larr; Dashboard</a>
+</nav>
 
 <div class="section">
     <h2>SYSTEM ACTIONS</h2>
@@ -1257,28 +1267,6 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
         <button class="revoke-btn" style="font-size:10px;padding:6px 14px" onclick="clearExpiredShares()">CLEAR ALL EXPIRED</button>
     </div>
     <div id="sharesTable"></div>
-</div>
-
-<div class="section" style="border-color:#5a4a1f">
-    <h2 style="color:#c4a44e">MEMBERS — INVITE CODES</h2>
-    <div class="label-row">
-        <input type="text" id="inviteLabel" placeholder="Label (e.g. 'For Mike — beta tester')">
-        <input type="number" id="inviteDays" placeholder="Expiry days (blank = never)" style="max-width:200px">
-    </div>
-    <button class="gen-btn" onclick="generateInvite()" style="background:#c4873a">GENERATE INVITE CODE</button>
-    <div class="result" id="inviteResult" style="border-color:#5a4a1f">
-        <div class="url" id="inviteUrl" style="color:#c4a44e"></div>
-        <div class="info" id="inviteInfo"></div>
-        <button class="copy-btn" style="background:#5a4a1f" onclick="copyInviteLink()">COPY INVITE LINK</button>
-    </div>
-    <div style="margin-top:18px">
-        <h2 style="font-size:12px;color:#6c757d">ALL INVITES</h2>
-        <div id="invitesTable"></div>
-    </div>
-    <div style="margin-top:18px">
-        <h2 style="font-size:12px;color:#6c757d">MEMBERS</h2>
-        <div id="membersTable"></div>
-    </div>
 </div>
 
 <script>
@@ -1514,119 +1502,6 @@ async function fullRefresh() {
 
 loadShares();
 setInterval(loadShares, 30000);
-
-// ─── Members invite management ───
-async function generateInvite() {
-    const label = document.getElementById('inviteLabel').value;
-    const days = document.getElementById('inviteDays').value;
-    const body = { label };
-    if (days) body.duration_days = parseInt(days);
-    const res = await fetch('/admin/create-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    });
-    const data = await res.json();
-    if (data.url) {
-        document.getElementById('inviteResult').style.display = 'block';
-        document.getElementById('inviteUrl').textContent = data.url;
-        const exp = data.invite.expires_at
-            ? 'Expires ' + new Date(data.invite.expires_at + 'Z').toLocaleString()
-            : 'Never expires';
-        document.getElementById('inviteInfo').textContent = exp + ' • Code: ' + data.code;
-        loadInvites();
-    }
-}
-function copyInviteLink() {
-    const url = document.getElementById('inviteUrl').textContent;
-    navigator.clipboard.writeText(url).then(() => {
-        const btn = event.target;
-        btn.textContent = 'COPIED!';
-        setTimeout(() => btn.textContent = 'COPY INVITE LINK', 2000);
-    });
-}
-async function revokeInvite(code) {
-    if (!confirm('Revoke invite ' + code + '?')) return;
-    await fetch('/admin/revoke-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
-    });
-    loadInvites();
-}
-async function toggleMember(memberId, currentStatus) {
-    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
-    if (!confirm('Set member to ' + newStatus + '?')) return;
-    await fetch('/admin/disable-member', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member_id: memberId, status: newStatus })
-    });
-    loadInvites();
-}
-async function loadInvites() {
-    const res = await fetch('/admin/invites');
-    const data = await res.json();
-
-    // Invites table
-    const iWrap = document.getElementById('invitesTable');
-    if (!data.invites || data.invites.length === 0) {
-        iWrap.innerHTML = '<div style="color:#6c757d; font-size:12px; padding:10px">No invites yet.</div>';
-    } else {
-        let html = '<table><thead><tr><th>Code</th><th>Label</th><th>Status</th><th>Used By</th><th>Expires</th><th></th></tr></thead><tbody>';
-        for (const inv of data.invites) {
-            const exp = inv.expires_at ? new Date(inv.expires_at + 'Z').toLocaleDateString() : '—';
-            const statusClass = inv.status === 'active' ? 'active' : 'expired';
-            const usedBy = inv.used_by_email || '—';
-            const action = inv.status === 'active'
-                ? '<button class="copy-btn" style="margin:0;font-size:9px;padding:4px 8px;background:#5a4a1f" onclick="copyInviteByCode(\\''+inv.code+'\\')">COPY LINK</button> <button class="revoke-btn" onclick="revokeInvite(\\''+inv.code+'\\')">REVOKE</button>'
-                : '';
-            html += '<tr>' +
-                '<td style="font-size:10px;color:#c4a44e">' + inv.code + '</td>' +
-                '<td>' + (inv.label || '—') + '</td>' +
-                '<td><span class="' + statusClass + '">' + inv.status.toUpperCase() + '</span></td>' +
-                '<td style="font-size:10px">' + usedBy + '</td>' +
-                '<td style="font-size:10px">' + exp + '</td>' +
-                '<td style="display:flex;gap:6px">' + action + '</td>' +
-                '</tr>';
-        }
-        html += '</tbody></table>';
-        iWrap.innerHTML = html;
-    }
-
-    // Members table
-    const mWrap = document.getElementById('membersTable');
-    if (!data.members || data.members.length === 0) {
-        mWrap.innerHTML = '<div style="color:#6c757d; font-size:12px; padding:10px">No members yet.</div>';
-    } else {
-        let html = '<table><thead><tr><th>Email</th><th>Joined</th><th>Last Login</th><th>Status</th><th></th></tr></thead><tbody>';
-        for (const m of data.members) {
-            const created = m.created_at ? new Date(m.created_at + 'Z').toLocaleDateString() : '—';
-            const last = m.last_login_at ? new Date(m.last_login_at + 'Z').toLocaleString() : '—';
-            const statusClass = m.status === 'active' ? 'active' : 'expired';
-            const toggleLabel = m.status === 'active' ? 'DISABLE' : 'ENABLE';
-            html += '<tr>' +
-                '<td>' + m.email + '</td>' +
-                '<td style="font-size:10px">' + created + '</td>' +
-                '<td style="font-size:10px">' + last + '</td>' +
-                '<td><span class="' + statusClass + '">' + m.status.toUpperCase() + '</span></td>' +
-                '<td><button class="revoke-btn" onclick="toggleMember(\\''+m.id+'\\', \\''+m.status+'\\')">' + toggleLabel + '</button></td>' +
-                '</tr>';
-        }
-        html += '</tbody></table>';
-        mWrap.innerHTML = html;
-    }
-}
-async function copyInviteByCode(code) {
-    const url = window.location.origin + '/members?invite=' + code;
-    navigator.clipboard.writeText(url).then(() => {
-        const btn = event.target;
-        btn.textContent = 'COPIED!';
-        setTimeout(() => btn.textContent = 'COPY LINK', 2000);
-    });
-}
-loadInvites();
-setInterval(loadInvites, 60000);
 </script>
 </body></html>
 """
@@ -1680,11 +1555,22 @@ td { padding:8px 6px; border-bottom:1px solid #1e2130; vertical-align:middle; }
 .kpi .v { font-size:20px; color:#e0e0e0; margin-top:4px; font-weight:600; }
 .back { color:#d4740a; text-decoration:none; font-size:11px; }
 .back:hover { text-decoration:underline; }
+.admin-nav { display:flex; gap:0; margin-bottom:24px; border-bottom:1px solid #2d3139; align-items:flex-end; flex-wrap:wrap; }
+.admin-nav .nav-tab { padding:10px 18px; font-size:11px; font-weight:700; letter-spacing:0.06em; color:#6c757d; text-decoration:none; border-bottom:2px solid transparent; }
+.admin-nav .nav-tab:hover { color:#d4740a; }
+.admin-nav .nav-tab.active { color:#d4740a; border-bottom-color:#d4740a; }
+.admin-nav .nav-back { margin-left:auto; padding:10px 12px; font-size:11px; color:#6c757d; text-decoration:none; letter-spacing:0.04em; }
+.admin-nav .nav-back:hover { color:#d4740a; }
 @media (max-width:600px) { body { padding:14px; } .row-form input, .row-form select { min-width:140px; } table { font-size:10px; } th, td { padding:6px 4px; } }
 </style>
 </head><body>
 <h1>MEMBERS ADMIN</h1>
-<div class="sub"><a href="/admin" class="back">&larr; back to admin</a> &middot; manage member accounts, invites, and outbound alerts</div>
+<nav class="admin-nav">
+    <a class="nav-tab" href="/admin">SYSTEM</a>
+    <a class="nav-tab active" href="/admin/members">MEMBERS</a>
+    <a class="nav-back" href="/">&larr; Dashboard</a>
+</nav>
+<div class="sub" style="margin-top:-12px">manage member accounts, invites, and outbound alerts</div>
 
 <div class="kpi-row" id="kpiRow"></div>
 
