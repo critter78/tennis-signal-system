@@ -2496,21 +2496,31 @@ _HTML_BASE_STYLES = (
 
 
 def _html_email_shell(inner_html, preheader=""):
-    """Wrap a section of body HTML in the standard BreakPoint email scaffold."""
+    """Wrap a section of body HTML in the standard BreakPoint email scaffold.
+    Header band uses the COMBINED site logo (racket + 'BREAKPOINT BETTING'
+    wordmark in copper gradient — single PNG, mirrors the site header).
+    Footer band shows just the racket icon + Adjust Alert Preferences link."""
     base = PUBLIC_BASE_URL.rstrip("/")
+    logo_full_url = f"{base}/static/breakpoint_logo_full.png"
+    logo_icon_url = f"{base}/static/breakpoint_logo.png"
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>BreakPoint Betting</title></head>
-<body style="margin:0;padding:0;background:#f4f5f7;{_HTML_BASE_STYLES}">
-  <span style="display:none!important;visibility:hidden;mso-hide:all;font-size:1px;color:#f4f5f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">{_esc_html(preheader)}</span>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7;padding:24px 12px">
+<body style="margin:0;padding:0;background:#0f1117;{_HTML_BASE_STYLES}">
+  <span style="display:none!important;visibility:hidden;mso-hide:all;font-size:1px;color:#0f1117;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">{_esc_html(preheader)}</span>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0f1117;padding:24px 12px">
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0"
-             style="max-width:560px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+             style="max-width:560px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #2d3139">
+        <!-- Header: combined logo PNG (racket + BB wordmark) — same as site -->
+        <tr><td style="background:#13151d;padding:18px 22px;border-bottom:2px solid #d4740a;text-align:center">
+          <img src="{logo_full_url}" alt="BreakPoint Betting" width="240" height="40" style="display:block;margin:0 auto;border:0;max-width:100%;height:auto">
+        </td></tr>
         {inner_html}
-        <tr><td style="background:#fafbfc;padding:16px 22px;text-align:center;font-size:11px;color:#8a8f99;border-top:1px solid #ececec">
-          <div style="font-family:'Courier New',monospace;letter-spacing:0.10em;color:#6c757d;margin-bottom:4px">CRITTER LABS &middot; BREAKPOINT</div>
-          <div>Powered by Amora Edge &middot; <a href="{base}/members/dashboard" style="color:#b87333;text-decoration:none">Adjust alert preferences</a></div>
+        <!-- Footer: racket icon + Adjust Alert Preferences link -->
+        <tr><td style="background:#13151d;padding:18px 22px;text-align:center;border-top:1px solid #2d3139">
+          <img src="{logo_icon_url}" alt="BreakPoint Betting" width="32" height="32" style="display:block;margin:0 auto 8px;border:0;width:32px;height:32px">
+          <div><a href="{base}/members/dashboard" style="color:#d4740a;text-decoration:none;font-size:11px;letter-spacing:0.04em">Adjust Alert Preferences</a></div>
         </td></tr>
       </table>
     </td></tr>
@@ -2519,7 +2529,9 @@ def _html_email_shell(inner_html, preheader=""):
 
 
 def _signal_alert_html(p):
-    """Build the HTML body for a single-pick admin alert."""
+    """Build the HTML body for a single-pick admin alert.
+    Site-matching colors: orange #d4740a accent, blue #42a5f5 model number,
+    red #f44336 for negative edge, green #4caf50 for positive edge."""
     base = PUBLIC_BASE_URL.rstrip("/")
     bet_on = _esc_html(p.get("bet_on") or "?")
     match = _esc_html(p.get("match") or "?")
@@ -2543,7 +2555,17 @@ def _signal_alert_html(p):
     except Exception:
         edge_num = None
     edge_str = f"{edge_num:+.1f}%" if edge_num is not None else "—"
-    edge_color = "#1b5e20" if (edge_num or 0) >= 0 else "#5a1f1f"
+    edge_color = "#4caf50" if (edge_num or 0) >= 0 else "#f44336"
+
+    # Match date — try several pick fields the pipeline may set
+    match_date = p.get("end_date") or p.get("match_date") or p.get("logged_at", "")[:10]
+    match_date_str = ""
+    if match_date:
+        try:
+            d = datetime.fromisoformat(str(match_date).replace("Z", "")[:10])
+            match_date_str = d.strftime("%a %b %d, %Y")
+        except Exception:
+            match_date_str = _esc_html(match_date)
 
     poly_link = _esc_html(p.get("poly_link") or "")
     poly_btn = (
@@ -2556,50 +2578,72 @@ def _signal_alert_html(p):
     sub_line = f"{tourn} &middot; {surf}"
     if rnd:
         sub_line += f" &middot; {rnd}"
+    if match_date_str:
+        sub_line += f" &middot; {match_date_str}"
+
+    # EDGE is the headline metric — gets a full-width banner above the
+    # smaller Model/Market row. Visual hierarchy: edge first, secondary
+    # context numbers below.
+    is_positive = (edge_num or 0) >= 0
+    edge_bg = "#e8f5e9" if is_positive else "#fdeae8"      # soft green / soft red
+    edge_border = "#4caf50" if is_positive else "#f44336"
+    edge_text = "#1b5e20" if is_positive else "#b71c1c"    # darker for contrast on tint
+    edge_arrow = "&#9650;" if is_positive else "&#9660;"   # ▲ / ▼
 
     inner = f"""
-        <tr><td style="background:linear-gradient(180deg,#b87333 0%,#a55f1f 100%);padding:22px;text-align:center;color:#ffffff">
-          <div style="font-family:'Courier New',monospace;font-size:13px;letter-spacing:0.12em;opacity:0.92">BREAKPOINT BETTING</div>
-          <div style="font-size:22px;font-weight:700;margin-top:6px">&#127934; {bet_on}</div>
-          <div style="font-size:12px;opacity:0.9;margin-top:4px">{sub_line}</div>
+        <tr><td style="background:linear-gradient(180deg,#f5b942 0%,#d4740a 50%,#c45e08 100%);padding:22px;text-align:center;color:#ffffff">
+          <div style="font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.12em;opacity:0.9">SIGNAL FIRED</div>
+          <div style="font-size:24px;font-weight:700;margin-top:6px">&#127934; {bet_on}</div>
+          <div style="font-size:12px;opacity:0.95;margin-top:4px">{sub_line}</div>
         </td></tr>
-        <tr><td style="padding:18px 22px">
+        <tr><td style="padding:18px 22px 6px">
           <div style="font-size:13px;color:#6c757d">vs {match}</div>
-          <div style="font-size:11px;color:#8a8f99;letter-spacing:0.04em;margin-top:6px">SIGNAL FIRED</div>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="8" border="0" style="margin-top:10px">
+
+          <!-- EDGE banner: the headline metric, big + colored bg -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;background:{edge_bg};border:2px solid {edge_border};border-radius:6px">
             <tr>
-              <td width="33%" style="background:#f7f8fa;padding:10px;text-align:center;border-radius:4px">
-                <div style="font-size:9px;color:#6c757d;letter-spacing:0.06em">MODEL</div>
-                <div style="font-size:18px;color:#1a1a1a;font-weight:700;margin-top:3px">{mp_str}</div>
-              </td>
-              <td width="33%" style="background:#f7f8fa;padding:10px;text-align:center;border-radius:4px">
-                <div style="font-size:9px;color:#6c757d;letter-spacing:0.06em">MARKET</div>
-                <div style="font-size:18px;color:#1a1a1a;font-weight:700;margin-top:3px">{pp_str}</div>
-              </td>
-              <td width="33%" style="background:#f7f8fa;padding:10px;text-align:center;border-radius:4px">
-                <div style="font-size:9px;color:#6c757d;letter-spacing:0.06em">EDGE</div>
-                <div style="font-size:18px;font-weight:700;margin-top:3px;color:{edge_color}">{edge_str}</div>
+              <td style="padding:14px 18px" align="center">
+                <div style="font-size:10px;color:{edge_text};letter-spacing:0.12em;font-weight:700;opacity:0.85">EDGE OVER MARKET</div>
+                <div style="font-size:34px;color:{edge_text};font-weight:800;margin-top:2px;letter-spacing:-0.02em">{edge_arrow} {edge_str}</div>
+                <div style="font-size:11px;color:{edge_text};opacity:0.75;margin-top:2px">Model prices {bet_on.split(' ')[-1] if ' ' in bet_on else bet_on} higher than the market</div>
               </td>
             </tr>
           </table>
+
+          <!-- Model + Market: secondary context, two equal cells -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="8" border="0" style="margin-top:10px">
+            <tr>
+              <td width="50%" style="background:#f7f8fa;padding:10px;text-align:center;border-radius:4px">
+                <div style="font-size:9px;color:#6c757d;letter-spacing:0.06em">MODEL</div>
+                <div style="font-size:18px;color:#42a5f5;font-weight:700;margin-top:3px">{mp_str}</div>
+              </td>
+              <td width="50%" style="background:#f7f8fa;padding:10px;text-align:center;border-radius:4px">
+                <div style="font-size:9px;color:#6c757d;letter-spacing:0.06em">MARKET</div>
+                <div style="font-size:18px;color:#42a5f5;font-weight:700;margin-top:3px">{pp_str}</div>
+              </td>
+            </tr>
+          </table>
+
           <div style="margin-top:14px;display:flex;gap:8px">
-            <a href="{base}/members/dashboard" style="flex:1;display:inline-block;text-align:center;padding:11px 8px;background:#b87333;color:#ffffff;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:0.05em;border-radius:4px">VIEW DASHBOARD</a>
+            <a href="{base}/members/dashboard" style="flex:1;display:inline-block;text-align:center;padding:11px 8px;background:#d4740a;color:#ffffff;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:0.05em;border-radius:4px">VIEW DASHBOARD</a>
             {poly_btn}
           </div>
         </td></tr>
     """
-    return _html_email_shell(inner, preheader=f"{bet_on} signal — model {mp_str}, market {pp_str}")
+    return _html_email_shell(inner, preheader=f"{bet_on} signal — {edge_str} edge, model {mp_str} vs market {pp_str}")
 
 
 def _members_alert_html_body(picks):
-    """Build the HTML body for the batched members alert email."""
+    """Build the HTML body for the batched members alert email.
+    Per-pick rows: pick name on left, venue+surface on right (separated with
+    a dot), then the three metrics. Title: 'X New Signals Fired!'."""
     base = PUBLIC_BASE_URL.rstrip("/")
     n = len(picks)
     rows_html = []
     for p in picks:
         bet_on = _esc_html(p.get("bet_on") or "?")
         match = _esc_html(p.get("match") or "")
-        # short context: opponent + tournament + surface
+        # opponent name only (no "vs " prefix — keeps the row readable)
         opp = ""
         if "vs" in match:
             try:
@@ -2610,11 +2654,16 @@ def _members_alert_html_body(picks):
         else:
             opp = match
         opp = _esc_html(opp)
-        ctx_line = f"vs {opp}"
+
+        # Right-side venue/surface line (separated with copper dot)
+        venue_parts = []
         if p.get("tournament"):
-            ctx_line += f" &middot; {_esc_html(p.get('tournament'))}"
+            venue_parts.append(_esc_html(p.get('tournament')))
         if p.get("surface"):
-            ctx_line += f" &middot; {_esc_html(p.get('surface'))}"
+            venue_parts.append(_esc_html(p.get('surface')))
+        venue_html = '<span style="color:#d4740a">&middot;</span>'.join(
+            f' {v} ' for v in venue_parts
+        ) if venue_parts else ""
 
         def _num(v, fmt):
             if v is None:
@@ -2631,64 +2680,82 @@ def _members_alert_html_body(picks):
         except Exception:
             edge_num = None
         edge_str = f"{edge_num:+.0f}%" if edge_num is not None else "—"
-        edge_color = "#1b5e20" if (edge_num or 0) >= 0 else "#5a1f1f"
+        edge_color = "#4caf50" if (edge_num or 0) >= 0 else "#f44336"
+
+        # Two-column row: pick + context on the LEFT, big EDGE chip on the RIGHT.
+        # Edge gets the prominence — it's the headline of why the email exists.
+        is_pos = (edge_num or 0) >= 0
+        chip_bg = "#e8f5e9" if is_pos else "#fdeae8"
+        chip_border = "#4caf50" if is_pos else "#f44336"
+        chip_text = "#1b5e20" if is_pos else "#b71c1c"
+        chip_arrow = "&#9650;" if is_pos else "&#9660;"   # ▲ / ▼
+
         rows_html.append(f"""
-        <tr><td style="padding:12px 22px;border-top:1px solid #f0f1f3">
+        <tr><td style="padding:14px 22px;border-top:1px solid #f0f1f3">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
             <tr>
-              <td style="font-size:13px;color:#1a1a1a;font-weight:600">{bet_on}<br>
-                <span style="color:#8a8f99;font-weight:400;font-size:11px">{ctx_line}</span>
+              <!-- LEFT: pick + context + secondary metrics -->
+              <td valign="middle" style="padding-right:14px">
+                <div style="font-size:14px;color:#1a1a1a;font-weight:700">{bet_on}
+                  <span style="color:#8a8f99;font-weight:400;font-size:11px"> &mdash; vs {opp}</span>
+                </div>
+                <div style="font-size:10px;color:#8a8f99;letter-spacing:0.04em;margin-top:3px">{venue_html}</div>
+                <div style="font-size:11px;color:#5a5f6a;margin-top:6px">
+                  <strong style="color:#42a5f5">{mp_str}</strong> <span style="color:#8a8f99">MODEL</span>
+                  <span style="color:#d0d2d7;margin:0 6px">·</span>
+                  <strong style="color:#42a5f5">{pp_str}</strong> <span style="color:#8a8f99">MKT</span>
+                </div>
               </td>
-              <td align="right" style="font-size:11px;color:#5a5f6a;padding-left:8px">
-                <strong style="display:block;font-size:14px;color:#1a1a1a">{mp_str}</strong>MODEL
-              </td>
-              <td align="right" style="font-size:11px;color:#5a5f6a;padding-left:8px">
-                <strong style="display:block;font-size:14px;color:#1a1a1a">{pp_str}</strong>MKT
-              </td>
-              <td align="right" style="font-size:11px;color:#5a5f6a;padding-left:8px">
-                <strong style="display:block;font-size:14px;color:{edge_color}">{edge_str}</strong>EDGE
+              <!-- RIGHT: BIG edge chip — colored bg + arrow + value -->
+              <td valign="middle" align="right" width="100" style="padding-left:8px">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background:{chip_bg};border:2px solid {chip_border};border-radius:6px">
+                  <tr><td align="center" style="padding:8px 12px;min-width:78px">
+                    <div style="font-size:8px;color:{chip_text};letter-spacing:0.10em;font-weight:700;opacity:0.85">EDGE</div>
+                    <div style="font-size:18px;color:{chip_text};font-weight:800;margin-top:1px">{chip_arrow} {edge_str}</div>
+                  </td></tr>
+                </table>
               </td>
             </tr>
           </table>
         </td></tr>""")
 
     inner = f"""
-        <tr><td style="background:linear-gradient(180deg,#b87333 0%,#a55f1f 100%);padding:22px;text-align:center;color:#ffffff">
-          <div style="font-family:'Courier New',monospace;font-size:13px;letter-spacing:0.12em;opacity:0.92">BREAKPOINT BETTING</div>
-          <div style="font-size:22px;font-weight:700;margin-top:6px">{n} new pick{'s' if n != 1 else ''}</div>
-          <div style="font-size:12px;opacity:0.9;margin-top:4px">All {SIGNAL_ALERT_THRESHOLD:.0f}%+ model probability</div>
+        <tr><td style="background:linear-gradient(180deg,#f5b942 0%,#d4740a 50%,#c45e08 100%);padding:22px;text-align:center;color:#ffffff">
+          <div style="font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.12em;opacity:0.9">SIGNALS UPDATE</div>
+          <div style="font-size:24px;font-weight:700;margin-top:6px">{n} New Signal{'s' if n != 1 else ''} Fired!</div>
+          <div style="font-size:12px;opacity:0.95;margin-top:4px">{SIGNAL_ALERT_THRESHOLD:.0f}%+ Model Probability</div>
         </td></tr>
         <tr><td style="padding:18px 22px 6px;font-size:13px;color:#1a1a1a;line-height:1.6">
-          <strong style="color:#b87333">{n} new signal{'s' if n != 1 else ''}</strong> just fired on the BreakPoint dashboard. Tap any pick to track.
+          <strong style="color:#d4740a">{n} new signal{'s' if n != 1 else ''}</strong> just fired on the BreakPoint dashboard. Tap any pick to track.
         </td></tr>
         {''.join(rows_html)}
         <tr><td style="padding:16px 22px;text-align:center;border-top:1px solid #ececec">
-          <a href="{base}/members/dashboard" style="display:inline-block;padding:11px 22px;background:#b87333;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.05em;border-radius:4px">VIEW IN DASHBOARD &rarr;</a>
+          <a href="{base}/members/dashboard" style="display:inline-block;padding:11px 22px;background:#d4740a;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.05em;border-radius:4px">VIEW IN DASHBOARD &rarr;</a>
         </td></tr>
     """
     return _html_email_shell(inner, preheader=f"{n} new high-confidence pick{'s' if n != 1 else ''}")
 
 
 def _invite_email_html(invite_code, base_url=None):
-    """HTML body for an invite email."""
+    """HTML body for an invite email — site orange branding + new copy."""
     base = (base_url or PUBLIC_BASE_URL).rstrip("/")
     link = f"{base}/members?invite={_esc_html(invite_code)}"
     inner = f"""
-        <tr><td style="background:linear-gradient(180deg,#b87333 0%,#a55f1f 100%);padding:24px;text-align:center;color:#ffffff">
-          <div style="font-family:'Courier New',monospace;font-size:13px;letter-spacing:0.12em;opacity:0.92">BREAKPOINT BETTING</div>
-          <div style="font-size:22px;font-weight:700;margin-top:8px">You're invited.</div>
-          <div style="font-size:12px;opacity:0.9;margin-top:6px">Invite-only beta access</div>
+        <tr><td style="background:linear-gradient(180deg,#f5b942 0%,#d4740a 50%,#c45e08 100%);padding:24px;text-align:center;color:#ffffff">
+          <div style="font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.12em;opacity:0.9">YOUR INVITE</div>
+          <div style="font-size:24px;font-weight:700;margin-top:8px">You're invited.</div>
+          <div style="font-size:12px;opacity:0.95;margin-top:6px">Invite-only beta access</div>
         </td></tr>
-        <tr><td style="padding:22px;font-size:14px;color:#1a1a1a;line-height:1.6">
-          <p style="margin:0 0 14px">You've been invited to <strong>BreakPoint Betting</strong> — invite-only beta access to live tennis-signal picks, your personal bet log, and player intel.</p>
-          <p style="margin:0 0 18px;color:#5a5f6a;font-size:13px">Tap below to redeem your invite and create your account. The invite is single-use.</p>
+        <tr><td style="padding:24px 22px;font-size:14px;color:#1a1a1a;line-height:1.6">
+          <p style="margin:0 0 18px">You've been invited to <strong>BreakPointBetting.NET</strong>. Invite-only beta access to live tennis-signal picks, your personal bet log, player intel and more.</p>
+          <p style="margin:0 0 28px;color:#5a5f6a;font-size:13px">Tap below to redeem your invite and create your account. The invite is single-use.</p>
           <div style="text-align:center;margin:24px 0">
-            <a href="{link}" style="display:inline-block;padding:14px 28px;background:#b87333;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:0.05em;border-radius:4px">REDEEM INVITE &rarr;</a>
+            <a href="{link}" style="display:inline-block;padding:14px 28px;background:#d4740a;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:0.05em;border-radius:4px">REDEEM INVITE &rarr;</a>
           </div>
-          <p style="margin:0;color:#8a8f99;font-size:11px;text-align:center">Or paste this link into your browser:<br><span style="color:#b87333;word-break:break-all">{link}</span></p>
+          <p style="margin:0;color:#8a8f99;font-size:11px;text-align:center">Or paste this link into your browser:<br><span style="color:#d4740a;word-break:break-all">{link}</span></p>
         </td></tr>
     """
-    return _html_email_shell(inner, preheader="Your invite to BreakPoint Betting")
+    return _html_email_shell(inner, preheader="Your invite to BreakPointBetting.NET")
 
 
 def _recent_picks(window_minutes=10):
@@ -3213,17 +3280,17 @@ def admin_test_alert():
     }.get(tier, "?")
     base = PUBLIC_BASE_URL.rstrip("/")
     inner = f"""
-        <tr><td style="background:linear-gradient(180deg,#b87333 0%,#a55f1f 100%);padding:22px;text-align:center;color:#ffffff">
-          <div style="font-family:'Courier New',monospace;font-size:13px;letter-spacing:0.12em;opacity:0.92">BREAKPOINT BETTING</div>
-          <div style="font-size:22px;font-weight:700;margin-top:6px">Test alert &middot; Tier {tier}</div>
-          <div style="font-size:12px;opacity:0.9;margin-top:4px">{timestamp_utc}</div>
+        <tr><td style="background:linear-gradient(180deg,#f5b942 0%,#d4740a 50%,#c45e08 100%);padding:22px;text-align:center;color:#ffffff">
+          <div style="font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.12em;opacity:0.9">CHANNEL TEST</div>
+          <div style="font-size:24px;font-weight:700;margin-top:6px">Test alert &middot; Tier {tier}</div>
+          <div style="font-size:12px;opacity:0.95;margin-top:4px">{timestamp_utc}</div>
         </td></tr>
         <tr><td style="padding:22px;font-size:14px;color:#1a1a1a;line-height:1.6">
           <p style="margin:0 0 12px"><strong>This is a test alert from BreakPoint Betting.</strong></p>
           <p style="margin:0 0 12px;color:#5a5f6a;font-size:13px">If you see this email, the SMTP / Resend wiring is working end-to-end with HTML rendering enabled.</p>
           <p style="margin:0;color:#8a8f99;font-size:11px">Tier {tier} = {tier_desc}</p>
           <div style="text-align:center;margin:22px 0 6px">
-            <a href="{base}/admin/members" style="display:inline-block;padding:11px 22px;background:#b87333;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.05em;border-radius:4px">OPEN MEMBERS ADMIN &rarr;</a>
+            <a href="{base}/admin/members" style="display:inline-block;padding:11px 22px;background:#d4740a;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.05em;border-radius:4px">OPEN MEMBERS ADMIN &rarr;</a>
           </div>
         </td></tr>
     """
