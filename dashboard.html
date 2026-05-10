@@ -940,7 +940,8 @@ window.PICKS_DATA = [];
         </div>
         <div style="display:flex; gap:8px; align-items:center; padding-bottom:8px">
             <button onclick="runAutoScan()" style="background:#d4740a; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RUN SCAN</button>
-            <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace">RESET</button>
+            <button onclick="clearStalePending()" style="background:#5a4a1f; color:#c4a44e; border:1px solid #c4a44e; padding:5px 12px; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace" title="Remove pending trades whose match has already resolved (keeps trade history)">CLEAR STALE</button>
+            <button onclick="resetAutoTrader()" style="background:#b71c1c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace" title="WIPES pending AND trade history (cannot be undone)">RESET</button>
             <button onclick="toggleAutoTraderSettings()" style="background:#1a1d24; color:#888; border:1px solid #2a2d37; padding:5px 10px; border-radius:6px; font-size:10px; cursor:pointer; font-family:'IBM Plex Mono',monospace">SETTINGS</button>
         </div>
     </div>
@@ -5187,22 +5188,63 @@ async function refreshPendingTrades() {
             return;
         }
 
+        // Helper: relative time string from ISO timestamp
+        const relTime = (iso) => {
+            if (!iso) return '';
+            try {
+                const t = new Date(iso);
+                if (isNaN(t)) return '';
+                const mins = Math.round((Date.now() - t.getTime()) / 60000);
+                if (mins < 1) return 'just now';
+                if (mins < 60) return mins + 'm ago';
+                const hrs = Math.round(mins / 60);
+                if (hrs < 24) return hrs + 'h ago';
+                const days = Math.round(hrs / 24);
+                return days + 'd ago';
+            } catch (e) { return ''; }
+        };
+        // Helper: short money string
+        const moneyShort = (v) => {
+            if (!v) return '—';
+            if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+            if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
+            return '$' + Math.round(v);
+        };
+
         container.innerHTML = trades.map(t => {
             const gap = (t.gap || 0);
             const gapColor = gap >= 10 ? '#4caf50' : gap >= 5 ? '#81c784' : '#f59e0b';
             const edgeStr = (t.edge || 0) > 0 ? `+${(t.edge||0).toFixed(1)}%` : `${(t.edge||0).toFixed(1)}%`;
             const polyLink = t.poly_link || '#';
+
+            // Surface tint
+            const surfColors = {Hard: '#4fc3f7', Clay: '#ff8a65', Grass: '#81c784'};
+            const surfColor = surfColors[t.surface] || '#aaa';
+
+            // Context line: tournament · surface · market · scanned-time · volume
+            const ctxParts = [];
+            if (t.tournament) ctxParts.push(`<span style="color:#aaa">${t.tournament}</span>`);
+            if (t.surface) ctxParts.push(`<span style="color:${surfColor}">${t.surface}</span>`);
+            if (t.market_type && t.market_type !== 'h2h') ctxParts.push(`<span style="color:#888">${t.market_type}</span>`);
+            const scannedAgo = relTime(t.timestamp);
+            if (scannedAgo) ctxParts.push(`<span style="color:#666">scanned ${scannedAgo}</span>`);
+            const vol = t.volume || 0;
+            if (vol > 0) ctxParts.push(`<span style="color:#666" title="Polymarket volume">vol ${moneyShort(vol)}</span>`);
+
             return `
             <div style="background:#0d1117; border:1px solid #2a2d37; border-radius:8px; padding:12px 14px; display:flex; align-items:center; gap:12px; border-left:3px solid #f59e0b">
                 <div style="flex:1; min-width:0">
-                    <div style="font-size:13px; font-weight:700; color:#e0e0e0; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${t.match || '?'}</div>
+                    <div style="font-size:13px; font-weight:700; color:#e0e0e0; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${t.match || '?'}</div>
+                    <div style="font-size:10px; margin-bottom:5px; display:flex; gap:8px; flex-wrap:wrap">
+                        <span style="color:#d4740a; font-weight:700">PICK: ${t.bet_on || '?'}</span>
+                        ${ctxParts.length ? '<span style="color:#444">·</span>' + ctxParts.join('<span style="color:#444"> · </span>') : ''}
+                    </div>
                     <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center">
-                        <span style="font-size:11px; color:#d4740a; font-weight:700">PICK: ${t.bet_on || '?'}</span>
-                        <span style="font-size:10px; color:#aaa">Model: ${(t.model_prob||0).toFixed(1)}%</span>
-                        <span style="font-size:10px; color:#aaa">Poly: ${(t.poly_price||0).toFixed(0)}c</span>
-                        <span style="font-size:10px; font-weight:700; color:${gapColor}; background:${gapColor}15; padding:1px 5px; border-radius:3px">Gap: +${gap.toFixed(0)}</span>
-                        <span style="font-size:10px; color:#aaa">Edge: ${edgeStr}</span>
-                        <span style="font-size:10px; color:#aaa">Stake: $${(t.stake||0).toFixed(2)}</span>
+                        <span style="font-size:10px; color:#aaa" title="Model's predicted win probability for the picked player">Model: <strong style="color:#e0e0e0">${(t.model_prob||0).toFixed(1)}%</strong></span>
+                        <span style="font-size:10px; color:#aaa" title="Polymarket price (cents = implied %)">Poly: <strong style="color:#e0e0e0">${(t.poly_price||0).toFixed(0)}c</strong></span>
+                        <span style="font-size:10px; font-weight:700; color:${gapColor}; background:${gapColor}15; padding:1px 5px; border-radius:3px" title="Model% − Market% (raw gap)">Gap: +${gap.toFixed(0)}</span>
+                        <span style="font-size:10px; color:#aaa" title="Edge over market">Edge: ${edgeStr}</span>
+                        <span style="font-size:10px; color:#aaa">Stake: <strong style="color:#e0e0e0">$${(t.stake||0).toFixed(2)}</strong></span>
                     </div>
                 </div>
                 <div style="display:flex; gap:6px; flex-shrink:0">
@@ -5289,6 +5331,27 @@ async function resetAutoTrader() {
         }
     } catch(e) {
         alert('Reset error: ' + e.message);
+    }
+}
+
+async function clearStalePending() {
+    if (!confirm('Remove pending trades whose match has already resolved?\\n\\nTrade history is NOT touched. Only stale entries in the pending queue are removed.')) return;
+    try {
+        const res = await fetch('/api/auto-trader/clear-stale', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+            alert('Clear-stale failed: ' + (data.error || res.statusText));
+            return;
+        }
+        await refreshPendingTrades();
+        if (data.removed === 0) {
+            alert('No stale pending trades found. ' + data.kept + ' still pending.');
+        } else {
+            const sample = (data.removed_matches || []).slice(0, 5).join('\\n  • ');
+            alert(`Removed ${data.removed} stale pending trade${data.removed === 1 ? '' : 's'}.\\n${data.kept} still pending.\\n\\nSample:\\n  • ${sample}`);
+        }
+    } catch(e) {
+        alert('Clear-stale error: ' + e.message);
     }
 }
 

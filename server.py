@@ -5939,6 +5939,75 @@ def auto_trader_reset():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/auto-trader/clear-stale", methods=["POST"])
+@enable_cors
+def auto_trader_clear_stale():
+    """Remove pending trades whose underlying match has already resolved.
+    Non-destructive: trade history is untouched. Returns count removed +
+    a list of removed match names for the UI alert."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        if not PENDING_TRADES_FILE.exists():
+            return jsonify({"removed": 0, "kept": 0, "removed_matches": []})
+
+        pending = json.loads(PENDING_TRADES_FILE.read_text() or "[]")
+        if not pending:
+            return jsonify({"removed": 0, "kept": 0, "removed_matches": []})
+
+        # Build a fast lookup of resolved matches from picks.jsonl
+        resolved_matches = set()
+        try:
+            picks = load_picks_jsonl(enrich=False)
+            for p in picks:
+                if p.get("outcome") is not None and p.get("match"):
+                    resolved_matches.add(p["match"].strip().lower())
+        except Exception as e:
+            logger.warning(f"[clear-stale] picks load failed: {e}")
+
+        # Also fuzzy-match by last names (in case match name spelling drifts
+        # slightly between pick generation and auto-trader scan).
+        def _is_resolved(match_name: str) -> bool:
+            if not match_name:
+                return False
+            mn = match_name.strip().lower()
+            if mn in resolved_matches:
+                return True
+            parts = re.split(r"\s+vs\.?\s+", mn)
+            if len(parts) != 2:
+                return False
+            last_a = parts[0].strip().split()[-1] if parts[0].strip() else ""
+            last_b = parts[1].strip().split()[-1] if parts[1].strip() else ""
+            if not last_a or not last_b:
+                return False
+            for rm in resolved_matches:
+                if last_a in rm and last_b in rm:
+                    return True
+            return False
+
+        kept = []
+        removed_matches = []
+        for t in pending:
+            if _is_resolved(t.get("match", "")):
+                removed_matches.append(t.get("match") or "?")
+            else:
+                kept.append(t)
+
+        if removed_matches:
+            PENDING_TRADES_FILE.write_text(json.dumps(kept, indent=2))
+            logger.info(f"[AUTO-TRADER] clear-stale: removed {len(removed_matches)} resolved pending trades")
+
+        return jsonify({
+            "removed": len(removed_matches),
+            "kept": len(kept),
+            "removed_matches": removed_matches[:20],  # cap UI list
+        })
+    except Exception as e:
+        logger.error(f"[clear-stale] {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/auto-trader/approved", methods=["GET"])
 @enable_cors
 def auto_trader_approved():
