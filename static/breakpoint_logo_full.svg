@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="420" height="70" viewBox="0 0 420 70" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <!-- Site H1 copper gradient: #f5b942 → #d4740a → #c45e08 -->
+        <linearGradient id="copper" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f5b942"/>
+            <stop offset="50%" stop-color="#d4740a"/>
+            <stop offset="100%" stop-color="#c45e08"/>
+        </linearGradient>
+    </defs>
+
+    <!-- Racket icon: same shape as dashboard inline SVG, scaled to fit ~50px -->
+    <g transform="translate(6, 8)">
+        <!-- Racket head -->
+        <ellipse cx="24" cy="22" rx="15" ry="18" stroke="#d4740a" stroke-width="3" fill="none"/>
+        <!-- Handle -->
+        <line x1="24" y1="40" x2="24" y2="56" stroke="#d4740a" stroke-width="3.5" stroke-linecap="round"/>
+        <!-- Strings -->
+        <line x1="15" y1="22" x2="33" y2="22" stroke="#d4740a" stroke-width="1" opacity="0.4"/>
+        <line x1="19" y1="14" x2="29" y2="14" stroke="#d4740a" stroke-width="1" opacity="0.4"/>
+        <line x1="19" y1="30" x2="29" y2="30" stroke="#d4740a" stroke-width="1" opacity="0.4"/>
+        <line x1="24" y1="6" x2="24" y2="38" stroke="#d4740a" stroke-width="1" opacity="0.4"/>
+        <!-- Sweet-spot ring -->
+        <circle cx="24" cy="22" r="8" stroke="#d4740a" stroke-width="1" fill="none" opacity="0.35"/>
+        <!-- Ball trajectory -->
+        <path d="M24 22 L37 8" stroke="#4caf50" stroke-width="2" opacity="1"/>
+        <!-- Hit ball -->
+        <circle cx="37" cy="8" r="4" fill="#4caf50"/>
+        <!-- Trail ball -->
+        <circle cx="17" cy="28" r="2.4" fill="#4caf50" opacity="0.6"/>
+        <!-- Sweet spot center -->
+        <circle cx="24" cy="22" r="2.8" fill="#d4740a"/>
+    </g>
+
+    <!-- Wordmark "BREAKPOINT BETTING" in copper gradient -->
+    <text x="76" y="44" font-family="'IBM Plex Mono','Courier New','Liberation Mono',monospace"
+          font-size="22" font-weight="700" letter-spacing="2.4" fill="url(#copper)">BREAKPOINT BETTING</text>
+</svg>

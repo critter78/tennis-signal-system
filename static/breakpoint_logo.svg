@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Racket head -->
+    <ellipse cx="38" cy="32" rx="18" ry="22" stroke="#d4740a" stroke-width="3.5" fill="none"/>
+    <!-- Handle -->
+    <line x1="38" y1="54" x2="38" y2="74" stroke="#d4740a" stroke-width="4" stroke-linecap="round"/>
+    <!-- Strings (cross pattern) -->
+    <line x1="28" y1="32" x2="48" y2="32" stroke="#d4740a" stroke-width="1.2" opacity="0.4"/>
+    <line x1="33" y1="22" x2="43" y2="22" stroke="#d4740a" stroke-width="1.2" opacity="0.4"/>
+    <line x1="33" y1="42" x2="43" y2="42" stroke="#d4740a" stroke-width="1.2" opacity="0.4"/>
+    <line x1="38" y1="12" x2="38" y2="52" stroke="#d4740a" stroke-width="1.2" opacity="0.4"/>
+    <!-- Inner sweet-spot circle -->
+    <circle cx="38" cy="32" r="10" stroke="#d4740a" stroke-width="1.2" fill="none" opacity="0.35"/>
+    <!-- Ball trajectory -->
+    <path d="M38 32 L54 14" stroke="#4caf50" stroke-width="2.5" opacity="1"/>
+    <!-- Ball -->
+    <circle cx="54" cy="14" r="5" fill="#4caf50"/>
+    <!-- Ball trail/secondary ball -->
+    <circle cx="29" cy="39" r="3" fill="#4caf50" opacity="0.6"/>
+    <!-- Sweet spot center -->
+    <circle cx="38" cy="32" r="3.5" fill="#d4740a"/>
+</svg>
