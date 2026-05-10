@@ -86,6 +86,7 @@ SHARES_FILE = LOGS_DIR / "shares.json"
 MEMBERS_FILE = LOGS_DIR / "members.json"
 INVITES_FILE = LOGS_DIR / "invites.json"
 MEMBER_BETS_FILE = LOGS_DIR / "member_bets.json"  # Phase 2 — member-scoped bets
+MEMBER_SESSIONS_FILE = LOGS_DIR / "member_sessions.jsonl"  # session start/end events
 
 def _seed_persistent_files():
     """On first boot with persistent disk, copy data files from repo if they don't exist yet."""
@@ -98,6 +99,7 @@ def _seed_persistent_files():
         BASE_DIR / "logs" / "members.json": MEMBERS_FILE,
         BASE_DIR / "logs" / "invites.json": INVITES_FILE,
         BASE_DIR / "logs" / "member_bets.json": MEMBER_BETS_FILE,
+        BASE_DIR / "logs" / "member_sessions.jsonl": MEMBER_SESSIONS_FILE,
         BASE_DIR / "data" / "live_rankings.json": DATA_DIR / "live_rankings.json",
         BASE_DIR / "data" / "player_profiles.json": DATA_DIR / "player_profiles.json",
     }
@@ -471,6 +473,130 @@ def consume_invite(code, member_id):
     return True
 
 
+# ─── SESSION TRACKING (Batch 1 May 2026) ─────────────────────────────────────
+# Append-only event log. Each line is one of:
+#   {"event":"start", "session_id":"...", "member_id":"...", "ts":"<iso>"}
+#   {"event":"end",   "session_id":"...", "member_id":"...", "ts":"<iso>", "reason":"logout|...|"}
+# Sessions without an end event are capped to SESSION_CAP_SECONDS at aggregation.
+
+SESSION_CAP_SECONDS = int(os.environ.get("SESSION_CAP_SECONDS", str(30 * 60)))
+
+
+def _record_session_event(event, session_id, member_id, reason=None):
+    """Append a session start/end event to the JSONL log. Best-effort; failures don't block auth."""
+    try:
+        record = {
+            "event": event,
+            "session_id": session_id,
+            "member_id": member_id,
+            "ts": datetime.utcnow().isoformat(),
+        }
+        if reason:
+            record["reason"] = reason
+        MEMBER_SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(MEMBER_SESSIONS_FILE, "a") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception as e:
+        logger.warning(f"[sessions] failed to record {event} for {member_id}: {e}")
+
+
+def _load_session_events():
+    """Load all session events as a list of dicts. Skips malformed lines."""
+    if not MEMBER_SESSIONS_FILE.exists():
+        return []
+    out = []
+    try:
+        with open(MEMBER_SESSIONS_FILE, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception as e:
+        logger.warning(f"[sessions] load failed: {e}")
+    return out
+
+
+def compute_usage_stats():
+    """Pair start+end events by session_id, aggregate per-member + totals.
+
+    Returns:
+      {
+        "total_seconds": int,
+        "total_sessions": int,
+        "active_member_count": int,
+        "avg_seconds_per_member": int,
+        "by_member": {member_id: {sessions: int, total_seconds: int, last_seen: iso|None}}
+      }
+    """
+    events = _load_session_events()
+    starts = {}  # session_id -> start record
+    ends = {}    # session_id -> end record
+    for e in events:
+        sid = e.get("session_id")
+        if not sid:
+            continue
+        if e.get("event") == "start":
+            # Keep earliest start if duplicates somehow exist
+            if sid not in starts or (e.get("ts") or "") < starts[sid].get("ts", ""):
+                starts[sid] = e
+        elif e.get("event") == "end":
+            if sid not in ends or (e.get("ts") or "") > ends[sid].get("ts", ""):
+                ends[sid] = e
+
+    by_member = {}  # member_id -> {sessions, total_seconds, last_seen}
+    total_seconds = 0
+    total_sessions = 0
+
+    for sid, s in starts.items():
+        member_id = s.get("member_id")
+        if not member_id:
+            continue
+        try:
+            t_start = datetime.fromisoformat((s.get("ts") or "").replace("Z", ""))
+        except Exception:
+            continue
+
+        end = ends.get(sid)
+        if end:
+            try:
+                t_end = datetime.fromisoformat((end.get("ts") or "").replace("Z", ""))
+                duration = max(0, int((t_end - t_start).total_seconds()))
+            except Exception:
+                duration = 0
+        else:
+            # No logout — assume the session capped at SESSION_CAP_SECONDS (e.g. 30 min).
+            duration = SESSION_CAP_SECONDS
+
+        # Cap per-session to avoid pathological values
+        duration = min(duration, SESSION_CAP_SECONDS)
+
+        bm = by_member.setdefault(member_id, {"sessions": 0, "total_seconds": 0, "last_seen": None})
+        bm["sessions"] += 1
+        bm["total_seconds"] += duration
+        # last_seen = max ts (start or end) for this member
+        latest_ts = (end or s).get("ts")
+        if latest_ts and (bm["last_seen"] is None or latest_ts > bm["last_seen"]):
+            bm["last_seen"] = latest_ts
+
+        total_seconds += duration
+        total_sessions += 1
+
+    member_count = len(by_member)
+    avg = int(total_seconds / member_count) if member_count else 0
+
+    return {
+        "total_seconds": total_seconds,
+        "total_sessions": total_sessions,
+        "active_member_count": member_count,
+        "avg_seconds_per_member": avg,
+        "by_member": by_member,
+    }
+
+
 # ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
 
 def _member_token(member_id):
@@ -478,11 +604,13 @@ def _member_token(member_id):
     return hashlib.sha256(f"member:{member_id}:{app.secret_key}".encode()).hexdigest()
 
 
-def set_member_cookie(response, member_id):
-    """Issue the members session cookie. 30-day rolling cookie."""
+def set_member_cookie(response, member_id, session_id=None):
+    """Issue the members session cookie. 30-day rolling cookie.
+    Cookie value is `<member_id>|<token>|<session_id>` (session_id appended for usage tracking)."""
     token = _member_token(member_id)
-    # We store id|token so the server can find the member without a session store
-    value = f"{member_id}|{token}"
+    if not session_id:
+        session_id = secrets.token_urlsafe(8)
+    value = f"{member_id}|{token}|{session_id}"
     response.set_cookie(
         "tennis_member",
         value,
@@ -494,20 +622,26 @@ def set_member_cookie(response, member_id):
 
 
 def get_current_member():
-    """Return the currently logged-in member record, or None."""
+    """Return the currently logged-in member record, or None.
+    Member dict includes 'id' and 'session_id' (None for legacy 2-part cookies)."""
     raw = request.cookies.get("tennis_member")
     if not raw or "|" not in raw:
         return None
-    member_id, token = raw.split("|", 1)
+    parts = raw.split("|")
+    if len(parts) < 2:
+        return None
+    member_id, token = parts[0], parts[1]
+    session_id = parts[2] if len(parts) >= 3 else None
     if token != _member_token(member_id):
         return None
     members = load_members()
     member = members.get(member_id)
     if not member or member.get("status") != "active":
         return None
-    # attach id for convenience
+    # attach id + session_id for convenience
     member = dict(member)
     member["id"] = member_id
+    member["session_id"] = session_id
     return member
 
 
@@ -1175,18 +1309,18 @@ h1 { font-size: 16px; color: #d4740a; margin-bottom: 6px; letter-spacing: 0.06em
 .sub { font-size: 11px; color: #6c757d; margin-bottom: 24px; }
 .section { background: #1a1d27; border: 1px solid #2d3139; padding: 24px; margin-bottom: 20px; }
 .section h2 { font-size: 13px; color: #d4740a; margin-bottom: 16px; letter-spacing: 0.04em; }
-.duration-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.duration-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 9px; margin-bottom: 16px; }
 @media (max-width: 600px) {
     body { padding: 15px; }
     .section { padding: 16px; }
     .duration-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .dur-btn { padding: 12px 6px; font-size: 12px; }
+    .dur-btn { padding: 11px 5px; font-size: 11px; }
     .result .url { font-size: 11px; }
     table { font-size: 10px; }
     th, td { padding: 6px; }
     h1 { font-size: 14px; }
 }
-.dur-btn { background: #0f1117; border: 1px solid #2d3139; color: #e0e0e0; padding: 14px; text-align: center; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 700; transition: all 0.2s; }
+.dur-btn { background: #0f1117; border: 1px solid #2d3139; color: #e0e0e0; padding: 13px; text-align: center; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 700; transition: all 0.2s; }
 .dur-btn:hover { border-color: #d4740a; color: #d4740a; }
 .dur-btn.selected { border-color: #d4740a; background: #1e1200; color: #d4740a; }
 .label-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
@@ -1240,15 +1374,14 @@ td { padding: 8px; border-bottom: 1px solid #1e2130; }
 <div class="section">
     <h2>GENERATE TIME-LIMITED SHARE LINK</h2>
     <div class="duration-grid" id="durGrid">
-        <div class="dur-btn" data-min="15" onclick="selectDur(this)">15 min</div>
+        <div class="dur-btn" data-min="10" onclick="selectDur(this)">10 min</div>
         <div class="dur-btn" data-min="30" onclick="selectDur(this)">30 min</div>
-        <div class="dur-btn" data-min="45" onclick="selectDur(this)">45 min</div>
         <div class="dur-btn" data-min="60" onclick="selectDur(this)">1 hr</div>
-        <div class="dur-btn" data-min="90" onclick="selectDur(this)">90 min</div>
         <div class="dur-btn" data-min="120" onclick="selectDur(this)">2 hr</div>
-        <div class="dur-btn" data-min="240" onclick="selectDur(this)">4 hr</div>
         <div class="dur-btn" data-min="360" onclick="selectDur(this)">6 hr</div>
         <div class="dur-btn" data-min="720" onclick="selectDur(this)">12 hr</div>
+        <div class="dur-btn" data-min="1440" onclick="selectDur(this)">24 hr</div>
+        <div class="dur-btn" data-min="2880" onclick="selectDur(this)">48 hr</div>
     </div>
     <div class="label-row">
         <input type="text" id="shareLabel" placeholder="Label (optional) — e.g. 'For Mike'">
@@ -1589,24 +1722,20 @@ td { padding:8px 6px; border-bottom:1px solid #1e2130; vertical-align:middle; }
     <div class="flash" id="testFlash"></div>
 </div>
 
-<!-- ── Invite generator + email invite ── -->
+<!-- ── Invite generator (combined: generate + optionally email in one click) ── -->
 <div class="section copper">
     <h2>GENERATE INVITE <span class="count" id="inviteCounts"></span></h2>
+    <div class="muted" style="margin-bottom:10px">
+        Fill in a recipient email to <strong style="color:#c4a44e">generate AND email</strong> the invite in one click.
+        Leave it blank to just generate a link (copied to clipboard) for manual sharing.
+    </div>
     <div class="row-form">
         <input type="text" id="invLabel" placeholder="Label (e.g. 'For Mike — beta tester')">
-        <input type="number" id="invDays" placeholder="Expiry days (blank = never)" style="max-width:200px">
-        <button class="copper" onclick="generateInvite()">GENERATE CODE</button>
+        <input type="email" id="invRecipient" placeholder="Recipient email (optional)">
+        <input type="number" id="invDays" placeholder="Expires (days, blank = never)" style="max-width:200px">
+        <button class="copper" onclick="generateAndMaybeEmail()">GENERATE</button>
     </div>
     <div class="flash" id="invFlash"></div>
-    <div style="margin-top:14px; padding-top:14px; border-top:1px dashed #2d3139">
-        <div class="muted" style="margin-bottom:8px">Or send an existing invite directly to a recipient via email:</div>
-        <div class="row-form">
-            <select id="invToSend"><option value="">-- choose an active invite --</option></select>
-            <input type="email" id="invRecipient" placeholder="recipient@example.com">
-            <button class="copper" onclick="emailInvite()">EMAIL INVITE</button>
-        </div>
-        <div class="flash" id="emailInvFlash"></div>
-    </div>
 </div>
 
 <!-- ── All invites ── -->
@@ -1622,29 +1751,36 @@ td { padding:8px 6px; border-bottom:1px solid #1e2130; vertical-align:middle; }
 </div>
 
 <script>
-async function loadAll() {
-    const res = await fetch('/admin/invites');
-    if (res.status === 401) { location.href = '/'; return; }
-    const data = await res.json();
+function fmtDuration(secs) {
+    if (!secs || secs <= 0) return '—';
+    const hrs = Math.floor(secs / 3600);
+    const mins = Math.floor((secs % 3600) / 60);
+    if (hrs >= 1) return hrs + 'h ' + mins + 'm';
+    if (mins >= 1) return mins + 'm';
+    return secs + 's';
+}
 
-    // KPIs
+async function loadAll() {
+    // Fetch invites + usage stats in parallel
+    const [invitesRes, usageRes] = await Promise.all([
+        fetch('/admin/invites'),
+        fetch('/admin/api/usage'),
+    ]);
+    if (invitesRes.status === 401) { location.href = '/'; return; }
+    const data = await invitesRes.json();
+    const usage = usageRes.ok ? await usageRes.json() : {total_seconds:0, total_sessions:0, active_member_count:0, avg_seconds_per_member:0, by_member:{}};
+
+    // KPIs — first three are member/invite counts (existing), then total/avg usage
     document.getElementById('kpiRow').innerHTML = `
         <div class="kpi"><div class="l">MEMBERS</div><div class="v">${data.counts.members_total}</div></div>
         <div class="kpi"><div class="l">INVITES (ACTIVE)</div><div class="v">${data.counts.invites_active}</div></div>
         <div class="kpi"><div class="l">INVITES (TOTAL)</div><div class="v">${data.counts.invites_total}</div></div>
+        <div class="kpi"><div class="l">TOTAL USAGE</div><div class="v" style="color:#c4a44e">${fmtDuration(usage.total_seconds)}</div></div>
+        <div class="kpi"><div class="l">AVG PER MEMBER</div><div class="v" style="color:#c4a44e">${fmtDuration(usage.avg_seconds_per_member)}</div></div>
     `;
     document.getElementById('inviteCounts').textContent = data.counts.invites_active + ' active / ' + data.counts.invites_total + ' total';
     document.getElementById('invitesTotal').textContent = '(' + data.counts.invites_total + ')';
     document.getElementById('membersTotal').textContent = '(' + data.counts.members_total + ')';
-
-    // Active-invite picker
-    const sel = document.getElementById('invToSend');
-    const previousValue = sel.value;
-    sel.innerHTML = '<option value="">-- choose an active invite --</option>' + data.invites
-        .filter(i => i.status === 'active')
-        .map(i => `<option value="${i.code}">${i.code} — ${i.label || '(no label)'}</option>`)
-        .join('');
-    if (previousValue) sel.value = previousValue;
 
     // Invites table
     const it = document.getElementById('invitesTable');
@@ -1672,23 +1808,32 @@ async function loadAll() {
         it.innerHTML = html;
     }
 
-    // Members table
+    // Members table — added Sessions, Total Time, and Invite Link columns
     const mt = document.getElementById('membersTable');
     if (!data.members.length) {
         mt.innerHTML = '<div class="muted" style="padding:10px">No members yet. Email an invite above.</div>';
     } else {
-        let html = '<table><thead><tr><th>Email</th><th>Joined</th><th>Last Login</th><th>Status</th><th>Invite</th><th>Actions</th></tr></thead><tbody>';
+        let html = '<table><thead><tr><th>Email</th><th>Joined</th><th>Last Login</th><th>Status</th><th>Sessions</th><th>Total Time</th><th>Invite Link</th><th>Actions</th></tr></thead><tbody>';
         for (const m of data.members) {
             const created = m.created_at ? new Date(m.created_at + 'Z').toLocaleDateString() : '—';
             const last = m.last_login_at ? new Date(m.last_login_at + 'Z').toLocaleString() : '—';
             const statusCls = m.status === 'active' ? 'active' : 'inactive';
             const toggleLbl = m.status === 'active' ? 'DISABLE' : 'ENABLE';
+            const usageRec = (usage.by_member || {})[m.id] || {sessions: 0, total_seconds: 0};
+            const sessions = usageRec.sessions || 0;
+            const totalTime = fmtDuration(usageRec.total_seconds || 0);
+            const inviteUrl = m.invite_code ? (window.location.origin + '/members?invite=' + m.invite_code) : '';
+            const inviteCell = inviteUrl
+                ? `<button class="small ghost" title="${escapeHtml(inviteUrl)}" onclick="copyText('${inviteUrl.replace(/'/g, "\\\\'")}', this)">COPY LINK</button>`
+                : '<span class="muted">—</span>';
             html += `<tr>
                 <td>${escapeHtml(m.email || '—')}</td>
                 <td class="muted">${created}</td>
                 <td class="muted">${last}</td>
                 <td><span class="${statusCls}">${m.status.toUpperCase()}</span></td>
-                <td class="copper-text" style="font-size:10px">${m.invite_code || '—'}</td>
+                <td>${sessions}</td>
+                <td class="copper-text">${totalTime}</td>
+                <td>${inviteCell}</td>
                 <td>
                     <button class="small ghost" onclick="toggleMember('${m.id}','${m.status}')">${toggleLbl}</button>
                     <button class="danger" onclick="deleteMember('${m.id}','${escapeHtml(m.email || '')}')">DELETE</button>
@@ -1702,6 +1847,16 @@ async function loadAll() {
 
 function escapeHtml(s) { return (s || '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        if (btn) {
+            const orig = btn.textContent;
+            btn.textContent = 'COPIED';
+            setTimeout(() => btn.textContent = orig, 1500);
+        }
+    });
+}
+
 function flash(id, message, ok) {
     const el = document.getElementById(id);
     el.className = 'flash ' + (ok ? 'ok' : 'err');
@@ -1710,22 +1865,42 @@ function flash(id, message, ok) {
     setTimeout(() => el.style.display = 'none', 6000);
 }
 
-async function generateInvite() {
-    const label = document.getElementById('invLabel').value;
+async function generateAndMaybeEmail() {
+    const label = document.getElementById('invLabel').value.trim();
+    const recipient = document.getElementById('invRecipient').value.trim();
     const days = document.getElementById('invDays').value;
+
+    // Step 1: create the invite code
     const body = { label };
     if (days) body.duration_days = parseInt(days);
     const r = await fetch('/admin/create-invite', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const data = await r.json();
-    if (r.ok && data.url) {
-        flash('invFlash', 'Created: ' + data.url + ' (copied to clipboard)', true);
-        navigator.clipboard.writeText(data.url).catch(()=>{});
-        document.getElementById('invLabel').value = '';
-        document.getElementById('invDays').value = '';
-        loadAll();
-    } else {
-        flash('invFlash', 'Error: ' + (data.error || 'unknown'), false);
+    if (!r.ok || !data.url) {
+        flash('invFlash', 'Error creating invite: ' + (data.error || 'unknown'), false);
+        return;
     }
+
+    // Step 2: either email it OR copy link to clipboard
+    if (recipient) {
+        const r2 = await fetch('/admin/email-invite', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code: data.code, recipient_email: recipient})});
+        const d2 = await r2.json();
+        if (r2.ok && d2.ok) {
+            flash('invFlash', 'Created ' + data.code + ' and emailed to ' + recipient + '.', true);
+        } else {
+            const err = d2.error || 'send failed';
+            const hint = err === 'smtp_not_configured' ? ' — set SMTP env vars on Render first' : '';
+            navigator.clipboard.writeText(data.url).catch(()=>{});
+            flash('invFlash', 'Created ' + data.code + ' but email failed: ' + err + hint + '. Link copied to clipboard.', false);
+        }
+    } else {
+        navigator.clipboard.writeText(data.url).catch(()=>{});
+        flash('invFlash', 'Created: ' + data.url + ' (copied to clipboard)', true);
+    }
+
+    document.getElementById('invLabel').value = '';
+    document.getElementById('invRecipient').value = '';
+    document.getElementById('invDays').value = '';
+    loadAll();
 }
 
 function copyInvite(code) {
@@ -1738,21 +1913,6 @@ async function revokeInvite(code) {
     const r = await fetch('/admin/revoke-invite', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})});
     if (r.ok) loadAll();
     else { const d = await r.json(); flash('invFlash', 'Error: ' + (d.error || 'failed'), false); }
-}
-
-async function emailInvite() {
-    const code = document.getElementById('invToSend').value;
-    const recipient = document.getElementById('invRecipient').value.trim();
-    if (!code) { flash('emailInvFlash', 'Choose an invite first.', false); return; }
-    if (!recipient) { flash('emailInvFlash', 'Enter a recipient email.', false); return; }
-    const r = await fetch('/admin/email-invite', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code, recipient_email: recipient})});
-    const data = await r.json();
-    if (r.ok && data.ok) {
-        flash('emailInvFlash', 'Sent invite to ' + recipient, true);
-        document.getElementById('invRecipient').value = '';
-    } else {
-        flash('emailInvFlash', 'Error: ' + (data.error || 'send failed') + (data.error === 'smtp_not_configured' ? ' — set SMTP_HOST/USER/PASS + EMAIL_FROM env vars on Render' : ''), false);
-    }
 }
 
 async function toggleMember(memberId, currentStatus) {
@@ -1960,9 +2120,13 @@ def members_login():
         members[member_id]["last_login_at"] = datetime.utcnow().isoformat()
         save_members(members)
 
+    # Record session start for usage tracking
+    session_id = secrets.token_urlsafe(8)
+    _record_session_event("start", session_id, member_id)
+
     response = make_response(redirect("/members/dashboard"))
-    set_member_cookie(response, member_id)
-    logger.info(f"[MEMBERS] Login: {email}")
+    set_member_cookie(response, member_id, session_id=session_id)
+    logger.info(f"[MEMBERS] Login: {email} (session {session_id})")
     return response
 
 
@@ -2007,15 +2171,22 @@ def members_signup():
     save_members(members)
     consume_invite(invite_code, member_id)
 
+    # Record session start for usage tracking
+    session_id = secrets.token_urlsafe(8)
+    _record_session_event("start", session_id, member_id)
+
     response = make_response(redirect("/members/dashboard"))
-    set_member_cookie(response, member_id)
-    logger.info(f"[MEMBERS] Signup: {email} (invite {invite_code})")
+    set_member_cookie(response, member_id, session_id=session_id)
+    logger.info(f"[MEMBERS] Signup: {email} (invite {invite_code}, session {session_id})")
     return response
 
 
 @app.route("/members/logout", methods=["GET"])
 def members_logout():
-    """Clear member session."""
+    """Clear member session + record session end for usage tracking."""
+    member = get_current_member()
+    if member and member.get("session_id"):
+        _record_session_event("end", member["session_id"], member["id"], reason="logout")
     response = make_response(redirect("/members"))
     response.delete_cookie("tennis_member")
     return response
@@ -2826,7 +2997,7 @@ def admin_create_share():
     label = data.get("label", "")
 
     # Validate duration
-    allowed = [15, 30, 45, 60, 90, 120, 240, 360, 720]
+    allowed = [10, 30, 60, 120, 360, 720, 1440, 2880]
     if duration not in allowed:
         return jsonify({"error": f"Duration must be one of: {allowed}"}), 400
 
@@ -3098,6 +3269,51 @@ def admin_delete_member():
         _save_member_bets_all(all_bets)
     logger.info(f"[ADMIN] Deleted member {deleted_email} ({member_id})")
     return jsonify({"status": "deleted", "member_id": member_id, "email": deleted_email})
+
+
+@app.route("/admin/api/usage", methods=["GET"])
+def admin_api_usage():
+    """Aggregated usage stats for the /admin/members KPIs + per-member columns."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify(compute_usage_stats())
+
+
+@app.route("/admin/factory-reset", methods=["GET", "POST"])
+def admin_factory_reset():
+    """ONE-SHOT: wipe members, invites, member_bets, member_sessions.
+    Required: ?confirm=NUKE_BREAKPOINT_2026 in URL. Admin cookie required.
+    REMOVE THIS ENDPOINT after the first invocation."""
+    if not check_admin_cookie():
+        return jsonify({"error": "Unauthorized"}), 401
+    if request.args.get("confirm") != "NUKE_BREAKPOINT_2026":
+        return make_response(
+            "<h1>Factory reset blocked</h1>"
+            "<p>This endpoint wipes ALL members, invites, member-bets, and session events.</p>"
+            "<p>Add <code>?confirm=NUKE_BREAKPOINT_2026</code> to the URL to actually fire it.</p>",
+            400
+        )
+
+    wiped = []
+    for path, default in [
+        (MEMBERS_FILE, "{}\n"),
+        (INVITES_FILE, "{}\n"),
+        (MEMBER_BETS_FILE, "{}\n"),
+        (MEMBER_SESSIONS_FILE, ""),
+    ]:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(default)
+            wiped.append(str(path.name))
+        except Exception as e:
+            logger.error(f"[factory-reset] failed to wipe {path}: {e}")
+
+    logger.warning(f"[FACTORY-RESET] Wiped: {wiped}")
+    return jsonify({
+        "status": "wiped",
+        "files": wiped,
+        "next_step": "Remove this endpoint from server.py before next deploy.",
+    })
 
 
 @app.route("/admin/disable-member", methods=["POST"])
