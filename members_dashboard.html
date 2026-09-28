@@ -603,6 +603,16 @@ function renderSignals() {
         return isNaN(t) ? true : t > _nowMs;
     });
 
+    // Hide Polymarket's "Completed Match:" duplicate listings. These are a
+    // redundant variant of a fixture (usually price ~50, never resolves) and
+    // read as a finished match on a card. New runs strip the prefix at
+    // generation, but picks logged before that fix still carry it — so drop
+    // them here too, which also clears any that predate the game_start field.
+    latest = latest.filter(p => {
+        const label = String(p.match || p.question || '').toLowerCase();
+        return !label.includes('completed match');
+    });
+
     // Apply filters
     if (filterType === 'edge') latest = latest.filter(p => p.has_edge);
     else if (filterType === 'outright') latest = latest.filter(p => p.market_type === 'outright');

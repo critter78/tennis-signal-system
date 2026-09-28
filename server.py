@@ -2913,9 +2913,33 @@ def members_api_signals():
         "exit_price", "pnl", "shares", "trade_id", "clob_order_id",
         "wallet", "api_key", "secret",
     }
+    from datetime import timezone as _tz
+    def _started(gs):
+        """True if gameStartTime is present and already in the past (match underway/over)."""
+        if not gs:
+            return False
+        s = str(gs).strip().replace("Z", "+00:00")
+        if " " in s and "T" not in s:
+            s = s.replace(" ", "T", 1)
+        try:
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_tz.utc)
+            return dt <= datetime.now(_tz.utc)
+        except Exception:
+            return False
+
     out = []
     for p in picks_sorted:
         if status == "open" and p.get("outcome"):
+            continue
+        # Drop Polymarket's "Completed Match:" duplicate listings — a redundant
+        # variant that reads as finished on a card and never resolves cleanly.
+        label = str(p.get("match") or p.get("question") or "").lower()
+        if "completed match" in label:
+            continue
+        # On the bettable (open) feed, drop matches that have already started.
+        if status == "open" and _started(p.get("game_start")):
             continue
         clean = {k: v for k, v in p.items() if k not in _sensitive_keys}
         out.append(clean)
