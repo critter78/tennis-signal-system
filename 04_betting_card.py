@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -155,6 +155,8 @@ def _parse_market(m, min_volume=0):
         "slug":      m.get("slug", ""),
         "question":  m.get("question", ""),
         "end_date":  m.get("end_date_iso") or m.get("endDateIso", "") or m.get("endDate", ""),
+        "game_start": m.get("gameStartTime") or m.get("game_start_time") or "",
+        "start_date": m.get("startDate") or m.get("start_date_iso") or "",
         "volume":    vol,
         "liquidity": float(m.get("liquidity", 0) or 0),
         "prices":    prices,
@@ -306,6 +308,24 @@ def _fetch_whale_data(clob_token_ids, outcomes, total_volume):
     }
 
 
+def _parse_dt(s):
+    """Parse a Polymarket time string (gameStartTime/startDate/endDate) to an
+    aware UTC datetime. Handles 'YYYY-MM-DD HH:MM:SS+00', ISO, and trailing Z."""
+    if not s:
+        return None
+    s = str(s).strip().replace("Z", "+00:00")
+    if " " in s and "T" not in s:
+        s = s.replace(" ", "T", 1)
+    # normalise a 2-digit tz offset ("+00" -> "+00:00")
+    if len(s) >= 3 and s[-3] in "+-" and s[-2:].isdigit():
+        s = s + ":00"
+    try:
+        dt = datetime.fromisoformat(s)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
 def fetch_live_markets(min_volume=0):
     rows = []
 
@@ -430,23 +450,60 @@ def fetch_live_markets(min_volume=0):
         if is_tennis and len(r["prices"]) == 2:
             filtered.append(r)
 
-    # Remove resolved markets (price at 0¢ or 100¢ means already decided)
+    # Keep only UPCOMING, unresolved matches.
+    # Polymarket's `endDate` is a far-future resolution deadline (often a week+
+    # out) and `closed` lags until the UMA oracle settles, so neither says whether
+    # a match is over. `gameStartTime` is the real match start — a match is only
+    # bettable pre-match, i.e. BEFORE it starts. Anything already started/finished
+    # (gameStartTime <= now) is dropped so completed matches never reach a card.
     live = []
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now(timezone.utc)
     for r in filtered:
-        prices = r["prices"]
-        vals = list(prices.values())
-        # Skip if any price is 0 or 100 (market already resolved)
+        vals = list(r["prices"].values())
+        # Safety net: skip fully-resolved markets (price pinned to ~0 / ~100)
         if any(v <= 0.5 or v >= 99.5 for v in vals):
             continue
-        # Skip if end_date is in the past
-        end = str(r.get("end_date", "") or "")[:10]
-        if end and end < today_str:
-            continue
+        gst = _parse_dt(r.get("game_start"))
+        if gst is not None:
+            if gst <= now:
+                continue          # match already started or finished
+        else:
+            # fallback when gameStartTime is missing: legacy date-only end check
+            end = str(r.get("end_date", "") or "")[:10]
+            if end and end < now.strftime("%Y-%m-%d"):
+                continue
         live.append(r)
 
+    # De-duplicate Polymarket's twin listings. Each fixture is often listed
+    # twice: a plain market and a "Completed Match: X vs Y" variant with the
+    # same gameStartTime. The "Completed Match:" label is Polymarket's own
+    # naming for that variant (NOT a signal the match is over — these start in
+    # the future), but it looks like a finished match on a card, so collapse
+    # the pair: keep the plain listing, and if only the labelled one exists,
+    # strip the misleading prefix off its question.
+    import re as _re
+    def _norm_q(q):
+        q = str(q).lower().replace("completed match:", " ")
+        return _re.sub(r"\s+", " ", q).strip()
+    plain_keys = {_norm_q(r["question"]) for r in live
+                  if "completed match" not in str(r["question"]).lower()}
+    deduped = []
+    for r in live:
+        ql = str(r["question"]).lower()
+        if "completed match" in ql:
+            if _norm_q(r["question"]) in plain_keys:
+                continue  # drop the duplicate; plain twin is kept
+            # no plain twin — keep it but strip the misleading prefix
+            r = dict(r)
+            r["question"] = _re.sub(r"(?i)\bcompleted match:\s*", "",
+                                    str(r["question"])).strip()
+        deduped.append(r)
+    dropped_dupes = len(live) - len(deduped)
+    live = deduped
+
     if live:
-        print(f"  → {len(live)} live tennis markets after filtering ({len(filtered) - len(live)} resolved/expired removed)")
+        print(f"  → {len(live)} live tennis markets after filtering "
+              f"({len(filtered) - len(live)} resolved/expired/duplicate removed)")
         return pd.DataFrame(live)
 
     # If nothing matched with strict filter, return empty
