@@ -592,6 +592,17 @@ function renderSignals() {
     // Hide resolved/completed matches
     latest = latest.filter(p => p.outcome === null || p.outcome === undefined);
 
+    // Hide matches that have already started (gameStartTime in the past).
+    // Safety net independent of the generator: a pick is only bettable pre-match.
+    // Picks with no/unparseable start time are kept (older picks predate this field).
+    const _nowMs = Date.now();
+    latest = latest.filter(p => {
+        const gs = p.game_start;
+        if (!gs) return true;
+        const t = Date.parse(String(gs).trim().replace(' ', 'T'));
+        return isNaN(t) ? true : t > _nowMs;
+    });
+
     // Apply filters
     if (filterType === 'edge') latest = latest.filter(p => p.has_edge);
     else if (filterType === 'outright') latest = latest.filter(p => p.market_type === 'outright');

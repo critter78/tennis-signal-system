@@ -68,6 +68,7 @@ def log_picks(signals, run_id=None):
         "sa_second_won", "sb_second_won", "sa_bp_saved", "sb_bp_saved",
         "sa_bp_convert", "sb_bp_convert",
         "token_id", "condition_id",
+        "game_start", "end_date",
     ]
 
     logged = 0
@@ -137,6 +138,7 @@ def log_picks(signals, run_id=None):
             "poly_price": s.get("poly_price"), "poly_price_a": s.get("poly_price_a"),
             "poly_price_b": s.get("poly_price_b"), "volume": s.get("volume"),
             "liquidity": s.get("liquidity"), "end_date": s.get("end_date"),
+            "game_start": s.get("game_start", ""),
             "poly_link": s.get("poly_link",""),
             "token_id": s.get("token_id",""), "condition_id": s.get("condition_id",""),
             "sa_wr": s.get("sa_wr"), "sb_wr": s.get("sb_wr"),
